@@ -1,0 +1,59 @@
+/* pg 24 */
+SELECT price
+FROM Ticks
+    ASSUMING ORDER timestampe
+WHERE ID = "ACME";
+
+/* pg 25, example 3.1 */
+SELECT max(price - mins(price))
+FROM Ticks
+    ASSUMING ORDER timestamp
+WHERE ID="ACME" AND
+    date = "05/11/2003";
+
+
+/* pg 29, example 3.3 */
+SELECT src, dest, avg(length), count(timestamp)
+FROM Packets
+    ASSUMING ORDER src, dest, timestamp
+GROUP BY src, dest, sums(deltas(timestamp) > 120);
+
+/* pg 30, example 3.4 */
+WITH
+    averages (ID, date, a21, a5) AS
+    (SELECT ID, date, avgs(21, price) as a21,
+      avgs(5, price) as a5 FROM Ticks
+        ASSUMING ORDER ID, timestampe
+     GROUP BY ID)
+ SELECT ID, date 
+ FROM FLATTEN(averages)
+    ASSUMING ORDER ID, timestampe
+ WHERE a21 > a5 AND
+       prev(a21) <= prev(a5) AND
+       prev(ID) = ID;
+
+/* pg 32, example 3.5 */
+SELECT t.ID, last(10, price)
+FROM Ticks t, Portfiolio p
+    ASSUMING ORDER timestamp
+WHERE t.ID = p.ID
+GROUP BY t.ID;
+
+/* pg 33, example 3.6 */
+WITH
+    OneDay AS
+    (SELECT ID, price, timestamp
+     FROM Ticks
+        ASSUMING ORDER timestamp
+     WHERE date = "05/11/2003")
+ SELECT ID, count(*) 
+ FROM OneDay
+    ASSUMING ORDER timestamp
+    WHERE ROWID < 1000
+    GROUP BY ID;
+
+/* pg 35 */
+SELECT src, dest, avg(length), count(timestamp)
+FROM Packets
+    ASSUMING ORDER src, dest, timestamp
+GROUP BY src, dest, sums(deltas(timestamp) > 120);
