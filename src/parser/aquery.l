@@ -12,34 +12,91 @@ void consume_comment();
 
 %}
 
-
-%x IN_COMMENT
-
+%option noyywrap
 
 %%
  /* comments */
  
 "/*"			{ count(); consume_comment(); }
 
- /* SQL key words */
+ /* SQL: select query key words */
 "WITH"			{ count(); return WITH;   	 }
-"AS"			{ count(); return TABLE_AS;  }
+"AS"			{ count(); return UC_AS;     }
 "SELECT"		{ count(); return SELECT; 	 }
 "FROM"			{ count(); return FROM;	 	 }
 "ASSUMING"		{ count(); return ASSUMING;  }
 "ORDER"			{ count(); return ORDER; 	 }
 "WHERE"			{ count(); return WHERE; 	 }
-"AND"			{ count(); return AND; 		 }
 "GROUP"			{ count(); return GROUP; 	 }
 "BY"			{ count(); return BY; 		 }
-"FLATTEN"		{ count(); return FLATTEN;	 }
-"as"			{ count(); return COL_AS;	 }
+"HAVING"		{ count(); return HAVING;    }
+"as"			{ count(); return LC_AS;	 }
+
+ /* SQL: indexing */
 "ROWID"			{ count(); return ROWID;	 }
 "ODD"			{ count(); return ODD;		 }
 "EVEN"			{ count(); return EVEN;		 }
 "EVERY"			{ count(); return EVERY;	 }
 
- /*  built-in operators from q and k */
+ /* SQL: table operations */
+"FLATTEN"		{ count(); return FLATTEN;	 }
+
+ /* SQL: joins */
+"CROSS"			{ count(); return CROSS; 	}
+"JOIN"			{ count(); return JOIN;		}	
+"NATURAL"		{ count(); return NATURAL;	}
+"OUTER"			{ count(); return OUTER;	}
+"LEFT"			{ count(); return LEFT;		}
+"RIGHT"			{ count(); return RIGHT;	}
+"FULL"			{ count(); return FULL;		}
+"ON"			{ count(); return ON;		}
+"USING"			{ count(); return USING;	}
+
+ /* SQL: Views/Tables */
+"CREATE"	{ count(); return CREATE;	}
+"TABLE"		{ count(); return TABLE;	}
+"VIEW"		{ count(); return VIEW; 	}
+
+ /* SQL: update/insert/delete statements */
+"UPDATE"	{ count(); return UPDATE; 	}
+"SET"		{ count(); return SET; 	}
+"INSERT"	{ count(); return INSERT; 	}
+"INTO"		{ count(); return INTO; 	}
+"VALUES"	{ count(); return VALUES; 	}
+"DELETE"	{ count(); return DELETE; 	}
+
+ /* SQL: search conditions */
+"AND"		{ count(); return AND;			}
+"OR"		{ count(); return OR;			}
+"IS"		{ count(); return IS;			}
+"NOT"		{ count(); return NOT;			}
+"BETWEEN"	{ count(); return BETWEEN;		}
+"IN"		{ count(); return IN;			}
+"LIKE"		{ count(); return LIKE;			}
+"NULL"		{ count(); return NULL_KEYWORD;	}
+"OVERLAPS"	{ count(); return OVERLAPS;		}
+
+ /* SQL: case statements */
+"CASE"	{ count(); return CASE; }
+"END"	{ count(); return END; 	}
+"WHEN"	{ count(); return WHEN;	}
+"THEN"	{ count(); return THEN;	}
+"ELSE"	{ count(); return ELSE;	}
+ 
+ /* SQL: type names */
+"INT"		{ count(); return TYPE_INT;		}
+"FLOAT"		{ count(); return TYPE_FLOAT;	}
+"STRING"	{ count(); return TYPE_STRING;	}
+"DATE"		{ count(); return TYPE_DATE;	}
+"BOOLEAN"	{ count(); return TYPE_BOOLEAN;	}
+"BIT"		{ count(); return TYPE_BIT;		}
+"HEX"		{ count(); return TYPE_HEX;		}
+
+ /* SQL: user defined functions */
+"FUNCTION"	{ count(); return FUNCTION;	}
+":="		{ count(); return ASSIGN;	} 
+ 
+ /* Built-in functions from q and k */
 "abs"			{ count(); return ABS;		}
 "avg"			{ count(); return AVG;		}
 "avgs"			{ count(); return AVGS;		}
@@ -64,14 +121,22 @@ void consume_comment();
 "stddev"		{ count(); return STDDEV;   }
 
 
- /* Standard tokens including spaces, floats, integers, strings, and identifiers */
 
-[ \t\n]    																		{ count(); 					 } //spaces
--?[0-9]+\.[0-9]+																{ count(); return FLOAT;   	  } //floats
--?[0-9]+																		{ count(); return INTEGER; 	  }	//integer
-\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'		{ count(); return DATE;		  } //date	
-\"(\\.|[^"])*\"																	{ count(); return STRING;       }	//string
-[a-zA-Z]+[a-zA-Z0-9_]*															{ count(); return ID; 		  }	//identifiers
+ /* Space definitions */
+[ \t\n]    						{ count(); 	} 
+
+
+ /* Literals */
+-?[0-9]+						{ count(); return INT; 	  }	
+-?[0-9]+\.[0-9]+	   			{ count(); return FLOAT;   	} 
+\"(\\.|[^"])*\"					{ count(); return STRING;     } 
+\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'		{ count(); return DATE; } 
+"TRUE"							{ count(); return TRUE;	 }
+"FALSE"							{ count(); return FALSE; }
+"0x"[0-9a-fA-F]+				{ count(); return HEX;	 }
+
+ /* Variables */
+[a-zA-Z]+[a-zA-Z0-9_]*	{ count(); return ID; }	 
 
 
  /* Standard mathematical operators */
@@ -94,12 +159,15 @@ void consume_comment();
  "."		{ count(); return '.'; }
  ","		{ count(); return ','; }
  ";"		{ count(); return ';'; }
+ "{"		{ count(); return '{'; } 
+ "}"		{ count(); return '}'; }
 
 
 
 
+ /* TODO: add better error handling/reporting */
+.		     { printf("Unidentified token:%s, line:%d, column:%d\n", yytext, line_num, col_num); exit(1); }
 
-.		     { printf("Unidentified token:%s, line:%d, column:%d\n", yytext, line_num, col_num); exit(1); } //TODO: add better error handling/reporting
 %%
 
 void count()
