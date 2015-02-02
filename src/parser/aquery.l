@@ -89,7 +89,6 @@ void consume_comment();
 "STRING"	{ count(); return TYPE_STRING;	}
 "DATE"		{ count(); return TYPE_DATE;	}
 "BOOLEAN"	{ count(); return TYPE_BOOLEAN;	}
-"BIT"		{ count(); return TYPE_BIT;		}
 "HEX"		{ count(); return TYPE_HEX;		}
 
  /* SQL: user defined functions */
@@ -119,7 +118,8 @@ void consume_comment();
 "sum"			{ count(); return SUM;		}
 "sums"			{ count(); return SUMS;		}
 "stddev"		{ count(); return STDDEV;   }
-
+"make_null"		{ count(); return MAKENULL;	}
+		
 
 
  /* Space definitions */

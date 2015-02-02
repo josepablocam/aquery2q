@@ -53,7 +53,7 @@ void yyerror(const char *);
 %token CASE END WHEN THEN ELSE
 
  /* SQL: type names */
-%token TYPE_INT TYPE_FLOAT TYPE_STRING TYPE_DATE TYPE_BOOLEAN TYPE_BIT TYPE_HEX
+%token TYPE_INT TYPE_FLOAT TYPE_STRING TYPE_DATE TYPE_BOOLEAN  TYPE_HEX
  
  /* SQL: user defined functions */
 %token FUNCTION ASSIGN
@@ -63,9 +63,10 @@ void yyerror(const char *);
 %token ABS AVG COUNT DISTINCT DROP FIRST LAST MAX MIN MOD NEXT PREV PRD REV SUM STDDEV
  /* moving variants */
 %token AVGS DELTAS MAXS MINS PRDS SUMS
+%token MAKENULL
  
  /* literals and identifiers */
-%token INT FLOAT STRING DATE TRUE FALSE BIT HEX NULL_VAL ID 
+%token INT FLOAT STRING DATE TRUE FALSE HEX NULL_VAL ID 
  
  /* Math operators */
 %token TIMES_OP DIV_OP PLUS_OP MINUS_OP LE_OP GE_OP L_OP G_OP EQ_OP NEQ_OP AND_OP OR_OP
@@ -293,11 +294,11 @@ schema_tail: ',' schema_element schema_tail
 	| /* epsilon */
 	;
 	
-type_name: TYPE_INT | TYPE_FLOAT | TYPE_STRING | TYPE_DATE | TYPE_BOOLEAN | TYPE_BIT | TYPE_HEX ;	
+type_name: TYPE_INT | TYPE_FLOAT | TYPE_STRING | TYPE_DATE | TYPE_BOOLEAN | TYPE_HEX ;	
 
 
 /******* 2.6: update, insert, delete statements *******/
-update_statement: UPDATE ID SET set_clauses where_clause ;
+update_statement: UPDATE ID SET set_clauses where_clause order_clause;
 
 set_clauses: set_clause set_clauses_tail ;
 
@@ -307,7 +308,7 @@ set_clauses_tail: ',' set_clause set_clauses_tail
 
 set_clause: ID EQ_OP value_expression ;
 
-insert_statement: INSERT INTO ID insert_modifier insert_source ;
+insert_statement: INSERT INTO ID order_clause insert_modifier insert_source;
 
 insert_modifier: '(' comma_identifier_list ')'	
 	| /* epsilon */
@@ -317,8 +318,8 @@ insert_source: global_query
 	| VALUES '(' comma_value_expression_list ')'
 	;
 	
-delete_statement: DELETE from_clause where_clause
-	| DELETE comma_identifier_list from_clause
+delete_statement: DELETE from_clause where_clause order_clause
+	| DELETE comma_identifier_list from_clause 
 	;
 
 /******* 2.7: user defined functions *******/
@@ -341,7 +342,7 @@ function_local_var_def: ID ASSIGN value_expression ;
 
 
 /******* 2.8: value expressions *******/
-constant: INT | FLOAT | DATE | STRING | HEX | truth_value | BIT | NULL_VAL ;
+constant: INT | FLOAT | DATE | STRING | HEX | truth_value | NULL_VAL ;
 
 table_constant: ROWID | column_access | TIMES_OP ;
 
@@ -378,7 +379,7 @@ call: main_expression
 indexing: ODD | EVEN | EVERY INT ;
 
 built_in_fun: ABS | AVG | AVGS | COUNT | DELTAS | DISTINCT | DROP | FIRST | LAST | MAX | MAXS | MIN
-	| MINS | MOD | NEXT | PREV | PRD | PRDS | REV | SUM | SUMS | STDDEV
+	| MINS | MOD | NEXT | PREV | PRD | PRDS | REV | SUM | SUMS | STDDEV | MAKENULL
 	;
 
 mult_expression: call
