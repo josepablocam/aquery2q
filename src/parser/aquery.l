@@ -20,105 +20,106 @@ void consume_comment();
 "/*"			{ count(); consume_comment(); }
 
  /* SQL: select query key words */
-"WITH"			{ count(); return WITH;   	 }
+"WITH"			{ count(); return WITH;      }
 "AS"			{ count(); return UC_AS;     }
-"SELECT"		{ count(); return SELECT; 	 }
-"FROM"			{ count(); return FROM;	 	 }
+"SELECT"		{ count(); return SELECT;    }
+"FROM"			{ count(); return FROM;      }
 "ASSUMING"		{ count(); return ASSUMING;  }
-"ORDER"			{ count(); return ORDER; 	 }
-"WHERE"			{ count(); return WHERE; 	 }
-"GROUP"			{ count(); return GROUP; 	 }
-"BY"			{ count(); return BY; 		 }
+"ORDER"			{ count(); return ORDER;     }
+"WHERE"			{ count(); return WHERE;     }
+"GROUP"			{ count(); return GROUP;     }
+"BY"			{ count(); return BY;        }
 "HAVING"		{ count(); return HAVING;    }
-"as"			{ count(); return LC_AS;	 }
+"as"			{ count(); return LC_AS;     }
 
  /* SQL: indexing */
-"ROWID"			{ count(); return ROWID;	 }
-"ODD"			{ count(); return ODD;		 }
-"EVEN"			{ count(); return EVEN;		 }
-"EVERY"			{ count(); return EVERY;	 }
+"ROWID"			{ count(); return ROWID;     }
+"ODD"			{ count(); return ODD;       }
+"EVEN"			{ count(); return EVEN;      }
+"EVERY"			{ count(); return EVERY;     }
 
  /* SQL: table operations */
 "FLATTEN"		{ count(); return FLATTEN;	 }
 
  /* SQL: joins */
-"CROSS"			{ count(); return CROSS; 	}
-"JOIN"			{ count(); return JOIN;		}	
-"NATURAL"		{ count(); return NATURAL;	}
-"OUTER"			{ count(); return OUTER;	}
-"LEFT"			{ count(); return LEFT;		}
-"RIGHT"			{ count(); return RIGHT;	}
-"FULL"			{ count(); return FULL;		}
-"ON"			{ count(); return ON;		}
-"USING"			{ count(); return USING;	}
+"CROSS"			{ count(); return CROSS;    }
+"JOIN"			{ count(); return JOIN;     }	
+"NATURAL"		{ count(); return NATURAL;  }
+"OUTER"			{ count(); return OUTER;    }
+"LEFT"			{ count(); return LEFT;     }
+"RIGHT"			{ count(); return RIGHT;    }
+"FULL"			{ count(); return FULL;     }
+"ON"			{ count(); return ON;       }
+"USING"			{ count(); return USING;    }
 
  /* SQL: Views/Tables */
-"CREATE"	{ count(); return CREATE;	}
-"TABLE"		{ count(); return TABLE;	}
-"VIEW"		{ count(); return VIEW; 	}
+"CREATE"	{ count(); return CREATE;   }
+"TABLE"		{ count(); return TABLE;    }
+"VIEW"		{ count(); return VIEW;     }
 
  /* SQL: update/insert/delete statements */
-"UPDATE"	{ count(); return UPDATE; 	}
-"SET"		{ count(); return SET; 	}
-"INSERT"	{ count(); return INSERT; 	}
-"INTO"		{ count(); return INTO; 	}
-"VALUES"	{ count(); return VALUES; 	}
-"DELETE"	{ count(); return DELETE; 	}
+"UPDATE"	{ count(); return UPDATE;   }
+"SET"		{ count(); return SET;      }
+"INSERT"	{ count(); return INSERT;   }
+"INTO"		{ count(); return INTO;     }
+"VALUES"	{ count(); return VALUES;   }
+"DELETE"	{ count(); return DELETE;   }
 
  /* SQL: search conditions */
-"AND"		{ count(); return AND;			}
-"OR"		{ count(); return OR;			}
-"IS"		{ count(); return IS;			}
-"NOT"		{ count(); return NOT;			}
-"BETWEEN"	{ count(); return BETWEEN;		}
-"IN"		{ count(); return IN;			}
-"LIKE"		{ count(); return LIKE;			}
-"NULL"		{ count(); return NULL_KEYWORD;	}
-"OVERLAPS"	{ count(); return OVERLAPS;		}
+"AND"		{ count(); return AND;          }
+"OR"		{ count(); return OR;           }
+"IS"		{ count(); return IS;           }
+"NOT"		{ count(); return NOT;          }
+"BETWEEN"	{ count(); return BETWEEN;      }
+"IN"		{ count(); return IN;           }
+"LIKE"		{ count(); return LIKE;         }
+"NULL"		{ count(); return NULL_KEYWORD; }
+"OVERLAPS"	{ count(); return OVERLAPS;     }
 
  /* SQL: case statements */
 "CASE"	{ count(); return CASE; }
-"END"	{ count(); return END; 	}
-"WHEN"	{ count(); return WHEN;	}
-"THEN"	{ count(); return THEN;	}
-"ELSE"	{ count(); return ELSE;	}
+"END"	{ count(); return END;  }
+"WHEN"	{ count(); return WHEN; }
+"THEN"	{ count(); return THEN; }
+"ELSE"	{ count(); return ELSE; }
  
  /* SQL: type names */
-"INT"		{ count(); return TYPE_INT;		}
-"FLOAT"		{ count(); return TYPE_FLOAT;	}
-"STRING"	{ count(); return TYPE_STRING;	}
-"DATE"		{ count(); return TYPE_DATE;	}
-"BOOLEAN"	{ count(); return TYPE_BOOLEAN;	}
-"HEX"		{ count(); return TYPE_HEX;		}
+"INT"		{ count(); return TYPE_INT;     }
+"FLOAT"		{ count(); return TYPE_FLOAT;   }
+"STRING"	{ count(); return TYPE_STRING;  }
+"DATE"		{ count(); return TYPE_DATE;    }
+"BOOLEAN"	{ count(); return TYPE_BOOLEAN; }
+"HEX"		{ count(); return TYPE_HEX;     }
 
  /* SQL: user defined functions */
-"FUNCTION"	{ count(); return FUNCTION;	}
-":="		{ count(); return ASSIGN;	} 
+"FUNCTION"	{ count(); return FUNCTION;     }
+":="		{ count(); return LOCAL_ASSIGN; } 
  
  /* Built-in functions from q and k */
-"abs"			{ count(); return ABS;		}
-"avg"			{ count(); return AVG;		}
-"avgs"			{ count(); return AVGS;		}
-"count"			{ count(); return COUNT;	}
-"deltas"		{ count(); return DELTAS; 	}
+"abs"			{ count(); return ABS;      }
+"avg"			{ count(); return AVG;      }
+"avgs"			{ count(); return AVGS;     }
+"count"			{ count(); return COUNT;    }
+"deltas"		{ count(); return DELTAS;   }
 "distinct"		{ count(); return DISTINCT; }
-"drop"			{ count(); return DROP; 	}
+"drop"			{ count(); return DROP;     }
+"fill"			{ count(); return FILL;     }
 "first"			{ count(); return FIRST;    }
-"last"			{ count(); return LAST; 	}
-"max"			{ count(); return MAX; 		}
-"maxs"			{ count(); return MAXS;		}
-"min"			{ count(); return MIN;		}
-"mins"			{ count(); return MINS; 	}
-"mod"			{ count(); return MOD; 		}
-"next"			{ count(); return NEXT; 	}
-"prev"			{ count(); return PREV;		}
-"prd"			{ count(); return PRD;		}
-"prds"			{ count(); return PRDS;		}
-"reverse"		{ count(); return REV;		}
-"sum"			{ count(); return SUM;		}
-"sums"			{ count(); return SUMS;		}
+"last"			{ count(); return LAST;     }
+"max"			{ count(); return MAX;      }
+"maxs"			{ count(); return MAXS;     }
+"min"			{ count(); return MIN;      }
+"mins"			{ count(); return MINS;     }
+"mod"			{ count(); return MOD;      }
+"next"			{ count(); return NEXT;     }
+"prev"			{ count(); return PREV;     }
+"prd"			{ count(); return PRD;      }
+"prds"			{ count(); return PRDS;     }
+"reverse"		{ count(); return REV;      }
+"sum"			{ count(); return SUM;      }
+"sums"			{ count(); return SUMS;     }
 "stddev"		{ count(); return STDDEV;   }
-"make_null"		{ count(); return MAKENULL;	}
+"make_null"		{ count(); return MAKENULL; }
 		
 
 
@@ -127,31 +128,32 @@ void consume_comment();
 
 
  /* Literals */
--?[0-9]+						{ count(); return INT; 	  }	
--?[0-9]+\.[0-9]+	   			{ count(); return FLOAT;   	} 
-\"(\\.|[^"])*\"					{ count(); return STRING;     } 
+-?[0-9]+                        { count(); return INT;     }	
+-?[0-9]+\.[0-9]+                { count(); return FLOAT;   } 
+\"(\\.|[^"])*\"                 { count(); return STRING;  } 
 \'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'		{ count(); return DATE; } 
-"TRUE"							{ count(); return TRUE;	 }
-"FALSE"							{ count(); return FALSE; }
-"0x"[0-9a-fA-F]+				{ count(); return HEX;	 }
+"TRUE"                          { count(); return TRUE;	   }
+"FALSE"                         { count(); return FALSE;   }
+"0x"[0-9a-fA-F]+                { count(); return HEX;	   }
 
  /* Variables */
 [a-zA-Z]+[a-zA-Z0-9_]*	{ count(); return ID; }	 
 
 
  /* Standard mathematical operators */
-"*"			{ count(); return TIMES_OP; }
-"/"			{ count(); return DIV_OP;  	}
-"+"			{ count(); return PLUS_OP; 	}	
-"-"			{ count(); return MINUS_OP; }
-"<="		{ count(); return LE_OP; 	}
-">="		{ count(); return GE_OP; 	}
-"<"			{ count(); return L_OP; 	}
-">"			{ count(); return G_OP; 	}	
-"="			{ count(); return EQ_OP; 	}
-"!="		{ count(); return NEQ_OP; 	}
-"&"			{ count(); return AND_OP;	}
-"|"			{ count(); return OR_OP;	}
+"^"         { count(); return EXP_OP;   }
+"*"         { count(); return TIMES_OP; }
+"/"         { count(); return DIV_OP;   }
+"+"         { count(); return PLUS_OP;  }	
+"-"         { count(); return MINUS_OP; }
+"<="        { count(); return LE_OP;    }
+">="        { count(); return GE_OP;    }
+"<"         { count(); return L_OP;     }
+">"         { count(); return G_OP;     }	
+"="         { count(); return EQ_OP;    }
+"!="        { count(); return NEQ_OP;   }
+"&"         { count(); return AND_OP;   }
+"|"         { count(); return OR_OP;   }
 
  /* miscellaneous */
  "("		{ count(); return '('; }
