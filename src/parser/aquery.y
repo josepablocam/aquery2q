@@ -56,20 +56,20 @@ void yyerror(const char *);
 %token TYPE_INT TYPE_FLOAT TYPE_STRING TYPE_DATE TYPE_BOOLEAN  TYPE_HEX
  
  /* SQL: user defined functions */
-%token FUNCTION ASSIGN
+%token FUNCTION LOCAL_ASSIGN
   
  /* built-in functions */
  /* non-moving variants */
-%token ABS AVG COUNT DISTINCT DROP FIRST LAST MAX MIN MOD NEXT PREV PRD REV SUM STDDEV
+%token ABS AVG COUNT DISTINCT DROP FILL FIRST LAST MAX MIN MOD NEXT PREV PRD REV SUM STDDEV
  /* moving variants */
 %token AVGS DELTAS MAXS MINS PRDS SUMS
 %token MAKENULL
  
  /* literals and identifiers */
-%token INT FLOAT STRING DATE TRUE FALSE HEX NULL_VAL ID 
+%token INT FLOAT STRING DATE TRUE FALSE HEX ID 
  
  /* Math operators */
-%token TIMES_OP DIV_OP PLUS_OP MINUS_OP LE_OP GE_OP L_OP G_OP EQ_OP NEQ_OP AND_OP OR_OP
+%token EXP_OP TIMES_OP DIV_OP PLUS_OP MINUS_OP LE_OP GE_OP L_OP G_OP EQ_OP NEQ_OP AND_OP OR_OP
   
  
 %start program
@@ -123,6 +123,18 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail
 	|	/* epsilon */
 	;
 
+column_list: column_elem column_list_tail ;
+
+column_elem: ID | column_access ;
+
+column_access: ID '.' ID ;
+
+column_list_tail: ',' column_elem column_list_tail
+	| /* epsilon */
+	;
+
+
+
  /******* 2.3: Base query *******/
  
 base_query: select_clause from_clause order_clause where_clause groupby_clause ;
@@ -139,7 +151,7 @@ select_clause_tail: ',' select_elem select_clause_tail
 		
 from_clause: FROM table_expressions ;
 
-order_clause: ASSUMING ORDER comma_identifier_list
+order_clause: ASSUMING ORDER column_list
 	| /* epsilon */
 	;
 	 
@@ -165,81 +177,57 @@ boolean_term: boolean_factor
 	| boolean_term AND boolean_factor
 	;
 	
-boolean_factor: boolean_test
-	| NOT boolean_test
+boolean_factor: boolean_primary
+	| NOT boolean_primary
 	;
-
-boolean_test: boolean_primary
-	| boolean_primary IS truth_value
-	| boolean_primary IS NOT truth_value
-	;
-
-truth_value: TRUE | FALSE ;
 
 boolean_primary: predicate | '(' search_condition ')' ;
 
-predicate: built_in_pred_expression | value_expression ;
+predicate: value_expression postfix_predicate 
+	| overlaps_predicate
+	;
 
-built_in_pred_expression: between_predicate
+postfix_predicate: between_predicate
 	| in_predicate
 	| null_predicate
 	| like_predicate
-	| overlaps_predicate
+	| is_predicate
+	| /* epsilon */ //ie, our value_expression already generated a boolean
 	;
 	
-between_predicate: value_expression BETWEEN value_expression AND value_expression
-	| value_expression NOT BETWEEN value_expression AND value_expression
+between_predicate: BETWEEN value_expression AND value_expression
+	|  NOT BETWEEN value_expression AND value_expression
 	;
 	
-in_predicate: value_expression IN value_expression
-	| value_expression NOT IN value_expression
+in_predicate: IN in_pred_spec
+	| NOT IN in_pred_spec
 	;
 	
-like_predicate: value_expression LIKE value_expression
-	| value_expression NOT LIKE value_expression
+in_pred_spec: '(' comma_value_expression_list ')'  //explicit list
+	| value_expression //implicit list e.g a function call returning a list, a column name
 	;
 	
-null_predicate: value_expression IS NOT NULL_KEYWORD
-	| value_expression IS NULL_KEYWORD
+like_predicate: LIKE value_expression
+	| NOT LIKE value_expression
 	;
 	
-overlaps_predicate: range_value_expression OVERLAPS range_value_expression ;
+null_predicate: IS NOT NULL_KEYWORD
+	| IS NULL_KEYWORD
+	;
+	
+is_predicate: IS truth_value
+	| IS NOT truth_value
+	;
 
-range_value_expression: '(' value_expression ',' value_expression ')' ;
+truth_value: TRUE | FALSE ;	
 
-/******* 2.4: table expressions *******/
-
- /*
- 
-table_expressions: table_expression table_expressions_tail ;
-
-table_expressions_tail: ',' table_expression table_expressions_tail
-	| 
-	;
-	 
-table_expression_main: table_expression ID 
-	| table_expression LC_AS ID 
-	| table_expression 
-	;
+overlaps_predicate: range_value_expression OVERLAPS range_value_expression ;	
 	
-table_expression: built_in_table_fun '(' table_expression_main ')'	
-	| joined_table
-	| ID
-	;
+range_value_expression: '(' value_expression ',' value_expression ')' ;	
 	
-built_in_table_fun: FLATTEN ;
 
-joined_table: cross_join
-	| qualified_join
-	| '(' joined_table ')'
-	;
-	
-cross_join: table_expression_main CROSS JOIN table_expression_main ;
 
-qualified_join: table_expression_main NATURAL join_type JOIN table_expression_main
-	| table_expression_main join_type JOIN table_expression_main join_spec
-	;
- */	
+/******* 2.3.2: table expressions *******/
 
 joined_table: qualified_join 
 	| qualified_join CROSS JOIN joined_table 
@@ -255,7 +243,7 @@ table_expression: table_expression_main
 	;
 		
 table_expression_main: ID ID 
-	| ID LC_AS ID 
+	| ID UC_AS ID 
 	| ID
 	| '(' joined_table ')' 
 	;
@@ -268,7 +256,7 @@ table_expressions_tail: ',' joined_table table_expressions_tail
 	| /* epsilon */
 	;
 		
-join_type: INNER | LEFT OUTER | LEFT | RIGHT | OUTER | FULL | FULL OUTER ;
+join_type: INNER | LEFT OUTER | LEFT | RIGHT | OUTER | FULL | FULL OUTER | /* epsilon */ ;
 
 join_spec: on_clause | using_clause ;
 
@@ -298,7 +286,7 @@ type_name: TYPE_INT | TYPE_FLOAT | TYPE_STRING | TYPE_DATE | TYPE_BOOLEAN | TYPE
 
 
 /******* 2.6: update, insert, delete statements *******/
-update_statement: UPDATE ID SET set_clauses where_clause order_clause;
+update_statement: UPDATE ID SET set_clauses order_clause where_clause;
 
 set_clauses: set_clause set_clauses_tail ;
 
@@ -318,8 +306,8 @@ insert_source: global_query
 	| VALUES '(' comma_value_expression_list ')'
 	;
 	
-delete_statement: DELETE from_clause where_clause order_clause
-	| DELETE comma_identifier_list from_clause 
+delete_statement: DELETE from_clause order_clause where_clause
+	| DELETE column_list from_clause 
 	;
 
 /******* 2.7: user defined functions *******/
@@ -338,15 +326,14 @@ function_body_elem: value_expression
 	| local_queries base_query
 	;
 	
-function_local_var_def: ID ASSIGN value_expression ;
+function_local_var_def: ID LOCAL_ASSIGN value_expression ;
 
 
 /******* 2.8: value expressions *******/
-constant: INT | FLOAT | DATE | STRING | HEX | truth_value | NULL_VAL ;
+constant: INT | FLOAT | DATE | STRING | HEX | truth_value ;
 
 table_constant: ROWID | column_access | TIMES_OP ;
 
-column_access: ID '.' ID ;
 
 case_expression: CASE case_clause when_clauses else_clause END ;
 
@@ -378,13 +365,16 @@ call: main_expression
 
 indexing: ODD | EVEN | EVERY INT ;
 
-built_in_fun: ABS | AVG | AVGS | COUNT | DELTAS | DISTINCT | DROP | FIRST | LAST | MAX | MAXS | MIN
+built_in_fun: ABS | AVG | AVGS | COUNT | DELTAS | DISTINCT | DROP | FILL | FIRST | LAST | MAX | MAXS | MIN
 	| MINS | MOD | NEXT | PREV | PRD | PRDS | REV | SUM | SUMS | STDDEV | MAKENULL
 	;
+exp_expression: call 
+	| call EXP_OP exp_expression
+	;
 
-mult_expression: call
-	| mult_expression TIMES_OP call
-	| mult_expression DIV_OP call
+mult_expression: exp_expression
+	| mult_expression TIMES_OP exp_expression
+	| mult_expression DIV_OP exp_expression
 	;
 	
 
