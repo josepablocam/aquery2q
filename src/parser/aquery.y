@@ -29,7 +29,7 @@ void yyerror(const char *);
   
  /* SQL: select query key words */
  
-%token WITH UC_AS SELECT FROM ASSUMING ORDER WHERE GROUP BY HAVING LC_AS
+%token WITH UC_AS SELECT FROM ASSUMING ASC DESC WHERE GROUP BY HAVING LC_AS
 
  /* SQL: indexing */
 %token ROWID ODD EVEN EVERY
@@ -38,7 +38,7 @@ void yyerror(const char *);
 %token FLATTEN
 
  /* SQL: joins */
-%token CROSS JOIN NATURAL INNER OUTER LEFT RIGHT FULL ON USING 
+%token JOIN INNER OUTER FULL ON USING 
  
  /* SQL: views/tables */
 %token CREATE TABLE VIEW
@@ -123,13 +123,13 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail
 	|	/* epsilon */
 	;
 
-column_list: column_elem column_list_tail ;
+column_list: column_name column_list_tail ;
 
-column_elem: ID | column_access ;
+column_name: ID | column_dot_access ;
 
-column_access: ID '.' ID ;
+column_dot_access: ID '.' ID ;
 
-column_list_tail: ',' column_elem column_list_tail
+column_list_tail: ',' column_name column_list_tail
 	| /* epsilon */
 	;
 
@@ -151,10 +151,20 @@ select_clause_tail: ',' select_elem select_clause_tail
 		
 from_clause: FROM table_expressions ;
 
-order_clause: ASSUMING ORDER column_list
+order_clause: ASSUMING order_specs
 	| /* epsilon */
 	;
+	
+order_specs: order_spec order_specs_tail ;
+	
+order_spec: ASC column_name
+	 | DESC column_name
+	 ;
 	 
+order_specs_tail: ',' order_spec order_specs_tail 
+	| /* epsilon */
+	;
+
 where_clause: WHERE search_condition 
 	| /* epsilon */
 	;
@@ -229,14 +239,17 @@ range_value_expression: '(' value_expression ',' value_expression ')' ;
 
 /******* 2.3.2: table expressions *******/
 
-joined_table: qualified_join 
-	| qualified_join CROSS JOIN joined_table 
+joined_table: table_expression
+	| table_expression join_type JOIN joined_table join_spec
 	;
 
-qualified_join: table_expression
-	| table_expression NATURAL join_type JOIN qualified_join
-	| table_expression join_type JOIN qualified_join join_spec
-	;
+join_type: INNER | FULL OUTER ;	
+
+join_spec: on_clause | using_clause ;
+
+on_clause: ON search_condition ;
+
+using_clause: USING '(' comma_identifier_list ')' ;
 	
 table_expression: table_expression_main
 	| built_in_table_fun '(' table_expression_main ')'	
@@ -253,17 +266,8 @@ built_in_table_fun: FLATTEN ;
 table_expressions: joined_table table_expressions_tail ;
 
 table_expressions_tail: ',' joined_table table_expressions_tail
-	| /* epsilon */
+	| // epsilon 
 	;
-		
-join_type: INNER | LEFT OUTER | LEFT | RIGHT | OUTER | FULL | FULL OUTER | /* epsilon */ ;
-
-join_spec: on_clause | using_clause ;
-
-on_clause: ON search_condition ;
-
-using_clause: USING '(' comma_identifier_list ')' ;
-
 
 /******* 2.5: table and view creation *******/	 
 create_table_or_view: CREATE TABLE ID create_spec 
@@ -332,7 +336,7 @@ function_local_var_def: ID LOCAL_ASSIGN value_expression ;
 /******* 2.8: value expressions *******/
 constant: INT | FLOAT | DATE | STRING | HEX | truth_value ;
 
-table_constant: ROWID | column_access | TIMES_OP ;
+table_constant: ROWID | column_dot_access | TIMES_OP ;
 
 
 case_expression: CASE case_clause when_clauses else_clause END ;
@@ -362,6 +366,7 @@ call: main_expression
 	| ID '(' comma_value_expression_list ')'
 	| ID '(' ')'
 	;
+
 
 indexing: ODD | EVEN | EVERY INT ;
 
@@ -419,13 +424,13 @@ comma_value_expression_list_tail: ',' value_expression comma_value_expression_li
 
 void yyerror(const char *s) 
 {
-	//TODO: handle end of file errors
+	//TODO: rewrite with more robust fgets wrapper
 	//rewind file and find error
 	rewind(yyin);
 	int lines = line_num, cols = col_num;
-	size_t max_size = 256;
+	int max_size = 500;
 	
-	char *line = NULL;
+	char *line = malloc(sizeof(char) * (max_size - 1));
 	char *marker = malloc(sizeof(char) * (col_num + 2));
 	memset(marker, ' ', col_num + 1);
 	marker[col_num - yyleng] = '^';
@@ -433,11 +438,12 @@ void yyerror(const char *s)
 	
 	while(lines-- > 0) 
 	{ //find line with error
-		getline(&line, &max_size, yyin);
+		fgets(line, max_size, yyin);
 	}
 	
-	printf("%s at line %d, column %d\n%s" ERRORCOLOR "%s\n", s, line_num, col_num, line,marker);
+	printf("%s at line %d, column %d\n%s" ERRORCOLOR "%s\n", s, line_num, col_num - yyleng, line, marker);
 	fclose(yyin);
+	free(line); free(marker);
 	exit(1);
 }
 
