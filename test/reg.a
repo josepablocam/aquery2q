@@ -1,0 +1,107 @@
+/*	
+   A regression test set for aquery to q compiler
+   The below are a aquery translation of reg.q, which we intend to compare to the native
+   q implementation. Note that we skip creating the data as that has been done in q
+
+*/
+
+
+
+//Test 1.1: simple selection of column subset
+SELECT ticker, px, date FROM t
+
+//Test 1.2: simple selection of column subset with 1 constraint
+SELECT ticker, px, date FROM t WHERE ticker="ibm"
+
+//Test 1.3: simple selection of column subset with multiple constraints
+SELECT ticker, px, date FROM t WHERE ticker="ibm" AND size>1000
+
+//Test 1.4: calculating group-by based aggregation
+SELECT avg(px) FROM t GROUP BY ticker
+
+//Test 1.5: calculating multiple group-by based aggregations
+SELECT avg(px), min(size), max(date) FROM t GROUP BY ticker
+
+//Test 1.6: multiple group-by based aggregations and 1 constraint
+SELECT avg(px), min(size) FROM T WHERE ticker="fb" GROUP BY ticker
+
+//Test 1.7: multiple group-by based aggregations and multiple constraints
+SELECT avg(px), min(size) FROM T WHERE ticker="fb" AND date='02/04/2013' AND size > 100 GROUP BY ticker
+
+//Test 1.8: simple sorting by ticker and within that by date
+SELECT * FROM t ASSUMING ASC ticker, ASC date
+
+//Test 1.9: combining selection, sorting and constraint
+SELECT ticker, px FROM t ASSUMING ASC ticker, ASC date WHERE size>100
+
+
+//Test 1.10: combining selection, sorting, aggregate based on sorting, and constraint
+SELECT min(date) FROM t ASSUMING ASC TICKER, ASC date WHERE size>100 GROUP BY ticker
+
+/*
+   Section 2: Testing joins and their use in queries
+*/
+
+//Test 2.1: simple join and aggregate
+SELECT avg(px-closingpx) as diff FROM t FULL OUTER JOIN st USING (date, ticker) WHERE ticker IS NOT NULL GROUP BY ticker
+
+//Test 2.2: join, with constraints, and aggregate
+SELECT avg(px-closingpx) as diff FROM t FULL OUTER JOIN st USING (date, ticker) WHERE ticker IS NOT NULL AND year(date)=2000 GROUP BY ticker
+
+
+//Test 2.3: join, pushing down constraints, and aggregate (Note that the nested query is not allowed in aquery, sthg like this would solely come from optim stage)
+//Skipped as per above
+
+
+/*
+    Section 3: Testing local queries, for q, we will create "locals" by taking advantage of the function call, creating all "locals"
+    as local function variables
+*/
+
+//Test 3.1: using local queries for moving averages example
+WITH local(date, a21, a5) AS (
+	SELECT avgs(21, px) as a21, avgs(5, px) as a5 FROM t ASSUMING ASC ticker, ASC date GROUP BY ticker
+)
+SELECT ticker, date FROM FLATTEN(local) WHERE a21>5 AND prev(a21)<= prev(a5) AND prev(ticker)=ticker
+
+
+//Test 3.2: using nested queries (not allowed in aquery) for moving averages example.
+//Skipped as per above
+
+/*
+    Section 4: table creation,  insert/update/delete statements
+*/
+
+//Test 4.1: create a table
+CREATE TABLE temp (ticker STRING, px FLOAT, size INT)
+
+//Test 4.2: create table and populate using values
+CREATE TABLE temp (ticker STRING, px FLOAT, size INT)
+INSERT INTO temp VALUES("a", 1.1, 1)
+INSERT INTO temp VALUES("b", 1.2, 2)
+INSERT INTO temp VALUES("c", 1.3, 3)
+INSERT INTO temp VALUES("d", 1.4, 4)
+INSERT INTO temp VALUES("e", 1.5, 5)
+INSERT INTO temp VALUES("f", 1.6, 6)
+INSERT INTO temp VALUES("g", 1.7, 7)
+INSERT INTO temp VALUES("h", 1.8, 8)
+
+//Test 4.3: create a table and populate using query (cols in same order)
+CREATE TABLE temp (ticker STRING, px FLOAT, size INT)
+INSERT INTO temp SELECT ticker, px, size FROM t WHERE ticker="fb"
+
+
+//Test 4.4: create table, populate with query, but using different column order
+CREATE TABLE temp (ticker STRING, size INT, px FLOAT)
+INSERT INTO temp (ticker, size, px) SELECT ticker, px, size FROM t WHERE ticker="fb"
+
+
+//Test 4.5: update a new column to hold the minimum price for a ticker
+UPDATE t SET minpx=min(px) GROUP BY ticker
+
+//Test 4.6: update a new column to hold the first price per ticker, assuming sorted by year
+UPDATE t SET firstyrpx=first(px) ASSUMING ASC date GROUP BY ticker
+
+//Test 4.7: delete rows associated with the first 14 trade days listed in our table
+DELETE FROM t ASSUMING ASC date WHERE date IN first(14, distinct(date))
+
