@@ -5,6 +5,8 @@
 \
 
 
+.aq.util.time:{p:parse except/[ ;"\t\n\r"]x; ct:.z.P; r:eval p; `time`result!(%[;1e6].z.P-ct;r)}
+
 \S 10
 show "creating regression test set"
 //t, e.g. many observations of few instances, and few features
@@ -19,47 +21,47 @@ st:`ticker`date`closingpx`traded xcol update px:count[px]?px from (floor count[t
 \
 
 //Test 1.1: simple selection of column subset
-.aq.test.t11:{system"ts 0N!select ticker, px, date from t"}
+.aq.test.t11:{.aq.util.time "select ticker, px, date from t"}
 
 //Test 1.2: simple selection of column subset with 1 constraint
-.aq.test.t12:{system"ts 0N!select ticker, px, date from t where ticker=`ibm"}
+.aq.test.t12:{.aq.util.time "select ticker, px, date from t where ticker=`ibm"}
 
 //Test 1.3: simple selection of column subset with multiple constraints
-.aq.test.t13:{system"ts 0N!select ticker, px, date from t where ticker=`ibm, size>1000"}
+.aq.test.t13:{.aq.util.time "select ticker, px, date from t where ticker=`ibm, size>1000"}
 
 //Test 1.4: calculating group-by based aggregation
-.aq.test.t14:{system"ts 0N!select avg px by ticker from t"}
+.aq.test.t14:{.aq.util.time "select avg px by ticker from t"}
 
 //Test 1.5: calculating multiple group-by based aggregations
-.aq.test.t15:{system"ts 0N!select avg px, min size, max date by ticker from t"}
+.aq.test.t15:{.aq.util.time "select avg px, min size, max date by ticker from t"}
 
 //Test 1.6: multiple group-by based aggregations and 1 constraint
-.aq.test.t16:{system"ts 0N!select avg px, min size by ticker from t where ticker=`fb"}
+.aq.test.t16:{.aq.util.time "select avg px, min size by ticker from t where ticker=`fb"}
 
 //Test 1.7: multiple group-by based aggregations and multiple constraints
-.aq.test.t17:{system"ts 0N!select avg px, min size by ticker from t where ticker=`fb, date=2013.02.04, size > 100"}
+.aq.test.t17:{.aq.util.time "select avg px, min size by ticker from t where ticker=`fb, date=2013.02.04, size > 100"}
 
 //Test 1.8: simple sorting by ticker and within that by date
-.aq.test.t18:{system"ts 0N!`ticker`date xasc t"}
+.aq.test.t18:{.aq.util.time "`ticker`date xasc t"}
 
 //Test 1.9: combining selection, sorting and constraint
-.aq.test.t19:{system "ts 0N!select ticker, px from `ticker`date xasc t where size>100"}
+.aq.test.t19:{.aq.util.time "select ticker, px from `ticker`date xasc t where size>100"}
 
 //Test 1.10: combining selection, sorting, aggregate based on sorting, and constraint
-.aq.test.t110:{system "ts 0N!select min date by ticker from `ticker`date xasc t where size>100"}
+.aq.test.t110:{.aq.util.time "select min date by ticker from `ticker`date xasc t where size>100"}
 
 /
    Section 2: Testing joins and their use in queries
 \
 
 //Test 2.1: simple join and aggregate
-.aq.test.t21:{system"ts 0N!select diff:avg px-closingpx by ticker from t lj `date`ticker xkey st"}
+.aq.test.t21:{.aq.util.time "select diff:avg px-closingpx by ticker from t lj `date`ticker xkey st"}
 
 //Test 2.2: join, with constraints, and aggregate
-.aq.test.t22:{system "ts 0N!select diff:avg px-closingpx by ticker from t lj `date`ticker xkey st where date.year=2000"}
+.aq.test.t22:{.aq.util.time "select diff:avg px-closingpx by ticker from t lj `date`ticker xkey st where date.year=2000"}
 
 //Test 2.3: join, pushing down constraints, and aggregate (Note that the nested query is not allowed in aquery, sthg like this would solely come from optim stage)
-.aq.test.t23:{system "ts 0N!select diff:avg px-closingpx by ticker from (select from t where date.year=2000) lj `date`ticker xkey select from st where date.year=2000"}
+.aq.test.t23:{.aq.util.time "select diff:avg px-closingpx by ticker from (select from t where date.year=2000) lj `date`ticker xkey select from st where date.year=2000"}
 
 
 /
@@ -67,14 +69,17 @@ st:`ticker`date`closingpx`traded xcol update px:count[px]?px from (floor count[t
     as local function variables
 \
 
+
+
+
 //Test 3.1: using local queries for moving averages example
 .aq.test.t31:{
-    r:system"ts temp:select date, a21:21 mavg px, a5:5 mavg px by ticker from `ticker`date xasc t";
-    r+system"ts 0N!select ticker, date from ungroup temp where a21>a5,prev[a21]<=prev a5,prev[ticker]=ticker"
+ .aq.util.time "temp:select date, a21:21 mavg px, a5:5 mavg px by ticker from `ticker`date xasc t;
+                select ticker, date from ungroup temp where a21>a5,prev[a21]<=prev a5,prev[ticker]=ticker"
     }
 
 //Test 3.2: using nested queries (not allowed in aquery) for moving averages example.
-.aq.test.t32:{system"ts 0N!select from (update a21:21 mavg px, a5:5 mavg px by ticker from `ticker`date xasc t) where a21>a5, prev[a21]<=prev a5, prev[ticker]=ticker"}
+.aq.test.t32:{.aq.util.time "select from (update a21:21 mavg px, a5:5 mavg px by ticker from `ticker`date xasc t) where a21>a5, prev[a21]<=prev a5, prev[ticker]=ticker"}
 
 
 /
@@ -82,37 +87,94 @@ st:`ticker`date`closingpx`traded xcol update px:count[px]?px from (floor count[t
 \
 
 //Test 4.1: create a table
-.aq.test.t41:{system"ts 0N!([]ticker:`$(); px:`float$(); size:`long$())"}
+.aq.test.t41:{.aq.util.time "([]ticker:`$(); px:`float$(); size:`long$())"}
 
 //Test 4.2: create table and populate using values
 .aq.test.t42:{
-    r:system "ts temp:([]ticker:`$(); px:`float$(); size:`long$())";
-    r+system "ts 0N!`temp upsert flip (`a`b`c`d`e`f`g`h;1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8;1 2 3 4 5 6 7 8)"
+    .aq.util.time "temp:([]ticker:`$(); px:`float$(); size:`long$());
+                   temp upsert flip (`a`b`c`d`e`f`g`h;1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8;1 2 3 4 5 6 7 8)"
     }
 
 //Test 4.3: create a table and populate using query (cols in same order)
 .aq.test.t43:{
-    r:system"ts temp:([]ticker:`$(); px:`float$(); size:`long$())";
-    r+system"ts 0N!`temp upsert select ticker, px, size from t where ticker=`fb"
+    .aq.util.time "temp:([]ticker:`$(); px:`float$(); size:`long$());
+                   temp upsert select ticker, px, size from t where ticker=`fb"
  };
 
 //Test 4.4: create table, populate with query, but using different column order
 .aq.test.t44:{
-    r:system"ts temp:([]ticker:`$(); size:`long$(); px:`float$())";
-    r+system"ts 0N!`temp upsert `ticker`size`px xcols select ticker, px, size from t where ticker=`fb"
+    .aq.util.time "temp:([]ticker:`$(); size:`long$(); px:`float$());
+                   temp upsert `ticker`size`px xcols select ticker, px, size from t where ticker=`fb"
  }
 
 //Test 4.5: update a new column to hold the minimum price for a ticker
-.aq.test.t45:{system"ts 0N!update minpx:min px by ticker from `t"}
+.aq.test.t45:{.aq.util.time "update minpx:min px by ticker from `t"}
 
 //Test 4.6: update a new column to hold the first price per ticker, assuming sorted by year
-.aq.test.t46:{system"ts 0N!update firstyrpx:first px by ticker from `date xasc `t"}
+.aq.test.t46:{.aq.util.time "update firstyrpx:first px by ticker from `date xasc `t"}
 
 //Test 4.7: delete rows associated with the first 14 trade days listed in our table
-.aq.test.t47:{system"ts 0N!delete from `date xasc `t where date in 14 sublist distinct date"}
+.aq.test.t47:{.aq.util.time "delete from `date xasc `t where date in 14 sublist distinct date"}
 
 
-.aq.test.runTests:{{x[]} each ``runTests _ .aq.test}
 
+/
+	Section 5: Tests from Alberto Lerner's thesis and presentation on aquery. 
+	Please see the .pdf file accompanying this implementation for references to both
+	We assume the existence of tables: Ticks, Portfolio, Packets, Sales, TradedStocks, HistoricQuotes as per references in both documents
+\
+
+//Creating necessary tables
+n:`int$1e6 
+Ticks:([]ID:n?`S`ACME`OTHER`CORP; date:n?.z.D; timestamp:n?.z.P; price:n?100.)
+Portfolio:update cost:position*n?100. from ([]ID:n?`S`ACME`OTHER`CORP,upper 4?`3; position:1e4+n?1e6)
+Packets:select from ([]src:n?100; dest:n?100; length:n?256; timestamp:.z.P+10*n?`int$1e9) where src<>dest
+Sales:update sales:count[i]?1e6 from ([]month:`month${neg[x]?x}1+`long$`month$.z.D)
+TradedStocks:([]ID:n?`S`ACME`OTHER`CORP; TradeDate:n?.z.D);
+HistoricQuotes:update ClosePrice:count[i]?100. from `ID`date xcol distinct TradedStocks;
+base:([] ID:n?`S`ACME`OTHER`CORP; name:n?`$'.Q.a)
+
+//Test 5.1: pg 24
+.aq.test.t51:{.aq.util.time "select price from `timestamp xasc Ticks where ID=`ACME"}
+
+//Test 5.2: pg 25, example 3.1
+//naively written
+.aq.test.t52:{.aq.util.time "select max price-mins price from `timestamp xasc Ticks where ID=`ACME, date=2003.05.11"}
+
+//Test 5.3: pg 29, example 3.3
+.aq.test.t53:{.aq.util.time "select avg length, ct:count timestamp by src, dest, sums (120*1e9)<deltas timestamp from `src xasc `dest xdesc `timestamp xasc Packets"}
+
+//Test 5.4: pg 30, example 3.4
+.aq.test.t54:{
+    .aq.util.time "as:select date, timestamp, a21:21 mavg price, a5:5 mavg price by ID from `ID`timestamp xasc Ticks;
+                    select ID, date from `ID`timestamp xasc ungroup as where a21>a5,(prev a21) <=prev a5, (prev ID)=ID"
+ }
+
+//Test 5.5: pg 32, example 3.5
+//recreating innerjoin semantics from traditional sql, seems ej can't handle the full tables, wsfull
+.aq.test.t55:{.aq.util.time "select 10 sublist price by ID from ej[`ID;1000#Ticks;1000#Portfolio]"}
+
+//Test 5.6: pg 33, example 3.6
+.aq.test.t56:{
+    .aq.util.time "OneDay:select ID, price, timestamp from `timestamp xasc Ticks where date=2003.05.11;
+                    select count i by ID from `timestamp xasc OneDay where i < 1000"
+       }
+
+//Test 5.7: moving average over arrables
+.aq.test.t57:{.aq.util.time "select month, 3 mavg sales from `month xasc Sales"}
+
+
+//Test 5.8: Interchange sorting + order preserving operators
+//recreating innerjoin semantics from traditional sql
+ejOn:{y[where count each i],'z raze i:where each z x/:y} //similar to ej but now x is a predicate, need to test further currently too slow to use
+//.aq.test.t58:{.aq.util.time "select ID, 10 mavg ClosePrice by ID from `TradeDate xasc ejOn[{(x[`ID]=y`ID)&x[`TradeDate]=y`date};TradedStocks;HistoricQuotes]"}
+.aq.test.t58:{.aq.util.time "select 10 mavg ClosePrice by ID from `date xasc ej[`ID`date;`ID`date xcol TradedStocks;`ID xcol HistoricQuotes]"}
+
+
+//Test 5.9: last price for a name query (too large and blows up memory if operates on whole table, it's ej's fault..need to do this smarter)
+.aq.test.t59:{.aq.util.time "select last price from `name`timestamp xasc ej[`ID;1000#select from base where name=`x;1000#Ticks]"}
+
+
+.aq.util.runTests:{{show "------>running ",string x;show r:(.aq.test x)[];.Q.gc[];r`time} each key 1_.aq.test}
 
 

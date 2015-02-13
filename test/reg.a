@@ -105,3 +105,151 @@ UPDATE t SET firstyrpx=first(px) ASSUMING ASC date GROUP BY ticker
 //Test 4.7: delete rows associated with the first 14 trade days listed in our table
 DELETE FROM t ASSUMING ASC date WHERE date IN first(14, distinct(date))
 
+
+/*
+	Section 5: Tests from Alberto Lerner's thesis and presentation on aquery. 
+	Please see the .pdf file accompanying this implementation for references to both
+	We assume the existence of tables: Ticks, Portfolio, Packets, Sales, TradedStocks, Historic Quotes as per references in both documents
+*/
+
+
+/********************************************************** 
+***********Examples from aquery thesis*********************
+**********************************************************/
+
+//Test 5.1: pg 24
+SELECT price
+FROM Ticks
+    ASSUMING ASC timestamp
+WHERE ID = "ACME"
+
+//Test 5.2: pg 25, example 3.1
+SELECT max(price - mins(price))
+FROM Ticks
+    ASSUMING ASC timestamp
+WHERE ID="ACME" AND
+    date = '05/11/2003'
+
+
+//Test 5.3: pg 29, example 3.3,  pg 35
+SELECT src, dest, avg(length), count(timestamp)
+FROM Packets
+    ASSUMING ASC src, DESC dest, ASC timestamp
+GROUP BY src, dest, sums(deltas(timestamp) > 120)
+
+//Test 5.4: pg 30, example 3.4
+WITH
+    averages (ID, date, a21, a5) AS
+    (SELECT ID, date, avgs(21, price) as a21,
+      avgs(5, price) as a5 FROM Ticks
+        ASSUMING ASC ID, ASC timestamp
+     GROUP BY ID)
+ SELECT ID, date 
+ FROM FLATTEN(averages)
+    ASSUMING ASC ID, ASC timestamp
+ WHERE a21 > a5 AND
+       prev(a21) <= prev(a5) AND
+       prev(ID) = ID
+
+//Test 5.5: pg 32, example 3.5
+SELECT t.ID, last(10, price)
+FROM Ticks t, Portfolio p
+    ASSUMING ASC timestamp
+WHERE t.ID = p.ID
+GROUP BY t.ID
+
+//Test 5.6: pg 33, example 3.6
+WITH
+    OneDay AS
+    (SELECT ID, price, timestamp
+     FROM Ticks
+        ASSUMING ASC timestamp
+     WHERE date = '05/11/2003')
+ SELECT ID, count(*) 
+ FROM OneDay
+    ASSUMING ASC timestamp
+    WHERE ROWID < 1000
+    GROUP BY ID
+
+/********************************************************** 
+***********Examples from aquery presentation notes*********
+**********************************************************/
+
+
+//Test 5.7: moving average over arrables
+SELECT month, avgs(3, sales) 
+FROM Sales 
+ASSUMING ASC month
+
+
+//Test 5.8: Interchange sorting + order preserving operators
+SELECT ts.ID, avgs(10, hq.ClosePrice) 
+FROM TradedStocks AS ts INNER JOIN
+    HistoricQuotes AS hq
+	ON ts.ID=hq.ID AND ts.TradeDate=hq.date //note use of ON given differing col names
+ASSUMING ASC hq.TradeDate
+GROUP BY ID
+
+
+//Test 5.9: last price for a name query
+SELECT last(price)
+FROM Ticks t, base b
+    ASSUMING ASC name, ASC timestamp
+WHERE t.ID = b.ID AND name = "x"
+
+
+
+
+/*
+    Section 6: Extended Miscellaneous Aquery Examples
+*/
+
+
+
+//Test 6.1 simple function definition
+FUNCTION myfunction(x,y) { x + y }
+
+//Test 6.2 function definition with local variables
+FUNCTION pythag(x, y) {
+    sqr_x := x * x;
+    sqr_y := y * y;
+    sqrt(sqr_x + sqr_y)
+}
+
+
+//Test 6.3: table creation  with schema
+CREATE TABLE my_table (c1 INT, c2 FLOAT, c3 DATE)
+
+//Test 6.4: table creation with query
+CREATE TABLE my_table AS
+	SELECT c1, c2, c3 FROM other_table
+	ASSUMING ASC c1
+	
+
+//Test 6.3: update statement
+UPDATE my_table SET
+		c2 = first(c1)
+		ASSUMING ASC c1
+		WHERE c2 IS NULL
+
+
+		
+//Test 6.4: insert statement
+INSERT INTO my_table ASSUMING ASC c3 
+	(c2, c1, c3) VALUES (2.3, 10, '01/01/1990')
+	
+//Test 6.5: delete statement
+DELETE c2 FROM my_table
+
+//Test 6.6: delete statement
+DELETE FROM my_table ASSUMING ASC c1, DESC c2 WHERE c1 = first(c2)
+
+//Test 6.7: using case statement in select
+SELECT
+	CASE 
+		WHEN c1 IS NULL THEN c2
+		ELSE c1
+	END as c1_filled FROM t
+
+
+
