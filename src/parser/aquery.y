@@ -2,6 +2,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "symtable.h"	
+	
 #define YYDEBUG 1
 #define ERRORCOLOR  "\x1B[32m"
 
@@ -14,7 +16,7 @@ extern int yyparse();
 extern int line_num; 
 extern int col_num;
 
-	
+Symtable *env;	
 void yyerror(const char *);
 
 
@@ -65,14 +67,27 @@ void yyerror(const char *);
 %token AVGS DELTAS MAXS MINS PRDS SUMS
 %token MAKENULL
  
- /* literals and identifiers */
-%token INT FLOAT STRING DATE TRUE FALSE HEX ID 
+ /* literals and identifiers, and assocating storage in the yyval union */
+%token <intval> INT 
+%token <floatval> FLOAT
+%token <intval> TRUE
+%token <intval> FALSE 
+%token DATE HEX 
+%token <str> ID 
+%token <str> STRING
  
  /* Math operators */
 %token EXP_OP TIMES_OP DIV_OP PLUS_OP MINUS_OP LE_OP GE_OP L_OP G_OP EQ_OP NEQ_OP AND_OP OR_OP
   
  
 %start program
+
+%union {
+  int   intval;
+  float floatval;
+  char* str;
+}
+
 
 %%
 
@@ -88,7 +103,7 @@ void yyerror(const char *);
  
  /******* 2.1: Top level program definition *******/
 
-program: top_level
+program: top_level													{}
 
 top_level: global_query top_level
 	|	create_table_or_view top_level
@@ -101,23 +116,29 @@ top_level: global_query top_level
 
  /******* 2.2: Local and global queries *******/
  
-global_query: local_queries base_query;
+global_query:               { env = push_env(env); /* create a new scope */ }
+			  local_queries 
+              base_query
+			                { env = pop_env(env); /* remove current scope */ }
+		      ; 
 
-local_queries: WITH local_query local_queries_tail
-	|	/* epsilon */
+local_queries: WITH local_query local_queries_tail 
+	|	/* epsilon */	
 	;
 	
 local_queries_tail: local_query local_queries_tail
 	| /* epsilon */
 	;
 
-local_query: ID col_aliases UC_AS '(' base_query ')' ;
+local_query: ID                        { put_sym(env, $1, TABLE_TYPE); /* add to symbtable */ }
+             col_aliases 
+			 UC_AS '(' base_query ')' ; 
 
 col_aliases: '(' comma_identifier_list ')' 
 	| /* epsilon */
 	;
 
-comma_identifier_list: ID comma_identifier_list_tail;
+comma_identifier_list: ID comma_identifier_list_tail; 
 
 comma_identifier_list_tail: ',' ID comma_identifier_list_tail
 	|	/* epsilon */
@@ -137,7 +158,7 @@ column_list_tail: ',' column_name column_list_tail
 
  /******* 2.3: Base query *******/
  
-base_query: select_clause from_clause order_clause where_clause groupby_clause ;
+base_query: select_clause from_clause order_clause where_clause groupby_clause ; 
  
 select_clause: SELECT select_elem select_clause_tail ;
 
@@ -149,7 +170,7 @@ select_clause_tail: ',' select_elem select_clause_tail
 	| /* epislon */
 	;
 		
-from_clause: FROM table_expressions ;
+from_clause: FROM table_expressions ; //TODO: check that table_expressions is of type table or unknown
 
 order_clause: ASSUMING order_specs
 	| /* epsilon */
@@ -179,12 +200,12 @@ having_clause: HAVING search_condition
 
 
  /******* 2.3.1: search condition *******/
-search_condition: boolean_term
-	| search_condition OR boolean_term
+search_condition: boolean_term				
+	| search_condition OR boolean_term		//TODO: check that this is boolean type, unknown, or function call
 	;
 	
-boolean_term: boolean_factor
-	| boolean_term AND boolean_factor
+boolean_term: boolean_factor				
+	| boolean_term AND boolean_factor		//TODO: check that this is boolean type, unknown, or function call
 	;
 	
 boolean_factor: boolean_primary
@@ -193,7 +214,7 @@ boolean_factor: boolean_primary
 
 boolean_primary: predicate | '(' search_condition ')' ;
 
-predicate: value_expression postfix_predicate 
+predicate: value_expression postfix_predicate //TODO: check that type of value expression works with postfix_predicate
 	| overlaps_predicate
 	;
 
@@ -239,7 +260,7 @@ range_value_expression: '(' value_expression ',' value_expression ')' ;
 
 /******* 2.3.2: table expressions *******/
 
-joined_table: table_expression
+joined_table: table_expression									//TODO: check that types here work
 	| table_expression join_type JOIN joined_table join_spec
 	;
 
@@ -270,8 +291,8 @@ table_expressions_tail: ',' joined_table table_expressions_tail
 	;
 
 /******* 2.5: table and view creation *******/	 
-create_table_or_view: CREATE TABLE ID create_spec 
-	| CREATE VIEW ID create_spec
+create_table_or_view: CREATE TABLE ID create_spec             { put_sym(env, $3, TABLE_TYPE); }
+	| CREATE VIEW ID create_spec                              { put_sym(env, $3, VIEW_TYPE);  }
 	;
 
 create_spec: UC_AS global_query	
@@ -290,7 +311,7 @@ type_name: TYPE_INT | TYPE_FLOAT | TYPE_STRING | TYPE_DATE | TYPE_BOOLEAN | TYPE
 
 
 /******* 2.6: update, insert, delete statements *******/
-update_statement: UPDATE ID SET set_clauses order_clause where_clause;
+update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause;
 
 set_clauses: set_clause set_clauses_tail ;
 
@@ -315,7 +336,25 @@ delete_statement: DELETE from_clause order_clause where_clause
 	;
 
 /******* 2.7: user defined functions *******/
-user_function_definition: FUNCTION ID '(' comma_identifier_list ')' '{' function_body '}' ;
+user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE); }
+                        '(' 
+						    def_arg_list 	  { env = push_env(env); /* create new scope*/ } 
+					     ')' 
+						'{' 
+						    function_body 
+						'}'                   { env = pop_env(env); /* remove latest scope*/ } 
+						; 
+
+def_arg_list: ID                              { put_sym(env, $1, UNKNOWN_TYPE); }
+              def_arg_list_tail			
+	| /* epsilon */
+	;
+	
+def_arg_list_tail: ',' ID                     { put_sym(env, $2, UNKNOWN_TYPE ); }
+                   def_arg_list_tail
+	| /* epsilon */
+	;
+
 
 function_body: function_body_elem function_body_tail
 	| /* epsilon */
@@ -330,7 +369,7 @@ function_body_elem: value_expression
 	| local_queries base_query
 	;
 	
-function_local_var_def: ID LOCAL_ASSIGN value_expression ;
+function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE); } ; //TODO: replace UNKNOWN_TYPE with the type of the value expression node
 
 
 /******* 2.8: value expressions *******/
@@ -468,6 +507,8 @@ int main(int argc, char *argv[]) {
 	{
 		yyin = to_parse;
 	}
+	
+	env = make_symtable(); //create the global environment
 	
 	do 
 	{

@@ -129,16 +129,16 @@ void consume_single_line_comment();
 
 
  /* Literals */
--?[0-9]+                        { count(); return INT;     }	
--?[0-9]+\.[0-9]+                { count(); return FLOAT;   } 
-\"(\\.|[^"])*\"                 { count(); return STRING;  } 
-\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'		{ count(); return DATE; } 
-"TRUE"                          { count(); return TRUE;	   }
-"FALSE"                         { count(); return FALSE;   }
+-?[0-9]+                        { count(); yylval.intval = atoi(yytext); return INT;       }	
+-?[0-9]+\.[0-9]+                { count(); yylval.floatval = atof(yytext); return FLOAT;   } 
+\"(\\.|[^"])*\"                 { count(); yylval.str = strdup(yytext); return STRING;     } 
+\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'   { count(); return DATE; } 
+"TRUE"                          { count(); yylval.intval = 1; return TRUE;	   }
+"FALSE"                         { count(); yylval.intval = 0; return FALSE;   }
 "0x"[0-9a-fA-F]+                { count(); return HEX;	   }
 
  /* Variables */
-[a-zA-Z]+[a-zA-Z0-9_]*	{ count(); return ID; }	 
+[a-zA-Z]+[a-zA-Z0-9_]*	{ count(); yylval.str = strdup(yytext); return ID; }	 
 
 
  /* Standard mathematical operators */
