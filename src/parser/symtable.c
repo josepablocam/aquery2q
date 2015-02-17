@@ -8,12 +8,15 @@
 #include <string.h>
 #include <stdlib.h>
 #include "symtable.h"
-
+#define SYM_TABLE_DEBUG 0
+#define PRINT_DEBUG(str) if(SYM_TABLE_DEBUG) printf("---->DEBUGGING: %s\n", str)
+#define STAND_ALONE 0
 
 //Allocate memory for a symbol table entry, copy variable name, initialize and return
 //Exits with error if memory is not succesfully allocated with malloc
 Symentry *make_symentry(char *name, Type type)
 {
+	PRINT_DEBUG("MEMALLOC: symbol entry");
 	Symentry *newentry = malloc(sizeof(Symentry));
 	
 	if(newentry == NULL)
@@ -32,6 +35,7 @@ Symentry *make_symentry(char *name, Type type)
 //Allocate memory for symbol table and initializes struct. Exits with error if memory allocation fails
 Symtable *make_symtable()
 {
+	PRINT_DEBUG("MEMALLOC: symbol table");
 	Symtable *symtable = malloc(sizeof(Symtable));
 	
 	if(symtable == NULL)
@@ -54,6 +58,7 @@ Symtable *make_symtable()
 //a pointer to the top of the stack
 Symtable *push_env(Symtable *curr_env)
 {
+	PRINT_DEBUG("pushing context (new symbol table added to stack)");
 	Symtable *new_env = make_symtable();
 	new_env->next = curr_env;
 	return new_env;
@@ -63,7 +68,7 @@ Symtable *push_env(Symtable *curr_env)
 //and returns a pointer to the new top of the stack
 Symtable *pop_env(Symtable *curr_env)
 {
-	printf("****Popping environment****\n");
+	PRINT_DEBUG("popping current context (top of stack symbol table removed)");
 	Symtable* next_env = curr_env->next;
 	free_symtable(curr_env);
 	return next_env;
@@ -73,6 +78,7 @@ Symtable *pop_env(Symtable *curr_env)
 //(this needs to be called on every table in a symbol table stack to correctly free the whole symbol table)
 void free_symtable(Symtable *symtable)
 {
+	PRINT_DEBUG("freeing symbol table");
 	free_names(symtable->table);
 	free(symtable);
 }
@@ -80,6 +86,7 @@ void free_symtable(Symtable *symtable)
 //Frees the array of symbol table entries held in a symbol table structure.
 void free_names(Symentry *names[])
 {
+	PRINT_DEBUG("MEMDEALLOC: freeing names");
 	int i;
 	Symentry *this;
 	
@@ -95,6 +102,7 @@ void free_names(Symentry *names[])
 //Follows a chain of symbol table entries and frees each of them
 void free_symchain(Symentry *this)
 {
+	PRINT_DEBUG("MEMDEALLOC: freeing chain of symbols");
 	Symentry *delete;
 	
 	for(delete = NULL; this != NULL; )
@@ -125,6 +133,7 @@ int symhash(char *name)
 //If no match is found, NULL is returned
 Symentry *lookup_sym(Symtable *symtable, char *name)
 {
+	PRINT_DEBUG("looking up a symbol in symbol table");
 	Symtable *curr_env = symtable;
 	Symentry *result = NULL;
 	Symentry *entry = NULL;
@@ -149,6 +158,7 @@ Symentry *lookup_sym(Symtable *symtable, char *name)
 //Symbols are placed in stack order, with the latest put shadowing repetitions placed prior
 void put_sym(Symtable *curr_env, char *name, Type type)
 {
+	PRINT_DEBUG("putting symbol into symbol table");
 	Symentry *new_entry = make_symentry(name, type);
 	int hash_index = symhash(name);
 	new_entry->next = curr_env->table[hash_index];
@@ -178,6 +188,9 @@ const char* print_type_name(Type type)
 		case TABLE_TYPE:
 			return "table";
 			break;
+		case VIEW_TYPE:
+			return "view";
+			break;
 		case FUNCTION_TYPE:
 			return "function";
 			break;
@@ -188,28 +201,29 @@ const char* print_type_name(Type type)
 			return "unknown";
 			break;
 		default:
-			return "Error: undefined type";
+			return "Error: undef";
 			break;
 	}
 }
 
 
-
+//Printing the symbol
 void print_symtable(Symtable *symtable)
 {
 	int scope, i;
 	Symtable *env;
 	Symentry *entry = NULL;
 	printf("Symtable\n");
-	printf("------------------------\n");
+	printf("%12.12s %12.12s %12.12s\n", "n_scopes_out", "var_name", "var_type");
+	printf("---------------------------------------------\n");
 		
 	for(env = symtable, scope = 0; env != NULL; env = env->next, scope++)
 	{
 		for(i = 0; i < SYM_TABLE_SIZE; i++)
-		{
-			for(entry = symtable->table[i]; entry != NULL; entry = entry->next)
-			{
-				printf("%.3d %9.9s %9.9s\n", scope, entry->name, print_type_name(entry->type));
+		{	
+			for(entry = env->table[i]; entry != NULL; entry = entry->next)
+			{	
+				printf("%9.3d %16.12s %10.12s\n", scope, entry->name, print_type_name(entry->type));
 			}
 		}
 	}
@@ -220,6 +234,7 @@ void print_symtable(Symtable *symtable)
 //A simple set of tests for our symbol table implementation
 void ignore_symtable_test()
 { 
+	PRINT_DEBUG("running symbol table tests");
 	//scope 1
 	char *names[][4]= { 
 			{ "var_1","var_2","var_3", "var_4" }, //scope 0
@@ -295,12 +310,13 @@ void ignore_symtable_test()
 
 
 
-/*
+#if STAND_ALONE
 int main(int argc, char *argv[])
 {
 	ignore_symtable_test();
 	return 0;
 }
-*/
+#endif
+
 
 
