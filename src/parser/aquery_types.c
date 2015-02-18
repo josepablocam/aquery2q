@@ -29,6 +29,11 @@ int is_error(DataType x)
 	return x == ERROR_TYPE;
 }
 
+int is_fun(DataType x)
+{
+	return x == FUNCTION_TYPE;
+}
+
 
 //unification for situations where we have a guarantee on the resulting type, assuming
 //operands result in correct type resolution versus wrong type

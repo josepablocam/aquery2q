@@ -22,16 +22,20 @@ typedef enum NodeTypes {
 	CONSTANT_NODE, 
 	ROWID_NODE,
 	COLUMN_DOT_ACCESS_NODE,
-	ASTERISK_NODE,
+	ALL_COLS_NODE,
 	//Case expressions
 	CASE_EXP_NODE,
-	CASE_CASE_CLAUS_NODE,
+	CASE_EXP_CASE_NODE,
 	CASE_WHEN_NODE,
+	WHEN_CLAUSES_NODE,
 	CASE_ELSE_NODE,
-	NILADIC_CALL_NODE, //no arguments
-	CALL_NODE, //we can view indexing as a call as well
-	INDEX_NODE,
-	BUILT_IN_FUN_NODE, 
+	INDEX_NODE, //indexing parent node
+	EVEN_IX, //types of indexing
+	ODD_IX,
+	INT_IX,
+	CALL_NODE,
+	BUILT_IN_FUN_NODE,
+	UDF_NODE,
 	//Math operations
 	EXP_NODE,
 	MULT_NODE,
@@ -57,6 +61,7 @@ int is_float(DataType x);
 int is_bool(DataType x);
 int is_numeric(DataType x);
 int is_error(DataType x);
+int is_fun(DataType x);
 DataType unif_numeric(DataType x, DataType y);
 DataType unif_override(DataType poss, DataType override, DataType x, DataType y);
 DataType unif_comp(DataType x, DataType y);
