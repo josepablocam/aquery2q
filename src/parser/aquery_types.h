@@ -7,6 +7,7 @@ typedef enum DataTypes {
      FLOAT_TYPE, 
      DATE_TYPE, 
      BOOLEAN_TYPE, 
+	 STRING_TYPE,
      HEX_TYPE, 
      TABLE_TYPE, 
      VIEW_TYPE, 
@@ -16,46 +17,9 @@ typedef enum DataTypes {
 	 ERROR_TYPE, //we create a type error that we can use to point out issues later on
      } DataType;
 
-typedef enum NodeTypes {
-	//Expressions
-	COMPUTABLE_NODE, //nodes that we can reduce while we build the AST
-	CONSTANT_NODE, 
-	ROWID_NODE,
-	COLUMN_DOT_ACCESS_NODE,
-	ALL_COLS_NODE,
-	//Case expressions
-	CASE_EXP_NODE,
-	CASE_EXP_CASE_NODE,
-	CASE_WHEN_NODE,
-	WHEN_CLAUSES_NODE,
-	CASE_ELSE_NODE,
-	INDEX_NODE, //indexing parent node
-	EVEN_IX, //types of indexing
-	ODD_IX,
-	INT_IX,
-	CALL_NODE,
-	BUILT_IN_FUN_NODE,
-	UDF_NODE,
-	//Math operations
-	EXP_NODE,
-	MULT_NODE,
-	DIV_NODE,
-	ADD_NODE,
-	MINUS_NODE,
-	LT_NODE,
-	GT_NODE,
-	LE_NODE,
-	GE_NODE,
-	EQ_NODE,
-	NEQ_NODE,
-	LAND_NODE, //logical and from expression section
-	LOR_NODE,
-	VAL_LIST //comma value expression list 
-	} NodeType;
+
 	
-	
-	
-	//Type checking operations
+//Type checking operations
 int is_int(DataType x);
 int is_float(DataType x);
 int is_bool(DataType x);

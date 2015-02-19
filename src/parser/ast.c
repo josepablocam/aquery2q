@@ -5,14 +5,57 @@
 #include "ast.h"
 #include "aquery_types.h"
 #include "symtable.h"
+#define AST_DEBUG 1
+#define AST_PRINT_DEBUG(str) if(AST_DEBUG) printf("---->AST DEBUGGING: %s\n", str)
+
+#define STAND_ALONE 0
+
+char *ExprNodeTypeName[]= {
+	"const",
+	"var",
+	"rowid",
+	"col.dot.access",
+	"all_cols",
+	"case_expr",
+	"case_clause",
+	"case_when",
+	"case_when_clause",
+	"case_else",
+	"call",
+	"built-in",
+	"udf",
+	"index_expr",
+	"odd",
+	"even",
+	"every n",
+	"pow",
+	"*",
+	"/",
+	"+",
+	"-",
+	"<",
+	"<=",
+	">",
+	">=",
+	"==",
+	"!=",
+	"||",
+	"&&",
+	"expr_list",
+	"search_exp"
+	};
 
 
-ASTNode *make_EmptyNode(NodeType type)
+
+
+
+ExprNode *make_EmptyExprNode(ExprNodeType type)
 {
-	ASTNode *node = malloc(sizeof(ASTNode));
+	ExprNode *node = malloc(sizeof(ExprNode));
+	
 	if(node == NULL)
 	{
-		printf("Error: unable to allocate AST Node\n");
+		printf("Error: unable to allocate Expression Node\n");
 		exit(1);
 	}
 	node->first_child = node->first_sibling = NULL;
@@ -30,83 +73,116 @@ ASTNode *make_EmptyNode(NodeType type)
 	TODO: BASE QUERY (2.3)
 	TODO: LOCAL/GLOBAL QUERY (2.2)
 	TODO: TOP LEVEL (2.1)
+Consider breaking up node types by tyep of expression, so everything up until now
+has been expressio nodes
 
+set up query nodes as logical query plan (or close enough)
+
+create printers void (*print)(void *)
+just printout label
 
 */
 
 
 
 // Expressions
-ASTNode *make_int(int i)
+ExprNode *make_int(int i)
 {
-	ASTNode *node = make_EmptyNode(COMPUTABLE_NODE);
+	AST_PRINT_DEBUG("making int node");
+	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = INT_TYPE;
 	node->data.ival = i;
 	return node;
 }
 
-ASTNode *make_float(float f)
+ExprNode *make_float(float f)
 {
-	ASTNode *node = make_EmptyNode(COMPUTABLE_NODE);
+	AST_PRINT_DEBUG("making float node");
+	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = FLOAT_TYPE;
 	node->data.fval = f;
 	return node;
 }
 
-ASTNode *make_date(char *date)
+ExprNode *make_date(char *date)
 {
-	ASTNode *node = make_EmptyNode(CONSTANT_NODE);
+	AST_PRINT_DEBUG("making date node");
+	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = DATE_TYPE;
-	node->data.date = date; //any memory necessary was already allocated by flex
+	node->data.str = date; //any memory necessary was already allocated by flex
 	return node;
 }
 
-ASTNode *make_hex(char *hex)
+ExprNode *make_string(char *str)
 {
-	ASTNode *node = make_EmptyNode(CONSTANT_NODE);
+	AST_PRINT_DEBUG("making string node");
+	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
+	node->data_type = STRING_TYPE;
+	node->data.str = str; //any memory necessary was already allocated by flex
+	return node;
+}
+
+ExprNode *make_hex(char *hex)
+{
+	AST_PRINT_DEBUG("making hex node");
+	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = HEX_TYPE;
-	node->data.hex = hex; //any memory necessary was already allocated by flex
+	node->data.str = hex; //any memory necessary was already allocated by flex
 	return node;
 }
 
-ASTNode *make_bool(int boolean)
+ExprNode *make_bool(int boolean)
 {
-	ASTNode *node = make_EmptyNode(COMPUTABLE_NODE);
+	AST_PRINT_DEBUG("making boolean node");
+	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = BOOLEAN_TYPE;
 	node->data.ival = boolean; 
 	return node;
 }
 
-ASTNode *make_oddix()
+ExprNode *make_id(Symtable *symtable, char *id)
 {
-	return make_EmptyNode(ODD_IX);
+	AST_PRINT_DEBUG("making id node");
+	ExprNode *node = make_EmptyExprNode(ID_EXPR);
+	Symentry *info = lookup_sym(symtable, id);
+	node->data_type = (info != NULL) ? info->type : UNKNOWN_TYPE;
+	node->data.str = id;
+	return node;
 }
 
-ASTNode *make_evenix()
+ExprNode *make_oddix()
 {
-	return make_EmptyNode(ODD_IX);
+	AST_PRINT_DEBUG("making odd index");
+	return make_EmptyExprNode(ODD_IX);
 }
 
-ASTNode *make_intix(int ix)
+ExprNode *make_evenix()
 {
-	ASTNode *new_node = make_EmptyNode(INT_IX);
+	AST_PRINT_DEBUG("making even index");
+	return make_EmptyExprNode(EVEN_IX);
+}
+
+ExprNode *make_everynix(int ix)
+{
+	AST_PRINT_DEBUG("making every n index node");
+	ExprNode *new_node = make_EmptyExprNode(EVERY_N_IX);
 	new_node->data.ival = ix;
 	return new_node;
 }
 
-
-//Non-reducible operations
-ASTNode *make_valListNode(ASTNode *h, ASTNode *t)
+ExprNode *make_indexNode(ExprNode *src, ExprNode *ix)
 {
-	ASTNode *new_node = make_EmptyNode(VAL_LIST);
-	new_node->first_child = h;
-	h->first_sibling = t;
+	AST_PRINT_DEBUG("making indexing node");
+	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
+	new_node->first_child = src;
+	src->first_sibling = ix;
 	return new_node;
 }
 
-ASTNode *make_callNode(ASTNode *fun, ASTNode *args)
+ExprNode *make_callNode(ExprNode *fun, ExprNode *args)
 {
-	ASTNode *new_node = make_EmptyNode(CALL_NODE);
+	AST_PRINT_DEBUG("making call node");
+	ExprNode *new_node = make_EmptyExprNode(CALL_EXPR);
 	new_node->data_type = UNKNOWN_TYPE;
 	new_node->first_child = fun;
 		
@@ -114,25 +190,22 @@ ASTNode *make_callNode(ASTNode *fun, ASTNode *args)
 	{
 		new_node->first_child->first_sibling = args;
 	}
-	
-	if(fun->data_type == ERROR_TYPE)
-	{
-		new_node->data_type = ERROR_TYPE;
-	}
-	
+
 	return new_node;	
 }
 
-ASTNode *make_builtInFunNode(char *nm)
+ExprNode *make_builtInFunNode(char *nm)
 {
-	ASTNode *new_node = make_EmptyNode(BUILT_IN_FUN_NODE);
+	AST_PRINT_DEBUG("making built in function node");
+	ExprNode *new_node = make_EmptyExprNode(BUILT_IN_FUN_CALL);
 	new_node->data.str = nm;
 	return new_node;
 }
 
-ASTNode *make_udfNode(Symtable *symtable, char *nm)
+ExprNode *make_udfNode(Symtable *symtable, char *nm)
 {
-	ASTNode *new_node = make_EmptyNode(BUILT_IN_FUN_NODE);
+	AST_PRINT_DEBUG("making udf node");
+	ExprNode *new_node = make_EmptyExprNode(UDF_CALL);
 	Symentry *entry = lookup_sym(symtable, nm);
 	
 	if(entry != NULL && entry->type != FUNCTION_TYPE)
@@ -144,549 +217,181 @@ ASTNode *make_udfNode(Symtable *symtable, char *nm)
 }
 
 ///Case experssions
-ASTNode *make_caseNode(ASTNode *case_clause, ASTNode *when_clauses, ASTNode *else_clauses)
+ExprNode *make_caseNode(ExprNode *case_clause, ExprNode *when_clauses, ExprNode *else_clause)
 {
-	ASTNode *new_node = make_EmptyNode(CASE_EXP_NODE);
+	AST_PRINT_DEBUG("making case expression node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_EXPR);
 	
-	//TODO: think about this
-	if(is_error(case_clause->data_type) || is_error(when_clauses->data_type) || is_error(else_clauses->data_type))
-	{
-		new_node->data_type = ERROR_TYPE;
-	}
-	
+	//TODO: add error reporting
 	new_node->first_child = case_clause;
 	case_clause->first_sibling = when_clauses;
-	when_clauses->first_sibling = else_clauses;
-	
+	when_clauses->first_sibling = else_clause;
 	return new_node;
 }
 
-ASTNode *make_caseExpCaseNode(ASTNode *exp)
+ExprNode *make_caseClauseNode(ExprNode *exp)
 {
-	ASTNode *new_node = make_EmptyNode(CASE_EXP_CASE_NODE);
+	AST_PRINT_DEBUG("making case clause node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_CLAUSE);
 	new_node->first_child = exp;
 	return new_node;
 }
 
-ASTNode *make_caseWhenNode(ASTNode *exps)
+ExprNode *make_caseWhenNode(ExprNode *when, ExprNode *conseq)
 {
-	ASTNode *new_node = make_EmptyNode(CASE_WHEN_NODE);
-	new_node->first_child = exps;
+	AST_PRINT_DEBUG("making when clause node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSE);
+	new_node->first_child = when;
+	when->first_sibling = conseq;
 	return new_node;
 }
 
-ASTNode *make_WhenClausesNode(ASTNode *h, ASTNode *t)
+ExprNode *make_whenClausesNode(ExprNode *h, ExprNode *t)
 {
-	ASTNode *new_node = make_EmptyNode(CASE_WHEN_NODE);
+	AST_PRINT_DEBUG("making when clauses node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSES);
 	new_node->first_child = h;
 	h->first_sibling = t;
 	return new_node;
 }
 
-ASTNode *make_elseClauseNode(ASTNode *exp)
+ExprNode *make_elseClauseNode(ExprNode *exp)
 {
-	ASTNode *new_node = make_EmptyNode(CASE_ELSE_NODE);
+	AST_PRINT_DEBUG("making else clause node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_ELSE_CLAUSE);
 	new_node->first_child = exp;
 	return new_node;
 }
 
-ASTNode *make_rowId()
+ExprNode *make_rowId()
 {
-	return make_EmptyNode(ROWID_NODE);
+	AST_PRINT_DEBUG("making row id node");
+	return make_EmptyExprNode(ROWID_EXPR);
 }
 
-ASTNode *make_colDotAccessNode(char *nm)
+ExprNode *make_colDotAccessNode(ExprNode *src, ExprNode *dest)
 {
-	ASTNode *new_node = make_EmptyNode(ROWID_NODE);
-	new_node->data.str = nm;
+	AST_PRINT_DEBUG("making column dot access node");
+	ExprNode *new_node = make_EmptyExprNode(COLDOTACCESS_EXPR);
+	new_node->first_child = src;
+	src->first_sibling = dest;
 	return new_node;
 }
 
-ASTNode *make_allColsNode()
+ExprNode *make_allColsNode()
 {
-	return make_EmptyNode(ALL_COLS_NODE);
+	AST_PRINT_DEBUG("making all columns node");
+	return make_EmptyExprNode(ALLCOLS_EXPR);
 }
 
 
 //Simple arithmetic expressions
 /* Reduceable expressions */
 //comparison operations
-ASTNode *make_ltNode(ASTNode *x, ASTNode *y)
+
+// <, > , <=, >=, ==, !=
+ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 {
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_comp(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
+	AST_PRINT_DEBUG("making comparison node");
+	ExprNode *new_node = make_EmptyExprNode(op);
+	new_node->data_type = unif_comp(x->data_type, y->data_type);
+	new_node->first_child = x;
+	x->first_sibling = y;
+	return new_node;	
+}
+
+// || and &&
+ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y)
+{
+	AST_PRINT_DEBUG("making logical operation node");
+	ExprNode *new_node = make_EmptyExprNode(op);
+	new_node->data_type = unif_logic(x->data_type, y->data_type);
+	new_node->first_child = x;
+	x->first_sibling = y;
+	return new_node;
+}
+
+// Arithmetic Operations
+ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y)
+{
+	AST_PRINT_DEBUG("making arithmetic node");
+	ExprNode *new_node = make_EmptyExprNode(op);
+	new_node->data_type = unif_numeric(x->data_type, y->data_type);
 	
-	if(!is_computable(x, y) || !is_bool(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = LT_NODE;
-		new_node->data_type = unif_override(new_data_type,  BOOLEAN_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
+	if(op == DIV_EXPR || op == POW_EXPR)
+	{ //Division and Exponentiation result in floats regardless of underlying type
+		new_node->data_type = unif_numeric(FLOAT_TYPE, new_node->data_type);
 	}
-	else
+	
+	new_node->first_child = x;
+	x->first_sibling = y;
+	return new_node;
+}
+
+
+//lists of expressions
+ExprNode *make_exprListNode(ExprNode *h, ExprNode *t)
+{
+	AST_PRINT_DEBUG("making expression list node");
+	ExprNode *new_node = make_EmptyExprNode(LIST_EXPR);
+	new_node->first_child = h;
+	h->first_sibling = t;
+	return new_node;
+}
+
+
+//Printing Expressions
+void print_expr(ExprNode *n, int indent)
+{
+	
+	if(n != NULL)
 	{
-		if(is_float(x->data_type) && is_float(y->data_type))
+		
+			
+		if(n->node_type == CONSTANT_EXPR)
 		{
-			new_node->data.ival = x->data.fval < y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.ival = x->data.fval < y->data.ival;
-		}
-		else if(is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.ival = x->data.ival < y->data.fval;
+			if(n->data_type == INT_TYPE || n->data_type == BOOLEAN_TYPE)
+			{
+				printf("%*d\n", indent, n->data.ival);
+			}
+			else if(n->data_type == FLOAT_TYPE)
+			{
+				printf("%*f\n", indent, n->data.fval);
+			}
+			else
+			{
+				printf("%*s\n", indent, n->data.str);
+			}
 		}
 		else
 		{
-			new_node->data.ival = x->data.ival < y->data.ival;
+			printf("%*s\n", indent, ExprNodeTypeName[n->node_type]);
 		}
-	} 	
-	return new_node;	
-}
-
-ASTNode *make_gtNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_comp(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_bool(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = GT_NODE;
-		new_node->data_type = unif_override(new_data_type,  BOOLEAN_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
+		
+		print_expr(n->first_child, indent + 5);
+		print_expr(n->first_sibling, indent);	
+		
 	}
-	else
-	{
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.ival = x->data.fval > y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.ival = x->data.fval > y->data.ival;
-		}
-		else if(is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.ival = x->data.ival > y->data.fval;
-		}
-		else
-		{
-			new_node->data.ival = x->data.ival > y->data.ival;
-		}
-	} 	
-	return new_node;	
-}
-
-ASTNode *make_leNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_comp(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_bool(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = LE_NODE;
-		new_node->data_type = unif_override(new_data_type,  BOOLEAN_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else
-	{
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.ival = x->data.fval <= y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.ival = x->data.fval <= y->data.ival;
-		}
-		else if(is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.ival = x->data.ival <= y->data.fval;
-		}
-		else
-		{
-			new_node->data.ival = x->data.ival <= y->data.ival;
-		}
-	} 	
-	return new_node;	
-}
-
-
-ASTNode *make_geNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_comp(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_bool(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = GE_NODE;
-		new_node->data_type = unif_override(new_data_type,  BOOLEAN_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else
-	{
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.ival = x->data.fval >= y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.ival = x->data.fval >= y->data.ival;
-		}
-		else if(is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.ival = x->data.ival >= y->data.fval;
-		}
-		else
-		{
-			new_node->data.ival = x->data.ival >= y->data.ival;
-		}
-	} 	
-	return new_node;	
-}
-
-
-ASTNode *make_eqNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_comp(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_bool(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = EQ_NODE;
-		new_node->data_type = unif_override(new_data_type,  BOOLEAN_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else
-	{
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.ival = x->data.fval == y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.ival = x->data.fval == y->data.ival;
-		}
-		else if(is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.ival = x->data.ival == y->data.fval;
-		}
-		else
-		{
-			new_node->data.ival = x->data.ival == y->data.ival;
-		}
-	} 	
-	return new_node;	
-}
-
-ASTNode *make_neqNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_comp(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_bool(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = NEQ_NODE;
-		new_node->data_type = unif_override(new_data_type,  BOOLEAN_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else
-	{
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.ival = x->data.fval != y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.ival = x->data.fval != y->data.ival;
-		}
-		else if(is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.ival = x->data.ival != y->data.fval;
-		}
-		else
-		{
-			new_node->data.ival = x->data.ival != y->data.ival;
-		}
-	} 	
-	return new_node;	
-}
-
-ASTNode *make_lorNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_logic(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_bool(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = LOR_NODE;
-		new_node->data_type = unif_override(new_data_type,  BOOLEAN_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else
-	{
-		new_node->data.ival = x->data.ival || y->data.ival;
-
-	} 	
-	return new_node;	
-}
-
-ASTNode *make_landNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_logic(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_bool(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = LAND_NODE;
-		new_node->data_type = unif_override(new_data_type,  BOOLEAN_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else
-	{
-		new_node->data.ival = x->data.ival && y->data.ival;
-
-	} 	
-	return new_node;	
-}
-
-
-//Math operations
-//Note: with plus/minus/mult type of outcome depends on operands
-//While for exp and div outcome is always a float, regardless of underlying types
-ASTNode *make_addNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_numeric(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_numeric(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = ADD_NODE;
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else if(is_float(new_data_type))
-	{
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.fval = x->data.fval + y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.fval = x->data.fval + y->data.ival;
-		}
-		else //is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.fval = x->data.ival + y->data.fval;
-		}
-	} 
-	else 
-	{ //this situation only occurs if neither x nor y are floats, so both store in ival
-		new_node->data.ival = x->data.ival + y->data.ival;
-	}
-	
-	return new_node;	
-}
-
-
-ASTNode *make_minusNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_numeric(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_numeric(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = MINUS_NODE;
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else if(is_float(new_data_type))
-	{
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.fval = x->data.fval - y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.fval = x->data.fval - y->data.ival;
-		}
-		else //is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.fval = x->data.ival - y->data.fval;
-		}
-	} 
-	else 
-	{ //this situation only occurs if neither x nor y are floats, so both store in ival
-		new_node->data.ival = x->data.ival - y->data.ival;
-	}
-	
-	return new_node;	
-}
-
-ASTNode *make_multNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_numeric(x->data_type, y->data_type);
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_numeric(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = MULT_NODE;
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else if(is_float(new_data_type))
-	{
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.fval = x->data.fval * y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.fval = x->data.fval * y->data.ival;
-		}
-		else //is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.fval = x->data.ival * y->data.fval;
-		}
-	} 
-	else 
-	{ //this situation only occurs if neither x nor y are floats, so both store in ival
-		new_node->data.ival = x->data.ival * y->data.ival;
-	}
-	
-	return new_node;	
-}
-
-ASTNode *make_divNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_numeric(FLOAT_TYPE, unif_numeric(x->data_type, y->data_type));
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_numeric(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = DIV_NODE;
-		new_node->data_type = unif_override(new_data_type, FLOAT_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else
-	{ 
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.fval = x->data.fval / y->data.fval;
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.fval = x->data.fval / ((float) y->data.ival);
-		}
-		else if(is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.fval = ((float) x->data.ival) / y->data.fval;
-		}
-		else
-		{
-			new_node->data.fval = ((float) x->data.ival) / ((float)y->data.ival);
-		}
-	} 
-
-	
-	return new_node;	
-}
-
-
-ASTNode *make_expNode(ASTNode *x, ASTNode *y)
-{
-	ASTNode *new_node = make_EmptyNode(COMPUTABLE_NODE);
-	DataType new_data_type = unif_numeric(FLOAT_TYPE, unif_numeric(x->data_type, y->data_type));
-	new_node->data_type = new_data_type;
-	
-	if(!is_computable(x, y) || !is_numeric(new_data_type))
-	{ //We cannot compute using this node, or we have unknowns/errors in type
-		new_node->node_type = EXP_NODE;
-		new_node->data_type = unif_override(new_data_type, FLOAT_TYPE, x->data_type, y->data_type);
-		new_node->first_child = x;
-		x->first_sibling = y;
-	}
-	else
-	{ //exponetiation always promotes to floating point
-		if(is_float(x->data_type) && is_float(y->data_type))
-		{
-			new_node->data.fval = pow(x->data.fval, y->data.fval);
-		}
-		else if(is_float(x->data_type) && (is_int(y->data_type) || is_bool(y->data_type)))
-		{
-			new_node->data.fval = pow(x->data.fval, (float) y->data.ival);
-		}
-		else if(is_float(y->data_type) && (is_int(x->data_type) || is_bool(x->data_type)))
-		{
-			new_node->data.fval = pow((float) x->data.ival, y->data.fval);
-		}
-		else
-		{
-			new_node->data.fval = pow((float) x->data.ival, (float) y->data.ival);
-		}
-	} 
-	
-	return new_node;	
-}
-
-
-//Printing out AST
-
-
-
-
-
-
-
-
-
-/* this should be in a type checking file */
-int is_computable(ASTNode *x, ASTNode *y)
-{
-	return x->node_type == COMPUTABLE_NODE && y->node_type == COMPUTABLE_NODE;
 }
 
 
 
 
+
+
+
+#if STAND_ALONE
 int main()
 {
-	ASTNode *n1 = make_int(2);
-	ASTNode *n2 = make_int(3);
-	ASTNode *r = NULL;
-	ASTNode *e = make_expNode(n1, n2);
-	printf("%d ^ %d: %f\n", n1->data.ival, n2->data.ival, make_expNode(n1, n2)->data.fval);
-	printf("%d / %d: %f\n", n1->data.ival, n2->data.ival, make_divNode(n1, n2)->data.fval);
-	printf("%d * %d: %d\n", n1->data.ival, n2->data.ival, make_multNode(n1, n2)->data.fval);
-	printf("%d - %d: %d\n", n1->data.ival, n2->data.ival, make_minusNode(n1, n2)->data.ival);
-	printf("%d + %d: %d\n", n1->data.ival, n2->data.ival, make_addNode(n1, n2)->data.ival);
-
-	
+	ExprNode *n1 = make_int(2);
+	ExprNode *n2 = make_int(3);
+	ExprNode *n3 = make_int(4);
+	ExprNode *add = make_arithNode(PLUS_EXPR, n1, n2);
+	ExprNode *times = make_arithNode(MULT_EXPR,n3, add);
+	print_expr(times, 0);
 	return 0;
 }
-
-
-
+#endif
 
 
 
