@@ -97,30 +97,30 @@ void consume_single_line_comment();
 ":="		{ count(); return LOCAL_ASSIGN; } 
  
  /* Built-in functions from q and k */
-"abs"			{ count(); return ABS;      }
-"avg"			{ count(); return AVG;      }
-"avgs"			{ count(); return AVGS;     }
-"count"			{ count(); return COUNT;    }
-"deltas"		{ count(); return DELTAS;   }
-"distinct"		{ count(); return DISTINCT; }
-"drop"			{ count(); return DROP;     }
-"fill"			{ count(); return FILL;     }
-"first"			{ count(); return FIRST;    }
-"last"			{ count(); return LAST;     }
-"max"			{ count(); return MAX;      }
-"maxs"			{ count(); return MAXS;     }
-"min"			{ count(); return MIN;      }
-"mins"			{ count(); return MINS;     }
-"mod"			{ count(); return MOD;      }
-"next"			{ count(); return NEXT;     }
-"prev"			{ count(); return PREV;     }
-"prd"			{ count(); return PRD;      }
-"prds"			{ count(); return PRDS;     }
-"reverse"		{ count(); return REV;      }
-"sum"			{ count(); return SUM;      }
-"sums"			{ count(); return SUMS;     }
-"stddev"		{ count(); return STDDEV;   }
-"make_null"		{ count(); return MAKENULL; }
+"abs"			{ count(); yylval.str = strdup(yytext); return ABS;      }
+"avg"			{ count(); yylval.str = strdup(yytext); return AVG;      }
+"avgs"			{ count(); yylval.str = strdup(yytext); return AVGS;     }
+"count"			{ count(); yylval.str = strdup(yytext); return COUNT;    }
+"deltas"		{ count(); yylval.str = strdup(yytext); return DELTAS;   }
+"distinct"		{ count(); yylval.str = strdup(yytext); return DISTINCT; }
+"drop"			{ count(); yylval.str = strdup(yytext); return DROP;     }
+"fill"			{ count(); yylval.str = strdup(yytext); return FILL;     }
+"first"			{ count(); yylval.str = strdup(yytext); return FIRST;    }
+"last"			{ count(); yylval.str = strdup(yytext); return LAST;     }
+"max"			{ count(); yylval.str = strdup(yytext); return MAX;      }
+"maxs"			{ count(); yylval.str = strdup(yytext); return MAXS;     }
+"min"			{ count(); yylval.str = strdup(yytext); return MIN;      }
+"mins"			{ count(); yylval.str = strdup(yytext); return MINS;     }
+"mod"			{ count(); yylval.str = strdup(yytext); return MOD;      }
+"next"			{ count(); yylval.str = strdup(yytext); return NEXT;     }
+"prev"			{ count(); yylval.str = strdup(yytext); return PREV;     }
+"prd"			{ count(); yylval.str = strdup(yytext); return PRD;      }
+"prds"			{ count(); yylval.str = strdup(yytext); return PRDS;     }
+"reverse"		{ count(); yylval.str = strdup(yytext); return REV;      }
+"sum"			{ count(); yylval.str = strdup(yytext); return SUM;      }
+"sums"			{ count(); yylval.str = strdup(yytext); return SUMS;     }
+"stddev"		{ count(); yylval.str = strdup(yytext); return STDDEV;   }
+"make_null"		{ count(); yylval.str = strdup(yytext); return MAKENULL; }
 		
 
 
@@ -135,7 +135,7 @@ void consume_single_line_comment();
 \'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'   { count(); return DATE; } 
 "TRUE"                          { count(); yylval.intval = 1; return TRUE;	   }
 "FALSE"                         { count(); yylval.intval = 0; return FALSE;   }
-"0x"[0-9a-fA-F]+                { count(); return HEX;	   }
+"0x"[0-9a-fA-F]+                { count(); yylval.str = strdup(yytext); return HEX;	   }
 
  /* Variables */
 [a-zA-Z]+[a-zA-Z0-9_]*	{ count(); yylval.str = strdup(yytext); return ID; }	 

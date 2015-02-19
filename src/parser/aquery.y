@@ -3,6 +3,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include "symtable.h"	
+#include "ast.h"
+
 	
 #define YYDEBUG 1
 #define ERRORCOLOR  "\x1B[32m"
@@ -16,7 +18,10 @@ extern int yyparse();
 extern int line_num; 
 extern int col_num;
 
+//Symbol table
 Symtable *env;	
+
+
 void yyerror(const char *);
 
 
@@ -55,37 +60,46 @@ void yyerror(const char *);
 %token CASE END WHEN THEN ELSE
 
  /* SQL: type names */
-%token TYPE_INT TYPE_FLOAT TYPE_STRING TYPE_DATE TYPE_BOOLEAN  TYPE_HEX
+%token TYPE_INT TYPE_FLOAT TYPE_STRING TYPE_DATE TYPE_BOOLEAN TYPE_HEX
  
  /* SQL: user defined functions */
 %token FUNCTION LOCAL_ASSIGN
   
  /* built-in functions */
  /* non-moving variants */
-%token ABS AVG COUNT DISTINCT DROP FILL FIRST LAST MAX MIN MOD NEXT PREV PRD REV SUM STDDEV
+%token <str> ABS AVG COUNT DISTINCT DROP FILL FIRST LAST MAX MIN MOD NEXT PREV PRD REV SUM STDDEV
  /* moving variants */
-%token AVGS DELTAS MAXS MINS PRDS SUMS
-%token MAKENULL
+%token <str> AVGS DELTAS MAXS MINS PRDS SUMS
+%token <str> MAKENULL
  
- /* literals and identifiers, and assocating storage in the yyval union */
-%token <intval> INT 
+ /* literals and identifiers, and assocating storage in the yyval union */ 
 %token <floatval> FLOAT
-%token <intval> TRUE
-%token <intval> FALSE 
-%token DATE HEX 
-%token <str> ID 
-%token <str> STRING
+%token <intval> INT TRUE FALSE 
+%token <str> DATE HEX ID STRING
  
  /* Math operators */
 %token EXP_OP TIMES_OP DIV_OP PLUS_OP MINUS_OP LE_OP GE_OP L_OP G_OP EQ_OP NEQ_OP AND_OP OR_OP
   
  
+ /* Abstract Syntax Tree Types */
+/* types for expressions */
+%type <exprnode> constant truth_value table_constant column_dot_access
+%type <exprnode> case_expression case_clause when_clauses when_clause when_clauses_tail else_clause
+%type <exprnode> call built_in_fun 
+%type <exprnode> main_expression
+%type <exprnode> indexing
+%type <exprnode> exp_expression mult_expression add_expression rel_expression eq_expression 
+%type <exprnode> and_expression or_expression value_expression
+%type <exprnode> comma_value_expression_list comma_value_expression_list_tail
+%type <exprnode> search_condition
+
 %start program
 
 %union {
   int   intval;
   float floatval;
   char* str;
+  struct ExprNode *exprnode;
 }
 
 
@@ -103,7 +117,7 @@ void yyerror(const char *);
  
  /******* 2.1: Top level program definition *******/
 
-program: top_level													{}
+program: top_level													
 
 top_level: global_query top_level
 	|	create_table_or_view top_level
@@ -116,10 +130,10 @@ top_level: global_query top_level
 
  /******* 2.2: Local and global queries *******/
  
-global_query:               { env = push_env(env); /* create a new scope */ }
+global_query:               {print_symtable(env);  env = push_env(env); /* create a new scope to handle local query names */ }
 			  local_queries 
               base_query
-			                { env = pop_env(env); /* remove current scope */ }
+			                { print_symtable(env); env = pop_env(env); /* remove local queries from scope */ }
 		      ; 
 
 local_queries: WITH local_query local_queries_tail 
@@ -130,8 +144,8 @@ local_queries_tail: local_query local_queries_tail
 	| /* epsilon */
 	;
 
-local_query: ID                        { put_sym(env, $1, TABLE_TYPE); /* add to symbtable */ }
-             col_aliases 
+local_query: ID                        { put_sym(env, $1, TABLE_TYPE); /* add local query table name to symbol table */ }
+             col_aliases 				//TODO: eventually we will use this to rename cols
 			 UC_AS '(' base_query ')' ; 
 
 col_aliases: '(' comma_identifier_list ')' 
@@ -148,7 +162,8 @@ column_list: column_name column_list_tail ;
 
 column_name: ID | column_dot_access ;
 
-column_dot_access: ID '.' ID ;
+column_dot_access: ID '.' ID  {$$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
+	;
 
 column_list_tail: ',' column_name column_list_tail
 	| /* epsilon */
@@ -200,8 +215,8 @@ having_clause: HAVING search_condition
 
 
  /******* 2.3.1: search condition *******/
-search_condition: boolean_term				
-	| search_condition OR boolean_term		//TODO: check that this is boolean type, unknown, or function call
+search_condition: boolean_term				{$$ = make_EmptyExprNode(SEARCH_EXPR); }
+	| search_condition OR boolean_term		{$$ = make_EmptyExprNode(SEARCH_EXPR);}
 	;
 	
 boolean_term: boolean_factor				
@@ -214,7 +229,7 @@ boolean_factor: boolean_primary
 
 boolean_primary: predicate | '(' search_condition ')' ;
 
-predicate: value_expression postfix_predicate //TODO: check that type of value expression works with postfix_predicate
+predicate: value_expression postfix_predicate //TODO: check that type of value expression works with postfix_predicate?
 	| overlaps_predicate
 	;
 
@@ -250,7 +265,9 @@ is_predicate: IS truth_value
 	| IS NOT truth_value
 	;
 
-truth_value: TRUE | FALSE ;	
+truth_value: TRUE 				{$$ = make_bool(1); }
+			| FALSE 			{$$ = make_bool(0); }
+			;	
 
 overlaps_predicate: range_value_expression OVERLAPS range_value_expression ;	
 	
@@ -260,7 +277,7 @@ range_value_expression: '(' value_expression ',' value_expression ')' ;
 
 /******* 2.3.2: table expressions *******/
 
-joined_table: table_expression									//TODO: check that types here work
+joined_table: table_expression									//TODO: check that types here work (don't suddenly want a function here...so either table or unknown)
 	| table_expression join_type JOIN joined_table join_spec
 	;
 
@@ -301,7 +318,7 @@ create_spec: UC_AS global_query
 	
 schema: schema_element schema_tail ;
 
-schema_element: ID type_name ;
+schema_element: ID type_name ; //TODO: use this info to create new table
 
 schema_tail: ',' schema_element schema_tail
 	| /* epsilon */
@@ -336,12 +353,12 @@ delete_statement: DELETE from_clause order_clause where_clause
 	;
 
 /******* 2.7: user defined functions *******/
-user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE); }
+user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE); env = push_env(env);  /* define function, create new scope for args*/ }
                         '(' 
-						    def_arg_list 	  { env = push_env(env); /* create new scope*/ } 
+						    def_arg_list 	  
 					     ')' 
 						'{' 
-						    function_body 
+						    function_body 	  { print_symtable(env); /* this is what is reachable during function body*/ }
 						'}'                   { env = pop_env(env); /* remove latest scope*/ } 
 						; 
 
@@ -373,87 +390,131 @@ function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UN
 
 
 /******* 2.8: value expressions *******/
-constant: INT | FLOAT | DATE | STRING | HEX | truth_value ;
+constant: INT 				{ $$ = make_int($1); }
+		| FLOAT 			{ $$ = make_float($1); }
+		| DATE 				{ $$ = make_date($1); }
+		| STRING 			{ $$ = make_string($1); }
+		| HEX 				{ $$ = make_hex($1); }
+		| truth_value 		{ $$ = $1; }
+		;
 
-table_constant: ROWID | column_dot_access | TIMES_OP ;
+table_constant:  ROWID 					{ $$ = make_rowId(); }
+				| column_dot_access 	{ $$ = $1; 			}
+				| TIMES_OP 				{ $$ = make_allColsNode(); }
+				;
 
 
-case_expression: CASE case_clause when_clauses else_clause END ;
+case_expression: CASE case_clause when_clauses else_clause END 					{$$ = make_caseNode($2, $3, $4); }   
+				  ;
 
-case_clause: value_expression
-	| /* epsilon */
+case_clause: value_expression	 { $$ = make_caseClauseNode($1);  }
+	| /* epsilon */				 { $$ = make_caseClauseNode(NULL); }
 	;
 	
-when_clauses: when_clause when_clauses_tail ;
+when_clauses: when_clause when_clauses_tail {$$ = make_whenClausesNode($1, $2); }
+	;
 
-when_clauses_tail: when_clause when_clauses_tail 
-	| /* epsilon */
+when_clauses_tail: when_clause when_clauses_tail {$$ = make_whenClausesNode($1, $2); }
+	| /* epsilon */	{$$ = NULL; }
 	;
 	
-when_clause: WHEN search_condition THEN value_expression ;
+when_clause: WHEN search_condition THEN value_expression  {$$ = make_caseWhenNode($2, $4); }
+	;
 
-else_clause: ELSE value_expression
-	| /* epsilon */
+else_clause: ELSE value_expression  { $$ = make_elseClauseNode($2); }
 	;
 	
-main_expression: constant | table_constant | ID | '(' value_expression ')' | case_expression ;
+main_expression: constant 					{ $$ = $1; }
+			| table_constant 				{ $$ = $1; } 
+			| ID 							{ $$ = make_id(env, $1); }
+			| '(' value_expression ')'		{ $$ = $2; }
+			| case_expression 				{ $$ = $1; }
+			; 
 
-call: main_expression
-	| main_expression '[' indexing ']'
-	| built_in_fun '(' comma_value_expression_list ')'
-	| built_in_fun '(' ')' 
-	| ID '(' comma_value_expression_list ')'
-	| ID '(' ')'
+call: main_expression						{ $$ = $1; }
+	| main_expression '[' indexing ']' 		{ $$ = make_indexNode($1, $3); }
+	| built_in_fun '(' comma_value_expression_list ')' {$$ = make_callNode($1, $3); }
+	| built_in_fun '(' ')' 								{$$ = make_callNode($1, NULL); }
+	| ID '(' comma_value_expression_list ')' {$$ = make_callNode(make_udfNode(env, $1), $3); }
+	| ID '(' ')' 							 {$$ = make_callNode(make_udfNode(env, $1), NULL); }
 	;
 
 
-indexing: ODD | EVEN | EVERY INT ;
+indexing: ODD 				{$$ = make_oddix();     }
+		| EVEN 				{$$ = make_evenix();     }
+		| EVERY INT 		{$$ = make_everynix($2); }
+		;
 
-built_in_fun: ABS | AVG | AVGS | COUNT | DELTAS | DISTINCT | DROP | FILL | FIRST | LAST | MAX | MAXS | MIN
-	| MINS | MOD | NEXT | PREV | PRD | PRDS | REV | SUM | SUMS | STDDEV | MAKENULL
+built_in_fun: ABS 				{ $$ = make_builtInFunNode($1); }
+	| AVG 						{ $$ = make_builtInFunNode($1); }
+	| AVGS 						{ $$ = make_builtInFunNode($1); }
+	| COUNT 				{ $$ = make_builtInFunNode($1); }
+	| DELTAS 			{ $$ = make_builtInFunNode($1); }
+	| DISTINCT 			{ $$ = make_builtInFunNode($1); }
+	| DROP 	{ $$ = make_builtInFunNode($1); }
+	| FILL 	{ $$ = make_builtInFunNode($1); }
+	| FIRST 	{ $$ = make_builtInFunNode($1); }
+	| LAST 	{ $$ = make_builtInFunNode($1); }
+	| MAX 	{ $$ = make_builtInFunNode($1); }
+	| MAXS 	{ $$ = make_builtInFunNode($1); }
+	| MIN	{ $$ = make_builtInFunNode($1); }
+	| MINS 	{ $$ = make_builtInFunNode($1); }
+	| MOD 	{ $$ = make_builtInFunNode($1); }
+	| NEXT 		{ $$ = make_builtInFunNode($1); }
+	| PREV 	{ $$ = make_builtInFunNode($1); }
+	| PRD 	{ $$ = make_builtInFunNode($1); }
+	| PRDS 	{ $$ = make_builtInFunNode($1); }
+	| REV 	{ $$ = make_builtInFunNode($1); }
+	| SUM 	{ $$ = make_builtInFunNode($1); }
+	| SUMS 		{ $$ = make_builtInFunNode($1); }
+	| STDDEV 	{ $$ = make_builtInFunNode($1); }
+	| MAKENULL	{ $$ = make_builtInFunNode($1); }
 	;
-exp_expression: call 
-	| call EXP_OP exp_expression
+	
+exp_expression: call 				{ $$ = $1; }
+	| call EXP_OP exp_expression	{ $$ = make_arithNode(POW_EXPR, $1, $3); }
 	;
 
-mult_expression: exp_expression
-	| mult_expression TIMES_OP exp_expression
-	| mult_expression DIV_OP exp_expression
+mult_expression: exp_expression					{ $$ = $1; }
+	| mult_expression TIMES_OP exp_expression		{ $$ = make_arithNode(MULT_EXPR, $1, $3); }
+	| mult_expression DIV_OP exp_expression			{ $$ = make_arithNode(DIV_EXPR, $1, $3); }
 	;
 	
 
-add_expression: mult_expression
- 	| add_expression PLUS_OP mult_expression
-	| add_expression MINUS_OP mult_expression
+add_expression: mult_expression						{ $$ = $1; }
+ 	| add_expression PLUS_OP mult_expression		{ $$ = make_arithNode(PLUS_EXPR, $1, $3); }
+	| add_expression MINUS_OP mult_expression		{ $$ = make_arithNode(MINUS_EXPR, $1, $3); }
 	;
 	
-rel_expression: add_expression
-	| rel_expression L_OP add_expression
-	| rel_expression G_OP add_expression
-	| rel_expression LE_OP add_expression
-	| rel_expression GE_OP add_expression
+rel_expression: add_expression						{ $$ = $1; }
+	| rel_expression L_OP add_expression			{ $$ = make_compNode(LT_EXPR, $1, $3); }
+	| rel_expression G_OP add_expression			{ $$ = make_compNode(GT_EXPR, $1, $3); }
+	| rel_expression LE_OP add_expression			{ $$ = make_compNode(LE_EXPR, $1, $3); }
+	| rel_expression GE_OP add_expression			{ $$ = make_compNode(GE_EXPR, $1, $3); }
 	;
 
-eq_expression: rel_expression
-	| eq_expression EQ_OP rel_expression
-	| eq_expression NEQ_OP rel_expression
+eq_expression: rel_expression						{$$ = $1; }
+	| eq_expression EQ_OP rel_expression			{ $$ = make_compNode(EQ_EXPR, $1, $3); }
+	| eq_expression NEQ_OP rel_expression			{ $$ = make_compNode(NEQ_EXPR, $1, $3); }
 	;
 
-and_expression: eq_expression
-	| and_expression AND_OP eq_expression
+and_expression: eq_expression						{ $$ = $1; }
+	| and_expression AND_OP eq_expression			{ $$ = make_logicOpNode(LAND_EXPR, $1, $3); }
 	;
 
-or_expression: and_expression
-	| or_expression OR_OP and_expression
+or_expression: and_expression						{ $$ = $1; }
+	| or_expression OR_OP and_expression			{ $$ = make_logicOpNode(LOR_EXPR, $1, $3); }
 	;
 	
-value_expression: or_expression ;
+value_expression: or_expression 					{ $$ = $1; }
+	;
 
  
-comma_value_expression_list: value_expression comma_value_expression_list_tail ;
+comma_value_expression_list: value_expression comma_value_expression_list_tail 	{ $$ = make_exprListNode($1, $2); }
+		;
 
-comma_value_expression_list_tail: ',' value_expression comma_value_expression_list_tail 
-	| /* epsilon */
+comma_value_expression_list_tail: ',' value_expression comma_value_expression_list_tail { $$ = make_exprListNode($2, $3); }
+	| /* epsilon */																		{ $$ = NULL; }
 	;
 	
 
@@ -488,7 +549,7 @@ void yyerror(const char *s)
 
 int main(int argc, char *argv[]) {
 	
-	yydebug = 1;
+	yydebug = 0;
 	
 	if(argc < 2) 
 	{
@@ -515,6 +576,8 @@ int main(int argc, char *argv[]) {
 		yyparse();
 	} 
 	while(!feof(yyin));
+	
+	print_symtable(env);
 	
 	printf("File conforms to Aquery grammar... now on to building AST\n");
 }
