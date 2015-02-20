@@ -5,6 +5,7 @@
 
 /* Section 2.8: Value Expressions */
 typedef enum ExprNodeType {
+  ///value expressions
   CONSTANT_EXPR = 0,
   ID_EXPR,
   ROWID_EXPR,
@@ -36,7 +37,10 @@ typedef enum ExprNodeType {
   LOR_EXPR,
   LAND_EXPR,
   LIST_EXPR,
-  SEARCH_EXPR,
+  //search conditions
+  PRED_EXPR, //predicate
+  WHERE_AND_EXPR,
+  WHERE_OR_EXPR,
   DUMMY
 } ExprNodeType;
 
@@ -91,6 +95,10 @@ ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y);
 
 ExprNode *make_exprListNode(ExprNode *data);
 
+
+ExprNode *make_predNode(char *nm);
+
+
 void print_expr(ExprNode *n, ExprNodeType p, int type, int indent);
 
 
@@ -112,13 +120,15 @@ typedef struct TopLevelNode {
 typedef enum TopLevelType { GLOBAL_QUERY_N, UDF_DEF_N, MODIFY_N, CREATE_N } TopLevelType;
 */
 
+
+
+
+//Logical Query Plan Nodes
+
 typedef struct IDListNode {
 	char *name;
 	struct IDListNode *next_sibling;
 } IDListNode;
-
-
-//Logical Query Plan Nodes
 
 //Used to optimize queries
 typedef enum OrderNodeType { ASC_SORT, DESC_SORT } OrderNodeType;
@@ -129,8 +139,12 @@ typedef struct OrderNode {
 	struct OrderNode *next;
 } OrderNode;
 
+
+
+
 typedef enum LogicalQueryNodeType { PROJECT, SELECT_WHERE, SELECT_HAVING, ORDER, CARTESIAN_PROD, 
-	INNER_JOIN, FULL_OUTER_JOIN, GROUP_BY, GROUP_BY_HAVING, TABLE_NM, TABLE_ALIASED, SORT, BUILT_IN_FUN 
+	INNER_JOIN, FULL_OUTER_JOIN, GROUP_BY, GROUP_BY_HAVING, TABLE_NM, TABLE_ALIASED, SORT, BUILT_IN_FUN,
+	DELETE_WHERE, DELETE_COL, UPDATE_WHERE, UPDATE_HAVING
 	} LogicalQueryNodeType;
 
 
@@ -140,10 +154,11 @@ typedef struct LogicalQueryNode {
 	struct LogicalQueryNode *second_table;
 	char *name; //table name if any
 	union {
-		char *alias		 ; //some tables are given other names
-		ExprNode	*exprs; //search conditions
-		IDListNode 	*cols; //using
-		OrderNode 	*order; //sorting
+		char *alias		 		; //some tables are given other names
+		//ExprNamePairNode 	*colexprs; //c1 * 2 as c2
+		ExprNode			*exprs; //search conditions
+		IDListNode 			*cols; //using
+		OrderNode 			*order; //sorting
 		} params;
 } LogicalQueryNode;
 
@@ -186,7 +201,7 @@ typedef struct UDFBodyNode {
 
 typedef struct UDFDefNode {
 	char *name;
-	UDFArgsNode *args;
+	IDListNode *args;
 	UDFBodyNode *body;
 } UDFDefNode;
 
@@ -195,11 +210,11 @@ typedef struct UDFDefNode {
 
 //UDFs
 LocalVarDefNode *make_LocalVarDefNode(char *name, ExprNode *expr);
-UDFArgsNode *make_UDFArgsNode(char *arg, UDFArgsNode *next);
+IDListNode *make_IDListNode(char *arg, IDListNode *next);
 UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type);
 UDFBodyNode *make_UDFExpr(ExprNode *expr);
 UDFBodyNode *make_UDFVardef(LocalVarDefNode *vardef);
 UDFBodyNode *make_UDFQuery(FullQueryNode *query);
-UDFDefNode *make_UDFDefNode(char *name, UDFArgsNode *args, UDFBodyNode *body);
+UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body);
 
 #endif

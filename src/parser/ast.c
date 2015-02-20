@@ -6,7 +6,7 @@
 #include "symtable.h"
 #include "ast_print.h"
 
-#define AST_DEBUG 1
+#define AST_DEBUG 0
 #define AST_PRINT_DEBUG(str) if(AST_DEBUG) printf("---->AST DEBUGGING: %s\n", str)
 
 #define STAND_ALONE 0
@@ -262,7 +262,7 @@ ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	return new_node;	
 }
 
-// || and &&
+// || and &&, or search and and search or
 ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 {
 	AST_PRINT_DEBUG("making logical operation node");
@@ -298,6 +298,16 @@ ExprNode *make_exprListNode(ExprNode *data)
 	return list;
 }
 
+//Search conditions
+ExprNode *make_predNode(char *nm)
+{
+	AST_PRINT_DEBUG("making search condition predicate node");
+	ExprNode *new_node = make_EmptyExprNode(PRED_EXPR);
+	new_node->data.str = nm;
+	return new_node;
+}
+
+
 
 
 
@@ -325,14 +335,6 @@ LogicalQueryNode *make_
 
 
 
-
-IDListNode *make_IDListNode(char *id)
-{
-	IDListNode *ids = malloc(sizeof(IDListNode));
-	ids->name = id;
-	ids->next_sibling = NULL;
-	return ids;
-}
 
 
 LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames, LogicalQueryNode *plan)
@@ -366,13 +368,17 @@ LocalVarDefNode *make_LocalVarDefNode(char *name, ExprNode *expr)
 }
 
 
-UDFArgsNode *make_UDFArgsNode(char *name, UDFArgsNode *next)
+
+IDListNode *make_IDListNode(char *id, IDListNode *next)
 {
-	UDFArgsNode *new_node = malloc(sizeof(UDFArgsNode));
-	new_node->name = name;
-	new_node->next_sibling = next;
-	return new_node;
+	IDListNode *ids = malloc(sizeof(IDListNode));
+	ids->name = id;
+	ids->next_sibling = next;
+	return ids;
 }
+
+
+
 
 UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type)
 {
@@ -412,7 +418,7 @@ UDFBodyNode *make_UDFQuery(FullQueryNode *query)
 
 
 
-UDFDefNode *make_UDFDefNode(char *name, UDFArgsNode *args, UDFBodyNode *body)
+UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body)
 {
 	UDFDefNode *new_fun = malloc(sizeof(UDFDefNode));
 	new_fun->name = name;
@@ -435,13 +441,16 @@ int main()
 	ExprNode *times = make_arithNode(MULT_EXPR,n3, add);
 	//print_expr(times, DUMMY, 0, 0);
 	
-	UDFArgsNode *arg2 = make_UDFArgsNode("y", NULL);
-	UDFArgsNode *arg1 = make_UDFArgsNode("x", arg2);
+	//arguments
+	IDListNode *arg2 = make_IDListNode("y", NULL);
+	IDListNode *arg1 = make_IDListNode("x", arg2);
 	
+	//body
 	LocalVarDefNode *local_var_def = make_LocalVarDefNode("x", times);
 	UDFBodyNode *body1 = make_UDFVardef(local_var_def);
 	UDFBodyNode *body2 = make_UDFQuery(NULL);
 	body1->next_sibling = body2;
+	
 	UDFDefNode *udf = make_UDFDefNode("my_function", arg1, body1);
 	print_udf_def(udf);
 	

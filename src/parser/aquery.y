@@ -4,6 +4,7 @@
 #include <string.h>
 #include "symtable.h"	
 #include "ast.h"
+#include "ast_print.h"
 
 	
 #define YYDEBUG 1
@@ -54,7 +55,8 @@ void yyerror(const char *);
 %token UPDATE SET INSERT INTO VALUES DELETE
 
  /* SQL: search conditions */
-%token AND OR IS NOT BETWEEN IN LIKE NULL_KEYWORD OVERLAPS
+%token AND OR IS 
+%token <str> NOT BETWEEN IN LIKE NULL_KEYWORD OVERLAPS
 
  /* SQL: case statement */
 %token CASE END WHEN THEN ELSE
@@ -91,7 +93,19 @@ void yyerror(const char *);
 %type <exprnode> exp_expression mult_expression add_expression rel_expression eq_expression 
 %type <exprnode> and_expression or_expression value_expression
 %type <exprnode> comma_value_expression_list comma_value_expression_list_tail
-%type <exprnode> search_condition
+
+
+/* search condition */
+%type <exprnode> search_condition boolean_term boolean_factor boolean_primary predicate
+%type <exprnode> postfix_predicate overlaps_predicate between_predicate in_predicate null_predicate like_predicate is_predicate
+%type <exprnode> in_pred_spec range_value_expression
+
+/* UDF related */
+%type <localvardef> function_local_var_def;
+%type <udfbody> function_body function_body_tail function_body_elem 
+%type <fullquery> full_query
+%type <idlist> def_arg_list def_arg_list_tail	
+%type <udfdef> user_function_definition
 
 %start program
 
@@ -100,6 +114,13 @@ void yyerror(const char *);
   float floatval;
   char* str;
   struct ExprNode *exprnode;
+  //UDF related
+  struct UDFDefNode *udfdef;
+  struct IDListNode *idlist;
+  struct LocalVarDefNode *localvardef;
+  struct UDFBodyNode *udfbody;
+  struct FullQueryNode *fullquery; 
+  
 }
 
 
@@ -130,11 +151,14 @@ top_level: global_query top_level
 
  /******* 2.2: Local and global queries *******/
  
-global_query:               {print_symtable(env);  env = push_env(env); /* create a new scope to handle local query names */ }
-			  local_queries 
-              base_query
-			                { print_symtable(env); env = pop_env(env); /* remove local queries from scope */ }
-		      ; 
+global_query: full_query;
+
+full_query:  					{ print_symtable(env);  env = push_env(env); /* create a new scope to handle local query names */ }
+			local_queries 
+			base_query 			{ print_symtable(env); env = pop_env(env); /* remove local queries from scope */ }
+								{ $$ = NULL; }
+			;
+
 
 local_queries: WITH local_query local_queries_tail 
 	|	/* epsilon */	
@@ -215,63 +239,70 @@ having_clause: HAVING search_condition
 
 
  /******* 2.3.1: search condition *******/
-search_condition: boolean_term				{$$ = make_EmptyExprNode(SEARCH_EXPR); }
-	| search_condition OR boolean_term		{$$ = make_EmptyExprNode(SEARCH_EXPR);}
+search_condition: boolean_term				{printf("---->search\n"); print_expr($1, DUMMY, 0, 0); $$ = $1; }
+	| search_condition OR boolean_term		{$$ = make_logicOpNode(WHERE_OR_EXPR, $1, $3); }
 	;
 	
-boolean_term: boolean_factor				
-	| boolean_term AND boolean_factor		//TODO: check that this is boolean type, unknown, or function call
+boolean_term: boolean_factor				{$$ = $1; }
+	| boolean_term AND boolean_factor		{$$ = make_logicOpNode(WHERE_AND_EXPR, $1, $3); }
 	;
 	
-boolean_factor: boolean_primary
-	| NOT boolean_primary
+boolean_factor: boolean_primary				{$$ = $1; }
+	| NOT boolean_primary					{$$ = make_callNode(make_predNode($1), $2); }
+	;
+		
+boolean_primary: predicate 					{$$ = $1; }
+		| '(' search_condition ')' 			{$$ = $2; }
+		;
+
+
+predicate: value_expression 						{$$ = $1; }
+	| postfix_predicate								{$$ = $1; }
+	| overlaps_predicate							{$$ = $1; }
 	;
 
-boolean_primary: predicate | '(' search_condition ')' ;
 
-predicate: value_expression postfix_predicate //TODO: check that type of value expression works with postfix_predicate?
-	| overlaps_predicate
-	;
-
-postfix_predicate: between_predicate
-	| in_predicate
-	| null_predicate
-	| like_predicate
-	| is_predicate
-	| /* epsilon */ //ie, our value_expression already generated a boolean
+postfix_predicate:  between_predicate			{$$ = $1; }
+	|  in_predicate								{$$ = $1; }
+	|  null_predicate							{$$ = $1; }
+	|  like_predicate							{$$ = $1; }
+	|  is_predicate								{$$ = $1; }
 	;
 	
-between_predicate: BETWEEN value_expression AND value_expression
-	|  NOT BETWEEN value_expression AND value_expression
+	
+between_predicate: value_expression BETWEEN value_expression AND value_expression {$1->next_sibling = $3; $3->next_sibling = $5; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	|  value_expression NOT BETWEEN value_expression AND value_expression		{$1->next_sibling = $4; $4->next_sibling = $6; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
-in_predicate: IN in_pred_spec
-	| NOT IN in_pred_spec
+in_predicate: value_expression IN in_pred_spec {$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	| value_expression NOT IN in_pred_spec	    {$1->next_sibling = $4; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
-in_pred_spec: '(' comma_value_expression_list ')'  //explicit list
-	| value_expression //implicit list e.g a function call returning a list, a column name
+in_pred_spec: '(' comma_value_expression_list ')'  {$$ = $2; }
+	| value_expression {$$ = $1; }
 	;
 	
-like_predicate: LIKE value_expression
-	| NOT LIKE value_expression
+like_predicate: value_expression LIKE value_expression  {$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	| value_expression NOT LIKE value_expression		{$1->next_sibling = $4; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
-null_predicate: IS NOT NULL_KEYWORD
-	| IS NULL_KEYWORD
+null_predicate: value_expression IS NOT NULL_KEYWORD	{$$ = make_callNode(make_predNode($3), make_exprListNode(make_callNode(make_predNode($4), make_exprListNode($1)))); }
+	| value_expression IS NULL_KEYWORD					{$$ = make_callNode(make_predNode($3), make_exprListNode($1)); }
 	;
 	
-is_predicate: IS truth_value
-	| IS NOT truth_value
+is_predicate: value_expression IS truth_value			{$$ = $1; }
+	| value_expression IS NOT truth_value				{$$ = make_callNode(make_predNode($3), make_exprListNode($1)); }
 	;
 
 truth_value: TRUE 				{$$ = make_bool(1); }
 			| FALSE 			{$$ = make_bool(0); }
 			;	
 
-overlaps_predicate: range_value_expression OVERLAPS range_value_expression ;	
+overlaps_predicate: range_value_expression OVERLAPS range_value_expression 	{$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	;
 	
-range_value_expression: '(' value_expression ',' value_expression ')' ;	
+range_value_expression: '(' value_expression ',' value_expression ')' 		{$2->next_sibling = $4; $$ = $2; }
+	;
 	
 
 
@@ -359,34 +390,32 @@ user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE);
 					     ')' 
 						'{' 
 						    function_body 	  { print_symtable(env); /* this is what is reachable during function body*/ }
-						'}'                   { env = pop_env(env); /* remove latest scope*/ } 
+						'}'                   { env = pop_env(env); $$ =  make_UDFDefNode($2, $5, $8); print_udf_def($$); } 
 						; 
 
-def_arg_list: ID                              { put_sym(env, $1, UNKNOWN_TYPE); }
-              def_arg_list_tail			
-	| /* epsilon */
+def_arg_list: ID  def_arg_list_tail		{ put_sym(env, $1, UNKNOWN_TYPE); $$ = make_IDListNode($1, $2); }			 
+	| /* epsilon */						{ $$ = NULL; }	
 	;
 	
-def_arg_list_tail: ',' ID                     { put_sym(env, $2, UNKNOWN_TYPE ); }
-                   def_arg_list_tail
-	| /* epsilon */
+def_arg_list_tail: ',' ID def_arg_list_tail { put_sym(env, $2, UNKNOWN_TYPE ); $$ = make_IDListNode($2, $3); }
+	| /* epsilon */							 {$$ = NULL; } 
 	;
 
 
-function_body: function_body_elem function_body_tail
-	| /* epsilon */
+function_body: function_body_elem function_body_tail	{$1->next_sibling = $2; $$ = $1;}
+	| /* epsilon */										{$$ = NULL; }
 	;
 	
-function_body_tail: ';' function_body_elem function_body_tail
-	| /* epsilon */
+function_body_tail: ';' function_body_elem function_body_tail {$2->next_sibling = $3; $$ = $2; }
+	| /* epsilon */	{ $$= NULL; }
 	;
 	
-function_body_elem: value_expression
-	| function_local_var_def
-	| local_queries base_query
+function_body_elem: value_expression		{$$ = make_UDFExpr($1);   }
+	| function_local_var_def				{$$ = make_UDFVardef($1); } 
+	| full_query							{$$ = make_UDFQuery($1);  }
 	;
 	
-function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE); } ; //TODO: replace UNKNOWN_TYPE with the type of the value expression node
+function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE);    $$ = make_LocalVarDefNode($1, $3); } ;
 
 
 /******* 2.8: value expressions *******/
@@ -506,14 +535,14 @@ or_expression: and_expression						{ $$ = $1; }
 	| or_expression OR_OP and_expression			{ $$ = make_logicOpNode(LOR_EXPR, $1, $3); }
 	;
 	
-value_expression: or_expression 					{ $$ = $1; }
+value_expression: or_expression 					{ print_expr($1, DUMMY,0, 0); $$ = $1; } //TODO: delete dummy
 	;
 
  
-comma_value_expression_list: value_expression comma_value_expression_list_tail 	{ $$ = make_exprListNode($1, $2); }
+comma_value_expression_list: value_expression comma_value_expression_list_tail 	{ $1->next_sibling = $2; $$ = make_exprListNode($1); }
 		;
 
-comma_value_expression_list_tail: ',' value_expression comma_value_expression_list_tail { $$ = make_exprListNode($2, $3); }
+comma_value_expression_list_tail: ',' value_expression comma_value_expression_list_tail { $2->next_sibling = $3; $$ = $2; }
 	| /* epsilon */																		{ $$ = NULL; }
 	;
 	

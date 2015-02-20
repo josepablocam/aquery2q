@@ -36,7 +36,9 @@ char *ExprNodeTypeName[]= {
 	"||",
 	"&&",
 	"expr_list",
-	"search_exp",
+	"pred_expr",
+	"where_and_expr",
+	"where_or_expr",
 	"dummy"
 	};
 
@@ -91,7 +93,7 @@ void print_udf_def(UDFDefNode *udf)
 	print_udf_body(udf->body);
 }
 
-void print_udf_args(UDFArgsNode *args, int ct)
+void print_udf_args(IDListNode *args, int ct)
 {
 	if(args != NULL)
 	{

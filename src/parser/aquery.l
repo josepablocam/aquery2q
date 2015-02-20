@@ -43,7 +43,7 @@ void consume_single_line_comment();
 "EVERY"			{ count(); return EVERY;     }
 
  /* SQL: table operations */
-"FLATTEN"		{ count(); return FLATTEN;	 }
+"FLATTEN"		{ count(); yylval.str = strdup(yytext); return FLATTEN;	 }
 
  /* SQL: joins */
 "JOIN"			{ count(); return JOIN;     }
@@ -70,12 +70,12 @@ void consume_single_line_comment();
 "AND"		{ count(); return AND;          }
 "OR"		{ count(); return OR;           }
 "IS"		{ count(); return IS;           }
-"NOT"		{ count(); return NOT;          }
-"BETWEEN"	{ count(); return BETWEEN;      }
-"IN"		{ count(); return IN;           }
-"LIKE"		{ count(); return LIKE;         }
-"NULL"		{ count(); return NULL_KEYWORD; }
-"OVERLAPS"	{ count(); return OVERLAPS;     }
+"NOT"		{ count(); yylval.str = strdup(yytext); return NOT;          }
+"BETWEEN"	{ count(); yylval.str = strdup(yytext); return BETWEEN;      }
+"IN"		{ count(); yylval.str = strdup(yytext); return IN;           }
+"LIKE"		{ count(); yylval.str = strdup(yytext); return LIKE;         }
+"NULL"		{ count(); yylval.str = strdup(yytext); return NULL_KEYWORD; }
+"OVERLAPS"	{ count(); yylval.str = strdup(yytext); return OVERLAPS;     }
 
  /* SQL: case statements */
 "CASE"	{ count(); return CASE; }
@@ -132,7 +132,7 @@ void consume_single_line_comment();
 -?[0-9]+                        { count(); yylval.intval = atoi(yytext); return INT;       }	
 -?[0-9]+\.[0-9]+                { count(); yylval.floatval = atof(yytext); return FLOAT;   } 
 \"(\\.|[^"])*\"                 { count(); yylval.str = strdup(yytext); return STRING;     } 
-\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'   { count(); return DATE; } 
+\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'   { count(); yylval.str = strdup(yytext); return DATE; } 
 "TRUE"                          { count(); yylval.intval = 1; return TRUE;	   }
 "FALSE"                         { count(); yylval.intval = 0; return FALSE;   }
 "0x"[0-9a-fA-F]+                { count(); yylval.str = strdup(yytext); return HEX;	   }
