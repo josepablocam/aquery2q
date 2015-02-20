@@ -36,10 +36,9 @@ typedef enum ExprNodeType {
   LOR_EXPR,
   LAND_EXPR,
   LIST_EXPR,
-  SEARCH_EXPR
+  SEARCH_EXPR,
+  DUMMY
 } ExprNodeType;
-
-
 
 
 typedef struct ExprNode {
@@ -51,65 +50,8 @@ typedef struct ExprNode {
 		char *str;
 	} data;
 	struct ExprNode *first_child;
-	struct ExprNode *first_sibling;
+	struct ExprNode *next_sibling;
 } ExprNode;
-
-
-
-
-
-/*
-// Section 2.1: Top level program definition
-
-typedef struct TopLevelNode {
-	TopLevelType node_type;
-	union {
-		GlobalQueryNode *global_query; //top level query
-		UDFDefNode *udf_def; //user function definition
-		CreateNode *create; //create table/view
-		ModifyNode *modify; //update/delete/select
-	}
-	struct TopLevelNode *next;
-} TopLevelNode;
-
-typedef enum TopLevelType { GLOBAL_QUERY_N, UDF_DEF_N, MODIFY_N, CREATE_N } TopLevelType;
-
-
-// Section 2.2: Local and Global Queries 
-//Used to optimize queries
-typedef struct LogicalQueryNode {
-	LogicalQueryNodeType node_type;
-	struct LogicalQueryNode *first_table;
-	struct LogicalQueryNode *second_table;
-	ExprNode	*exp_list;
-}
-
-typedef enum LogicalQueryType { PROJECT, SELECT_WHERE, SELECT_HAVING, ORDER, JOIN, GROUP_BY }
-
-typedef struct QueryNode {
-	LogicalQueryNode *logical_plan;
-}
-
-
-typedef struct LocalQueryNode {
-	//name
-	//columns
-	LogicalQueryNode *query;
-	struct LocalQueryNode *next;
-}
-
-typedef struct GlobalQueryNode {
-	LocalQueryNode *local_queries;
-	LogicalQueryNode *main_query;
-}
-
-*/
-
-
-
-
-
-
 
 //Expressions
 ExprNode *make_EmptyExprNode(ExprNodeType type);
@@ -143,16 +85,121 @@ ExprNode *make_elseClauseNode(ExprNode *exp);
 
 
 
-
-ExprNode *make_exprListNode(ExprNode *h, ExprNode *t);
-
-
 ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y);
 ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y);
 ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y);
 
-void print_expr(ExprNode *n, int indent);
+ExprNode *make_exprListNode(ExprNode *data);
+
+void print_expr(ExprNode *n, ExprNodeType p, int type, int indent);
 
 
+
+/*
+// Section 2.1: Top level program definition
+
+typedef struct TopLevelNode {
+	TopLevelNodeType node_type;
+	union {
+		FullQueryNode *global_query; //top level query
+		UDFDefNode *udf_def; //user function definition
+		CreateNode *create; //create table/view
+		ModifyNode *modify; //update/delete/select
+	} elem;
+	struct TopLevelNode *next_sibling;
+} TopLevelNode;
+
+typedef enum TopLevelType { GLOBAL_QUERY_N, UDF_DEF_N, MODIFY_N, CREATE_N } TopLevelType;
+*/
+
+typedef struct IDListNode {
+	char *name;
+	struct IDListNode *next_sibling;
+} IDListNode;
+
+
+//Logical Query Plan Nodes
+
+//Used to optimize queries
+typedef enum OrderNodeType { ASC_SORT, DESC_SORT } OrderNodeType;
+
+typedef struct OrderNode {
+	OrderNodeType node_type;
+	char *col_name;
+	struct OrderNode *next;
+} OrderNode;
+
+typedef enum LogicalQueryNodeType { PROJECT, SELECT_WHERE, SELECT_HAVING, ORDER, CARTESIAN_PROD, 
+	INNER_JOIN, FULL_OUTER_JOIN, GROUP_BY, GROUP_BY_HAVING, TABLE_NM, TABLE_ALIASED, SORT, BUILT_IN_FUN 
+	} LogicalQueryNodeType;
+
+
+typedef struct LogicalQueryNode {
+	LogicalQueryNodeType node_type;
+	struct LogicalQueryNode *first_table;
+	struct LogicalQueryNode *second_table;
+	char *name; //table name if any
+	union {
+		char *alias		 ; //some tables are given other names
+		ExprNode	*exprs; //search conditions
+		IDListNode 	*cols; //using
+		OrderNode 	*order; //sorting
+		} params;
+} LogicalQueryNode;
+
+
+typedef struct LocalQueryNode {
+	char *name;
+	IDListNode *col_names;
+	LogicalQueryNode *query_plan; //optimizable
+	struct LocalQueryNode *next_sibling; //next local query..chained
+} LocalQueryNode;
+
+typedef struct FullQueryNode {
+	LocalQueryNode *local_queries;
+	LogicalQueryNode *query_plan;
+} FullQueryNode;
+
+// Section 2.7: user defined functions definition
+typedef struct UDFArgsNode {
+	char *name;
+	struct UDFArgsNode *next_sibling;
+} UDFArgsNode;
+
+typedef struct LocalVarDefNode {
+	char *name;
+	ExprNode *expr;
+} LocalVarDefNode;
+
+
+typedef enum UDFBodyNodeType { EXPR, VARDEF, QUERY } UDFBodyNodeType;
+
+typedef struct UDFBodyNode {
+	UDFBodyNodeType node_type;
+	union {
+		ExprNode *expr;
+		LocalVarDefNode *vardef;
+		FullQueryNode *query;
+	} elem;
+	struct UDFBodyNode *next_sibling;
+} UDFBodyNode;
+
+typedef struct UDFDefNode {
+	char *name;
+	UDFArgsNode *args;
+	UDFBodyNode *body;
+} UDFDefNode;
+
+
+
+
+//UDFs
+LocalVarDefNode *make_LocalVarDefNode(char *name, ExprNode *expr);
+UDFArgsNode *make_UDFArgsNode(char *arg, UDFArgsNode *next);
+UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type);
+UDFBodyNode *make_UDFExpr(ExprNode *expr);
+UDFBodyNode *make_UDFVardef(LocalVarDefNode *vardef);
+UDFBodyNode *make_UDFQuery(FullQueryNode *query);
+UDFDefNode *make_UDFDefNode(char *name, UDFArgsNode *args, UDFBodyNode *body);
 
 #endif

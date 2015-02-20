@@ -1,49 +1,16 @@
 /* Building an AST for aquery, builds during the parse traversal in bison */
 #include <stdio.h>
 #include <stdlib.h>
-#include <math.h>
 #include "ast.h"
 #include "aquery_types.h"
 #include "symtable.h"
+#include "ast_print.h"
+
 #define AST_DEBUG 1
 #define AST_PRINT_DEBUG(str) if(AST_DEBUG) printf("---->AST DEBUGGING: %s\n", str)
 
 #define STAND_ALONE 0
 
-char *ExprNodeTypeName[]= {
-	"const",
-	"var",
-	"rowid",
-	"col.dot.access",
-	"all_cols",
-	"case_expr",
-	"case_clause",
-	"case_when",
-	"case_when_clause",
-	"case_else",
-	"call",
-	"built-in",
-	"udf",
-	"index_expr",
-	"odd",
-	"even",
-	"every n",
-	"pow",
-	"*",
-	"/",
-	"+",
-	"-",
-	"<",
-	"<=",
-	">",
-	">=",
-	"==",
-	"!=",
-	"||",
-	"&&",
-	"expr_list",
-	"search_exp"
-	};
 
 
 
@@ -58,7 +25,7 @@ ExprNode *make_EmptyExprNode(ExprNodeType type)
 		printf("Error: unable to allocate Expression Node\n");
 		exit(1);
 	}
-	node->first_child = node->first_sibling = NULL;
+	node->first_child = node->next_sibling = NULL;
 	node->node_type = type;
 	node->data_type = UNKNOWN_TYPE;
 	return node;
@@ -175,7 +142,7 @@ ExprNode *make_indexNode(ExprNode *src, ExprNode *ix)
 	AST_PRINT_DEBUG("making indexing node");
 	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
 	new_node->first_child = src;
-	src->first_sibling = ix;
+	src->next_sibling = ix;
 	return new_node;
 }
 
@@ -185,12 +152,7 @@ ExprNode *make_callNode(ExprNode *fun, ExprNode *args)
 	ExprNode *new_node = make_EmptyExprNode(CALL_EXPR);
 	new_node->data_type = UNKNOWN_TYPE;
 	new_node->first_child = fun;
-		
-	if(args != NULL)
-	{
-		new_node->first_child->first_sibling = args;
-	}
-
+	fun->next_sibling = args;
 	return new_node;	
 }
 
@@ -224,8 +186,8 @@ ExprNode *make_caseNode(ExprNode *case_clause, ExprNode *when_clauses, ExprNode 
 	
 	//TODO: add error reporting
 	new_node->first_child = case_clause;
-	case_clause->first_sibling = when_clauses;
-	when_clauses->first_sibling = else_clause;
+	case_clause->next_sibling = when_clauses;
+	when_clauses->next_sibling = else_clause;
 	return new_node;
 }
 
@@ -242,7 +204,7 @@ ExprNode *make_caseWhenNode(ExprNode *when, ExprNode *conseq)
 	AST_PRINT_DEBUG("making when clause node");
 	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSE);
 	new_node->first_child = when;
-	when->first_sibling = conseq;
+	when->next_sibling = conseq;
 	return new_node;
 }
 
@@ -251,7 +213,7 @@ ExprNode *make_whenClausesNode(ExprNode *h, ExprNode *t)
 	AST_PRINT_DEBUG("making when clauses node");
 	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSES);
 	new_node->first_child = h;
-	h->first_sibling = t;
+	h->next_sibling = t;
 	return new_node;
 }
 
@@ -274,7 +236,7 @@ ExprNode *make_colDotAccessNode(ExprNode *src, ExprNode *dest)
 	AST_PRINT_DEBUG("making column dot access node");
 	ExprNode *new_node = make_EmptyExprNode(COLDOTACCESS_EXPR);
 	new_node->first_child = src;
-	src->first_sibling = dest;
+	src->next_sibling = dest;
 	return new_node;
 }
 
@@ -296,7 +258,7 @@ ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	ExprNode *new_node = make_EmptyExprNode(op);
 	new_node->data_type = unif_comp(x->data_type, y->data_type);
 	new_node->first_child = x;
-	x->first_sibling = y;
+	x->next_sibling = y;
 	return new_node;	
 }
 
@@ -307,7 +269,7 @@ ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	ExprNode *new_node = make_EmptyExprNode(op);
 	new_node->data_type = unif_logic(x->data_type, y->data_type);
 	new_node->first_child = x;
-	x->first_sibling = y;
+	x->next_sibling = y;
 	return new_node;
 }
 
@@ -324,57 +286,140 @@ ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	}
 	
 	new_node->first_child = x;
-	x->first_sibling = y;
+	x->next_sibling = y;
 	return new_node;
 }
 
-
-//lists of expressions
-ExprNode *make_exprListNode(ExprNode *h, ExprNode *t)
+ExprNode *make_exprListNode(ExprNode *data)
 {
-	AST_PRINT_DEBUG("making expression list node");
-	ExprNode *new_node = make_EmptyExprNode(LIST_EXPR);
-	new_node->first_child = h;
-	h->first_sibling = t;
-	return new_node;
+	AST_PRINT_DEBUG("making expression list");
+	ExprNode *list = make_EmptyExprNode(LIST_EXPR);
+	list->first_child = data;
+	return list;
 }
 
 
-//Printing Expressions
-void print_expr(ExprNode *n, int indent)
+
+
+///****** Queries and their nodes etc *//////////
+/*
+FullQueryNode *make_FullQueryNode(LocalQueryNode *local, LogicalQueryNode *plan)
 {
+	FullQueryNode *query = malloc(sizeof(FullQueryNode));
+	query->local_queries = local;
+	query->query_plan = plan;
+	return query;
+}
+
+
+LogicalQueryNode *make_LogicalQueryNode(LogicalQueryType type)
+{
+	LogicalQueryNode *plan = malloc(sizeof(LogicalQueryNode));
+	plan->node_type = type;
+	plan->first_table = plan->second_table = NULL;
+	return plan;
+}
+
+LogicalQueryNode *make_
+
+
+
+
+
+IDListNode *make_IDListNode(char *id)
+{
+	IDListNode *ids = malloc(sizeof(IDListNode));
+	ids->name = id;
+	ids->next_sibling = NULL;
+	return ids;
+}
+
+
+LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames, LogicalQueryNode *plan)
+{
+	LocalQueryNode *local_query = malloc(sizeof(LocalQueryNode));
+	local_query->name = name;
+	local_query->col_names = colnames;
+	local_query->query_plan = plan;
+	local_query->next = NULL;
+	return local_query;
+}
+
+
+OrderNode *make_OrderNode(OrderNodeType type, char *colname)
+{
+	OrderNode *new_order = malloc(sizeof(OrderNode));
+	new_order->node_type = type;
+	new_order->col_name = colname;
+	new_order->next = NULL;
+}
+*/
+
+
+/// User Defined Functions 
+LocalVarDefNode *make_LocalVarDefNode(char *name, ExprNode *expr)
+{
+	LocalVarDefNode *vardef = malloc(sizeof(LocalVarDefNode));
+	vardef->name = name;
+	vardef->expr = expr;
+	return vardef;
+}
+
+
+UDFArgsNode *make_UDFArgsNode(char *name, UDFArgsNode *next)
+{
+	UDFArgsNode *new_node = malloc(sizeof(UDFArgsNode));
+	new_node->name = name;
+	new_node->next_sibling = next;
+	return new_node;
+}
+
+UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type)
+{
+	UDFBodyNode *new_node = malloc(sizeof(UDFBodyNode));
 	
-	if(n != NULL)
+	if(new_node == NULL)
 	{
-		
-			
-		if(n->node_type == CONSTANT_EXPR)
-		{
-			if(n->data_type == INT_TYPE || n->data_type == BOOLEAN_TYPE)
-			{
-				printf("%*d\n", indent, n->data.ival);
-			}
-			else if(n->data_type == FLOAT_TYPE)
-			{
-				printf("%*f\n", indent, n->data.fval);
-			}
-			else
-			{
-				printf("%*s\n", indent, n->data.str);
-			}
-		}
-		else
-		{
-			printf("%*s\n", indent, ExprNodeTypeName[n->node_type]);
-		}
-		
-		print_expr(n->first_child, indent + 5);
-		print_expr(n->first_sibling, indent);	
-		
+		printf("AST Error: unable to allocate memory for UDFEmptyBodyNode\n");
 	}
+	
+	new_node->node_type = type;
+	new_node->next_sibling = NULL;
+
+	return new_node;
+}
+
+UDFBodyNode *make_UDFExpr(ExprNode *expr)
+{
+	UDFBodyNode *body_elem = make_UDFEmptyBodyNode(EXPR);
+	body_elem->elem.expr = expr;
+	return body_elem;
+}
+
+UDFBodyNode *make_UDFVardef(LocalVarDefNode *vardef)
+{
+	UDFBodyNode *body_elem = make_UDFEmptyBodyNode(VARDEF);
+	body_elem->elem.vardef = vardef;
+	return body_elem;
+}
+
+UDFBodyNode *make_UDFQuery(FullQueryNode *query)
+{
+	UDFBodyNode *body_elem = make_UDFEmptyBodyNode(QUERY);
+	body_elem->elem.query = query;
+	return body_elem;
 }
 
 
+
+UDFDefNode *make_UDFDefNode(char *name, UDFArgsNode *args, UDFBodyNode *body)
+{
+	UDFDefNode *new_fun = malloc(sizeof(UDFDefNode));
+	new_fun->name = name;
+	new_fun->args = args;
+	new_fun->body = body;
+	return new_fun;
+}
 
 
 
@@ -388,7 +433,19 @@ int main()
 	ExprNode *n3 = make_int(4);
 	ExprNode *add = make_arithNode(PLUS_EXPR, n1, n2);
 	ExprNode *times = make_arithNode(MULT_EXPR,n3, add);
-	print_expr(times, 0);
+	//print_expr(times, DUMMY, 0, 0);
+	
+	UDFArgsNode *arg2 = make_UDFArgsNode("y", NULL);
+	UDFArgsNode *arg1 = make_UDFArgsNode("x", arg2);
+	
+	LocalVarDefNode *local_var_def = make_LocalVarDefNode("x", times);
+	UDFBodyNode *body1 = make_UDFVardef(local_var_def);
+	UDFBodyNode *body2 = make_UDFQuery(NULL);
+	body1->next_sibling = body2;
+	UDFDefNode *udf = make_UDFDefNode("my_function", arg1, body1);
+	print_udf_def(udf);
+	
+	
 	return 0;
 }
 #endif
