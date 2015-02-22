@@ -139,28 +139,49 @@ typedef struct OrderNode {
 	struct OrderNode *next;
 } OrderNode;
 
+typedef struct NamedExprNode {
+	char *name;
+	ExprNode *expr;
+	struct NamedExprNode *next_sibling;
+} NamedExprNode;
 
-
-
-typedef enum LogicalQueryNodeType { PROJECT, SELECT_WHERE, SELECT_HAVING, ORDER, CARTESIAN_PROD, 
-	INNER_JOIN, FULL_OUTER_JOIN, GROUP_BY, GROUP_BY_HAVING, TABLE_NM, TABLE_ALIASED, SORT, BUILT_IN_FUN,
-	DELETE_WHERE, DELETE_COL, UPDATE_WHERE, UPDATE_HAVING
+typedef enum LogicalQueryNodeType { PROJECT_SELECT, PROJECT_UPDATE, DELETION, FILTER_WHERE, FILTER_HAVING, CARTESIAN_PROD, 
+	INNER_JOIN_ON, FULL_OUTER_JOIN_ON, INNER_JOIN_USING, FULL_OUTER_JOIN_USING,
+	GROUP_BY, SIMPLE_TABLE, ALIAS, SORT, FLATTEN_FUN, EXPLICIT_VALUES
 	} LogicalQueryNodeType;
 
 
 typedef struct LogicalQueryNode {
 	LogicalQueryNodeType node_type;
-	struct LogicalQueryNode *first_table;
-	struct LogicalQueryNode *second_table;
-	char *name; //table name if any
+	struct LogicalQueryNode *arg; //argument to operation
+	struct LogicalQueryNode *next_arg; //potential additional arguments
 	union {
-		char *alias		 		; //some tables are given other names
-		//ExprNamePairNode 	*colexprs; //c1 * 2 as c2
-		ExprNode			*exprs; //search conditions
+		char *name		 		; //table name or alias
+		NamedExprNode 	*namedexprs; //c1 * 2 as c2, c1 * 2 (nil)
+		ExprNode			*exprs; //on, search conditions, grouping
 		IDListNode 			*cols; //using
 		OrderNode 			*order; //sorting
 		} params;
 } LogicalQueryNode;
+
+
+//Logical query nodes
+NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr);
+LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type);
+LogicalQueryNode *make_table(char *name);
+LogicalQueryNode *make_alias(LogicalQueryNode *t, char *alias);
+LogicalQueryNode *make_joinOn(LogicalQueryNodeType jointype, LogicalQueryNode *t1, LogicalQueryNode *t2, ExprNode *cond);
+LogicalQueryNode *make_joinUsing(LogicalQueryNodeType jointype, LogicalQueryNode *t1, LogicalQueryNode *t2, IDListNode *cols);
+LogicalQueryNode *make_cross(LogicalQueryNode *t1, LogicalQueryNode *t2);
+LogicalQueryNode *make_filterWhere(LogicalQueryNode *t, ExprNode *conds);
+LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds);
+LogicalQueryNode *make_flatten(LogicalQueryNode *t);
+LogicalQueryNode *make_project(LogicalQueryNodeType proj_type, LogicalQueryNode *t, NamedExprNode *namedexprs);
+LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols);
+
+
+
+
 
 
 typedef struct LocalQueryNode {
@@ -216,5 +237,10 @@ UDFBodyNode *make_UDFExpr(ExprNode *expr);
 UDFBodyNode *make_UDFVardef(LocalVarDefNode *vardef);
 UDFBodyNode *make_UDFQuery(FullQueryNode *query);
 UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body);
+
+
+
+
+
 
 #endif

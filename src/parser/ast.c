@@ -6,7 +6,7 @@
 #include "symtable.h"
 #include "ast_print.h"
 
-#define AST_DEBUG 0
+#define AST_DEBUG 1
 #define AST_PRINT_DEBUG(str) if(AST_DEBUG) printf("---->AST DEBUGGING: %s\n", str)
 
 #define STAND_ALONE 0
@@ -428,31 +428,142 @@ UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body)
 }
 
 
+///Logical query plan
+NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr)
+{
+	NamedExprNode *new_tuple = malloc(sizeof(NamedExprNode));
+	new_tuple->name = name;
+	new_tuple->expr = expr;
+	return new_tuple;
+}
+
+LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type)
+{	
+	AST_PRINT_DEBUG("making logical query node");
+	LogicalQueryNode *logical_unit =  malloc(sizeof(LogicalQueryNode));
+	logical_unit->node_type = type;
+	logical_unit->arg = logical_unit->next_arg = NULL;
+	return logical_unit;
+} 
+
+LogicalQueryNode *make_table(char *name)
+{
+	LogicalQueryNode *t = make_EmptyLogicalQueryNode(SIMPLE_TABLE);
+	t->params.name = name;
+	return t;
+}
+
+LogicalQueryNode *make_alias(LogicalQueryNode *t, char *alias)
+{
+	LogicalQueryNode *aliasing = make_EmptyLogicalQueryNode(ALIAS);
+	aliasing->arg = t;
+	aliasing->params.name = alias;
+	return aliasing;
+}
+
+
+LogicalQueryNode *make_joinOn(LogicalQueryNodeType jointype, LogicalQueryNode *t1, LogicalQueryNode *t2, ExprNode *cond)
+{
+	LogicalQueryNode *join = make_EmptyLogicalQueryNode(jointype);
+	join->arg = t1;
+	join->next_arg = t2;
+	join->params.exprs = cond;
+	return join;
+}
+
+LogicalQueryNode *make_joinUsing(LogicalQueryNodeType jointype, LogicalQueryNode *t1, LogicalQueryNode *t2, IDListNode *cols)
+{
+	LogicalQueryNode *join = make_EmptyLogicalQueryNode(jointype);
+	join->arg = t1;
+	join->next_arg = t2;
+	join->params.cols = cols;
+	return join;
+}
+
+LogicalQueryNode *make_cross(LogicalQueryNode *t1, LogicalQueryNode *t2)
+{
+	LogicalQueryNode *cross = make_EmptyLogicalQueryNode(CARTESIAN_PROD);
+	cross->arg = t1;
+	cross->next_arg = t2;
+	return cross;
+}
+
+LogicalQueryNode *make_filterWhere(LogicalQueryNode *t, ExprNode *conds)
+{
+	LogicalQueryNode *where = make_EmptyLogicalQueryNode(FILTER_WHERE);
+	where->arg = t;
+	where->params.exprs = conds;
+	return where;
+}
+
+LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds)
+{
+	LogicalQueryNode *having = make_EmptyLogicalQueryNode(FILTER_HAVING);
+	having->arg = t;
+	having->params.exprs = conds;
+	return having;
+	
+}
+
+LogicalQueryNode *make_flatten(LogicalQueryNode *t)
+{
+	LogicalQueryNode *app = make_EmptyLogicalQueryNode(FLATTEN_FUN);
+	app->arg = t;
+	return app;
+}
+
+LogicalQueryNode *make_project(LogicalQueryNodeType proj_type, LogicalQueryNode *t, NamedExprNode *namedexprs)
+{
+	LogicalQueryNode *proj = make_EmptyLogicalQueryNode(proj_type);
+	proj->arg = t;
+	proj->params.namedexprs = namedexprs;
+	return proj;
+}
+
+LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols)
+{
+	LogicalQueryNode *del = make_EmptyLogicalQueryNode(DELETION);
+	del->arg = t;
+	del->params.cols = cols;
+	return del;
+}
+
+
+
 
 
 
 #if STAND_ALONE
 int main()
 {
+	//Simple expressions
+	printf("--->printing an expression\n");
 	ExprNode *n1 = make_int(2);
 	ExprNode *n2 = make_int(3);
 	ExprNode *n3 = make_int(4);
 	ExprNode *add = make_arithNode(PLUS_EXPR, n1, n2);
 	ExprNode *times = make_arithNode(MULT_EXPR,n3, add);
-	//print_expr(times, DUMMY, 0, 0);
+	print_expr(times, DUMMY, 0, 0);
 	
-	//arguments
+	/*Functions*/
+	printf("--->printing an UDF\n");
+	//args
 	IDListNode *arg2 = make_IDListNode("y", NULL);
 	IDListNode *arg1 = make_IDListNode("x", arg2);
-	
 	//body
 	LocalVarDefNode *local_var_def = make_LocalVarDefNode("x", times);
 	UDFBodyNode *body1 = make_UDFVardef(local_var_def);
 	UDFBodyNode *body2 = make_UDFQuery(NULL);
 	body1->next_sibling = body2;
-	
 	UDFDefNode *udf = make_UDFDefNode("my_function", arg1, body1);
 	print_udf_def(udf);
+	
+	/* logical query plan */
+	printf("--->printing a logical query plan\n");
+	LogicalQueryNode *table = make_table("my_table");
+	LogicalQueryNode *aliased = make_alias(table, "other_name");
+	ExprNode *less_than = make_compNode(LE_EXPR, n1, n2);
+	LogicalQueryNode *filter = make_filterWhere(aliased, less_than);
 	
 	
 	return 0;

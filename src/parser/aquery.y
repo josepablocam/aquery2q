@@ -55,8 +55,8 @@ void yyerror(const char *);
 %token UPDATE SET INSERT INTO VALUES DELETE
 
  /* SQL: search conditions */
-%token AND OR IS 
-%token <str> NOT BETWEEN IN LIKE NULL_KEYWORD OVERLAPS
+%token AND OR  
+%token <str> IS NOT BETWEEN IN LIKE NULL_KEYWORD OVERLAPS
 
  /* SQL: case statement */
 %token CASE END WHEN THEN ELSE
@@ -107,6 +107,12 @@ void yyerror(const char *);
 %type <idlist> def_arg_list def_arg_list_tail	
 %type <udfdef> user_function_definition
 
+/* logical query plan */
+%type <plan> table_expression_main table_expression joined_table table_expressions table_expressions_tail
+%type <idlist> using_clause
+%type <exprnode> on_clause
+%type <idlist> comma_identifier_list comma_identifier_list_tail
+
 %start program
 
 %union {
@@ -120,7 +126,7 @@ void yyerror(const char *);
   struct LocalVarDefNode *localvardef;
   struct UDFBodyNode *udfbody;
   struct FullQueryNode *fullquery; 
-  
+  struct LogicalQueryNode *plan;
 }
 
 
@@ -176,10 +182,11 @@ col_aliases: '(' comma_identifier_list ')'
 	| /* epsilon */
 	;
 
-comma_identifier_list: ID comma_identifier_list_tail; 
+comma_identifier_list: ID comma_identifier_list_tail    {$$ = make_IDListNode($1, $2); }
+	; 
 
-comma_identifier_list_tail: ',' ID comma_identifier_list_tail
-	|	/* epsilon */
+comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{$$ = make_IDListNode($2, $3);}
+	|	/* epsilon */											{ $$ = NULL; }
 	;
 
 column_list: column_name column_list_tail ;
@@ -239,7 +246,7 @@ having_clause: HAVING search_condition
 
 
  /******* 2.3.1: search condition *******/
-search_condition: boolean_term				{printf("---->search\n"); print_expr($1, DUMMY, 0, 0); $$ = $1; }
+search_condition: boolean_term				{printf("---->search\n"); print_expr($1, DUMMY, 0, 0); $$ = $1; } //TODO: delete dummy
 	| search_condition OR boolean_term		{$$ = make_logicOpNode(WHERE_OR_EXPR, $1, $3); }
 	;
 	
@@ -274,7 +281,7 @@ between_predicate: value_expression BETWEEN value_expression AND value_expressio
 	|  value_expression NOT BETWEEN value_expression AND value_expression		{$1->next_sibling = $4; $4->next_sibling = $6; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
-in_predicate: value_expression IN in_pred_spec {$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+in_predicate: value_expression IN in_pred_spec  {$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
 	| value_expression NOT IN in_pred_spec	    {$1->next_sibling = $4; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
@@ -290,8 +297,8 @@ null_predicate: value_expression IS NOT NULL_KEYWORD	{$$ = make_callNode(make_pr
 	| value_expression IS NULL_KEYWORD					{$$ = make_callNode(make_predNode($3), make_exprListNode($1)); }
 	;
 	
-is_predicate: value_expression IS truth_value			{$$ = $1; }
-	| value_expression IS NOT truth_value				{$$ = make_callNode(make_predNode($3), make_exprListNode($1)); }
+is_predicate: value_expression IS truth_value			{$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	| value_expression IS NOT truth_value				{$1->next_sibling = $4; $$ = make_callNode(make_predNode($3),  make_exprListNode(make_callNode(make_predNode($2), make_exprListNode($1)))); }
 	;
 
 truth_value: TRUE 				{$$ = make_bool(1); }
@@ -308,34 +315,46 @@ range_value_expression: '(' value_expression ',' value_expression ')' 		{$2->nex
 
 /******* 2.3.2: table expressions *******/
 
-joined_table: table_expression									//TODO: check that types here work (don't suddenly want a function here...so either table or unknown)
-	| table_expression join_type JOIN joined_table join_spec
+//joined_table: table_expression									//TODO: check that types here work (don't suddenly want a function here...so either table or unknown)
+//	| table_expression join_type JOIN joined_table join_spec
+//	;
+
+
+joined_table: table_expression 										{ $$ = $1; }
+	| table_expression INNER JOIN joined_table on_clause			{ $$ = make_joinOn(INNER_JOIN_ON, $1, $4, $5); }	
+	| table_expression INNER JOIN joined_table using_clause			{ $$ = make_joinUsing(INNER_JOIN_USING, $1, $4, $5); } 
+	| table_expression FULL OUTER JOIN joined_table on_clause		{ $$ = make_joinOn(FULL_OUTER_JOIN_ON, $1, $5, $6); }
+	| table_expression FULL OUTER JOIN joined_table using_clause	{ $$ = make_joinUsing(FULL_OUTER_JOIN_USING, $1, $5, $6); } 
 	;
 
-join_type: INNER | FULL OUTER ;	
 
-join_spec: on_clause | using_clause ;
+//join_type: INNER | FULL OUTER ;	
 
-on_clause: ON search_condition ;
+//join_spec: on_clause | using_clause ;
 
-using_clause: USING '(' comma_identifier_list ')' ;
+on_clause: ON search_condition									{$$ = $2; }
+	;
+
+using_clause: USING '(' comma_identifier_list ')' 				{ $$ = $3; }
+	;
 	
-table_expression: table_expression_main
-	| built_in_table_fun '(' table_expression_main ')'	
+table_expression: table_expression_main							{ $$ = $1; }
+	| FLATTEN '(' table_expression_main ')'						{ $$ = make_flatten($3); }
 	;
 		
-table_expression_main: ID ID 
-	| ID UC_AS ID 
-	| ID
-	| '(' joined_table ')' 
+table_expression_main: ID ID 									{ $$ = make_alias(make_table($1), $2); }
+	| ID UC_AS ID 												{ $$ = make_alias(make_table($1), $3); }
+	| ID														{ $$ = make_table($1); }
+	| '(' joined_table ')' 										{ $$ = $2; }
 	;
 	
-built_in_table_fun: FLATTEN ;
+//built_in_table_fun: FLATTEN ;
 
-table_expressions: joined_table table_expressions_tail ;
+table_expressions: joined_table table_expressions_tail 				{if($2 == NULL){ $$ = $1; }else { $$ = make_cross($1, $2); } }
+	;
 
-table_expressions_tail: ',' joined_table table_expressions_tail
-	| // epsilon 
+table_expressions_tail: ',' joined_table table_expressions_tail	 	 {if($3 == NULL){ $$ = $2; }else { $$ = make_cross($2, $3); } }
+	| /* epsilon */ 											     { $$ = NULL; }
 	;
 
 /******* 2.5: table and view creation *******/	 
