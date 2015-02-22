@@ -135,7 +135,7 @@ typedef enum OrderNodeType { ASC_SORT, DESC_SORT } OrderNodeType;
 
 typedef struct OrderNode {
 	OrderNodeType node_type;
-	char *col_name;
+	ExprNode *col;
 	struct OrderNode *next;
 } OrderNode;
 
@@ -174,12 +174,15 @@ LogicalQueryNode *make_joinOn(LogicalQueryNodeType jointype, LogicalQueryNode *t
 LogicalQueryNode *make_joinUsing(LogicalQueryNodeType jointype, LogicalQueryNode *t1, LogicalQueryNode *t2, IDListNode *cols);
 LogicalQueryNode *make_cross(LogicalQueryNode *t1, LogicalQueryNode *t2);
 LogicalQueryNode *make_filterWhere(LogicalQueryNode *t, ExprNode *conds);
+LogicalQueryNode *make_groupby(LogicalQueryNode *t, ExprNode *exprs);
 LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_flatten(LogicalQueryNode *t);
 LogicalQueryNode *make_project(LogicalQueryNodeType proj_type, LogicalQueryNode *t, NamedExprNode *namedexprs);
 LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols);
-
-
+OrderNode *make_OrderNode(OrderNodeType type, ExprNode *cols);
+LogicalQueryNode *make_sort(LogicalQueryNode *t, OrderNode *order);
+LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs);
+LogicalQueryNode *assemble_logical(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 
 
 

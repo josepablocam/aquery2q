@@ -113,6 +113,13 @@ void yyerror(const char *);
 %type <exprnode> on_clause
 %type <idlist> comma_identifier_list comma_identifier_list_tail
 
+%type <plan> groupby_clause having_clause from_clause select_clause where_clause order_clause
+%type <plan> base_query
+%type <order> order_spec order_specs order_specs_tail
+
+%type <namedexpr> select_elem select_clause_tail
+%type <exprnode> column_name
+
 %start program
 
 %union {
@@ -127,6 +134,8 @@ void yyerror(const char *);
   struct UDFBodyNode *udfbody;
   struct FullQueryNode *fullquery; 
   struct LogicalQueryNode *plan;
+  struct OrderNode *order;
+  struct NamedExprNode *namedexpr;
 }
 
 
@@ -191,7 +200,9 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{$$ = make_IDListN
 
 column_list: column_name column_list_tail ;
 
-column_name: ID | column_dot_access ;
+column_name: ID 									{ $$ = make_id(env, $1); }
+	| column_dot_access 							{ $$ = $1; }
+	;
 
 column_dot_access: ID '.' ID  {$$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
 	;
@@ -204,44 +215,48 @@ column_list_tail: ',' column_name column_list_tail
 
  /******* 2.3: Base query *******/
  
-base_query: select_clause from_clause order_clause where_clause groupby_clause ; 
+base_query: select_clause from_clause order_clause where_clause groupby_clause  {$$ = assemble_logical($1, $2, $3, $4, $5); print_logical_query($$);}
+	; 
  
-select_clause: SELECT select_elem select_clause_tail ;
+select_clause: SELECT select_elem select_clause_tail {$2->next_sibling = $3; $$ = make_project(PROJECT_SELECT, NULL, $2); }
+	;
 
-select_elem: value_expression LC_AS ID
-	|	value_expression
+select_elem: value_expression LC_AS ID  { $$ = make_NamedExprNode($3, $1); }
+	|	value_expression				{ $$ = make_NamedExprNode(NULL, $1); }
 	;
 	
-select_clause_tail: ',' select_elem select_clause_tail
-	| /* epislon */
+select_clause_tail: ',' select_elem select_clause_tail		{$2->next_sibling = $3; $$ = $2; }
+	| /* epislon */											{$$ = NULL; }
 	;
 		
-from_clause: FROM table_expressions ; //TODO: check that table_expressions is of type table or unknown
+from_clause: FROM table_expressions {$$ = $2; }
+	;
 
-order_clause: ASSUMING order_specs
-	| /* epsilon */
+order_clause: ASSUMING order_specs	{ $$ = make_sort(NULL, $2); }
+	| /* epsilon */					{ $$ = NULL; }
 	;
 	
-order_specs: order_spec order_specs_tail ;
+order_specs: order_spec order_specs_tail  {$1->next = $2; $$ = $1; }
+		;
 	
-order_spec: ASC column_name
-	 | DESC column_name
+order_spec: ASC column_name							{$$ = make_OrderNode(ASC_SORT, $2); }
+	 | DESC column_name								{$$ = make_OrderNode(DESC_SORT, $2); }
 	 ;
 	 
-order_specs_tail: ',' order_spec order_specs_tail 
-	| /* epsilon */
+order_specs_tail: ',' order_spec order_specs_tail 		{$2->next = $3; $$ = $2; }
+	| /* epsilon */										{$$ = NULL; }
 	;
 
-where_clause: WHERE search_condition 
-	| /* epsilon */
+where_clause: WHERE search_condition 		{$$ = make_filterWhere(NULL, $2); }
+	| /* epsilon */							{$$ = NULL; }
 	;
 	
-groupby_clause: GROUP BY comma_value_expression_list having_clause
-	| /* epsilon */
+groupby_clause: GROUP BY comma_value_expression_list having_clause	{$$ = pushdown_logical($4, make_groupby(NULL, $3));   }
+	| /* epsilon */													{$$ = NULL; }
 	;
 	
-having_clause: HAVING search_condition 
-	| /* epsilon */
+having_clause: HAVING search_condition 								{$$ = make_filterHaving(NULL, $2); }
+	| /* epsilon */													{$$ =  NULL; }
 	;
 
 
@@ -315,11 +330,6 @@ range_value_expression: '(' value_expression ',' value_expression ')' 		{$2->nex
 
 /******* 2.3.2: table expressions *******/
 
-//joined_table: table_expression									//TODO: check that types here work (don't suddenly want a function here...so either table or unknown)
-//	| table_expression join_type JOIN joined_table join_spec
-//	;
-
-
 joined_table: table_expression 										{ $$ = $1; }
 	| table_expression INNER JOIN joined_table on_clause			{ $$ = make_joinOn(INNER_JOIN_ON, $1, $4, $5); }	
 	| table_expression INNER JOIN joined_table using_clause			{ $$ = make_joinUsing(INNER_JOIN_USING, $1, $4, $5); } 
@@ -327,10 +337,6 @@ joined_table: table_expression 										{ $$ = $1; }
 	| table_expression FULL OUTER JOIN joined_table using_clause	{ $$ = make_joinUsing(FULL_OUTER_JOIN_USING, $1, $5, $6); } 
 	;
 
-
-//join_type: INNER | FULL OUTER ;	
-
-//join_spec: on_clause | using_clause ;
 
 on_clause: ON search_condition									{$$ = $2; }
 	;
@@ -350,7 +356,7 @@ table_expression_main: ID ID 									{ $$ = make_alias(make_table($1), $2); }
 	
 //built_in_table_fun: FLATTEN ;
 
-table_expressions: joined_table table_expressions_tail 				{if($2 == NULL){ $$ = $1; }else { $$ = make_cross($1, $2); } }
+table_expressions: joined_table table_expressions_tail 				{if($2 == NULL){ $$ = $1; }else { $$ = make_cross($1, $2); } print_logical_query($$);}
 	;
 
 table_expressions_tail: ',' joined_table table_expressions_tail	 	 {if($3 == NULL){ $$ = $2; }else { $$ = make_cross($2, $3); } }

@@ -347,15 +347,17 @@ LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames, LogicalQue
 	return local_query;
 }
 
+*/
 
-OrderNode *make_OrderNode(OrderNodeType type, char *colname)
+OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col)
 {
 	OrderNode *new_order = malloc(sizeof(OrderNode));
 	new_order->node_type = type;
-	new_order->col_name = colname;
+	new_order->col = col;
 	new_order->next = NULL;
+	return new_order;
 }
-*/
+
 
 
 /// User Defined Functions 
@@ -434,6 +436,7 @@ NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr)
 	NamedExprNode *new_tuple = malloc(sizeof(NamedExprNode));
 	new_tuple->name = name;
 	new_tuple->expr = expr;
+	new_tuple->next_sibling = NULL;
 	return new_tuple;
 }
 
@@ -528,9 +531,52 @@ LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols)
 	return del;
 }
 
+LogicalQueryNode *make_groupby(LogicalQueryNode *t, ExprNode *exprs)
+{
+	LogicalQueryNode *group = make_EmptyLogicalQueryNode(GROUP_BY);
+ 	group->arg = t;
+	group->params.exprs = exprs;
+	return group;
+}
+
+LogicalQueryNode *make_sort(LogicalQueryNode *t, OrderNode *order)
+{
+	LogicalQueryNode *sort = make_EmptyLogicalQueryNode(SORT);
+	sort->arg = t;
+	sort->params.order = order;
+	return sort;
+}
 
 
+//We need a way to send down an argument into the logical query plan
+LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs)
+{
+	LogicalQueryNode *prev, *curr;
 
+	for(prev = curr = lhs; curr != NULL; prev = curr, curr = curr->arg)
+	{
+		/* find empty slot for rhs argument */
+	}
+	
+	if(prev == NULL)
+	{ //implies LHS was NULL
+		return rhs;
+	}
+	else
+	{ //place into the empty spot found
+		prev->arg = rhs;
+		return lhs;
+	}
+}
+
+LogicalQueryNode *assemble_logical(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+{
+	LogicalQueryNode *plan = from;
+	plan = pushdown_logical(order, plan);
+	plan = pushdown_logical(where, plan);
+	plan = pushdown_logical(grouphaving, plan);
+	return pushdown_logical(proj, plan);
+}
 
 
 #if STAND_ALONE
