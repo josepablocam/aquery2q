@@ -44,103 +44,100 @@
      SELECT = 260,
      FROM = 261,
      ASSUMING = 262,
-     ORDER = 263,
-     WHERE = 264,
-     GROUP = 265,
-     BY = 266,
-     HAVING = 267,
-     LC_AS = 268,
-     ROWID = 269,
-     ODD = 270,
-     EVEN = 271,
-     EVERY = 272,
-     FLATTEN = 273,
-     CROSS = 274,
+     ASC = 263,
+     DESC = 264,
+     WHERE = 265,
+     GROUP = 266,
+     BY = 267,
+     HAVING = 268,
+     LC_AS = 269,
+     ROWID = 270,
+     ODD = 271,
+     EVEN = 272,
+     EVERY = 273,
+     FLATTEN = 274,
      JOIN = 275,
-     NATURAL = 276,
-     INNER = 277,
-     OUTER = 278,
-     LEFT = 279,
-     RIGHT = 280,
-     FULL = 281,
-     ON = 282,
-     USING = 283,
-     CREATE = 284,
-     TABLE = 285,
-     VIEW = 286,
-     UPDATE = 287,
-     SET = 288,
-     INSERT = 289,
-     INTO = 290,
-     VALUES = 291,
-     DELETE = 292,
-     AND = 293,
-     OR = 294,
-     IS = 295,
-     NOT = 296,
-     BETWEEN = 297,
-     IN = 298,
-     LIKE = 299,
-     NULL_KEYWORD = 300,
-     OVERLAPS = 301,
-     CASE = 302,
-     END = 303,
-     WHEN = 304,
-     THEN = 305,
-     ELSE = 306,
-     TYPE_INT = 307,
-     TYPE_FLOAT = 308,
-     TYPE_STRING = 309,
-     TYPE_DATE = 310,
-     TYPE_BOOLEAN = 311,
-     TYPE_BIT = 312,
-     TYPE_HEX = 313,
-     FUNCTION = 314,
-     ASSIGN = 315,
-     ABS = 316,
-     AVG = 317,
-     COUNT = 318,
-     DISTINCT = 319,
-     DROP = 320,
-     FIRST = 321,
-     LAST = 322,
-     MAX = 323,
-     MIN = 324,
-     MOD = 325,
-     NEXT = 326,
-     PREV = 327,
-     PRD = 328,
-     REV = 329,
-     SUM = 330,
-     STDDEV = 331,
-     AVGS = 332,
-     DELTAS = 333,
-     MAXS = 334,
-     MINS = 335,
-     PRDS = 336,
-     SUMS = 337,
-     INT = 338,
-     FLOAT = 339,
-     STRING = 340,
-     DATE = 341,
-     TRUE = 342,
-     FALSE = 343,
-     BIT = 344,
-     HEX = 345,
-     NULL_VAL = 346,
-     ID = 347,
-     TIMES_OP = 348,
-     DIV_OP = 349,
-     PLUS_OP = 350,
-     MINUS_OP = 351,
-     LE_OP = 352,
-     GE_OP = 353,
-     L_OP = 354,
-     G_OP = 355,
-     EQ_OP = 356,
-     NEQ_OP = 357,
-     AND_OP = 358,
-     OR_OP = 359
+     INNER = 276,
+     OUTER = 277,
+     FULL = 278,
+     ON = 279,
+     USING = 280,
+     CREATE = 281,
+     TABLE = 282,
+     VIEW = 283,
+     UPDATE = 284,
+     SET = 285,
+     INSERT = 286,
+     INTO = 287,
+     VALUES = 288,
+     DELETE = 289,
+     AND = 290,
+     OR = 291,
+     IS = 292,
+     NOT = 293,
+     BETWEEN = 294,
+     IN = 295,
+     LIKE = 296,
+     NULL_KEYWORD = 297,
+     OVERLAPS = 298,
+     CASE = 299,
+     END = 300,
+     WHEN = 301,
+     THEN = 302,
+     ELSE = 303,
+     TYPE_INT = 304,
+     TYPE_FLOAT = 305,
+     TYPE_STRING = 306,
+     TYPE_DATE = 307,
+     TYPE_BOOLEAN = 308,
+     TYPE_HEX = 309,
+     FUNCTION = 310,
+     LOCAL_ASSIGN = 311,
+     ABS = 312,
+     AVG = 313,
+     COUNT = 314,
+     DISTINCT = 315,
+     DROP = 316,
+     FILL = 317,
+     FIRST = 318,
+     LAST = 319,
+     MAX = 320,
+     MIN = 321,
+     MOD = 322,
+     NEXT = 323,
+     PREV = 324,
+     PRD = 325,
+     REV = 326,
+     SUM = 327,
+     STDDEV = 328,
+     AVGS = 329,
+     DELTAS = 330,
+     MAXS = 331,
+     MINS = 332,
+     PRDS = 333,
+     SUMS = 334,
+     MAKENULL = 335,
+     FLOAT = 336,
+     INT = 337,
+     TRUE = 338,
+     FALSE = 339,
+     DATE = 340,
+     HEX = 341,
+     ID = 342,
+     STRING = 343,
+     EXP_OP = 344,
+     TIMES_OP = 345,
+     DIV_OP = 346,
+     PLUS_OP = 347,
+     MINUS_OP = 348,
+     LE_OP = 349,
+     GE_OP = 350,
+     L_OP = 351,
+     G_OP = 352,
+     EQ_OP = 353,
+     NEQ_OP = 354,
+     AND_OP = 355,
+     OR_OP = 356
    };
 #endif
 /* Tokens.  */
@@ -149,109 +146,126 @@
 #define SELECT 260
 #define FROM 261
 #define ASSUMING 262
-#define ORDER 263
-#define WHERE 264
-#define GROUP 265
-#define BY 266
-#define HAVING 267
-#define LC_AS 268
-#define ROWID 269
-#define ODD 270
-#define EVEN 271
-#define EVERY 272
-#define FLATTEN 273
-#define CROSS 274
+#define ASC 263
+#define DESC 264
+#define WHERE 265
+#define GROUP 266
+#define BY 267
+#define HAVING 268
+#define LC_AS 269
+#define ROWID 270
+#define ODD 271
+#define EVEN 272
+#define EVERY 273
+#define FLATTEN 274
 #define JOIN 275
-#define NATURAL 276
-#define INNER 277
-#define OUTER 278
-#define LEFT 279
-#define RIGHT 280
-#define FULL 281
-#define ON 282
-#define USING 283
-#define CREATE 284
-#define TABLE 285
-#define VIEW 286
-#define UPDATE 287
-#define SET 288
-#define INSERT 289
-#define INTO 290
-#define VALUES 291
-#define DELETE 292
-#define AND 293
-#define OR 294
-#define IS 295
-#define NOT 296
-#define BETWEEN 297
-#define IN 298
-#define LIKE 299
-#define NULL_KEYWORD 300
-#define OVERLAPS 301
-#define CASE 302
-#define END 303
-#define WHEN 304
-#define THEN 305
-#define ELSE 306
-#define TYPE_INT 307
-#define TYPE_FLOAT 308
-#define TYPE_STRING 309
-#define TYPE_DATE 310
-#define TYPE_BOOLEAN 311
-#define TYPE_BIT 312
-#define TYPE_HEX 313
-#define FUNCTION 314
-#define ASSIGN 315
-#define ABS 316
-#define AVG 317
-#define COUNT 318
-#define DISTINCT 319
-#define DROP 320
-#define FIRST 321
-#define LAST 322
-#define MAX 323
-#define MIN 324
-#define MOD 325
-#define NEXT 326
-#define PREV 327
-#define PRD 328
-#define REV 329
-#define SUM 330
-#define STDDEV 331
-#define AVGS 332
-#define DELTAS 333
-#define MAXS 334
-#define MINS 335
-#define PRDS 336
-#define SUMS 337
-#define INT 338
-#define FLOAT 339
-#define STRING 340
-#define DATE 341
-#define TRUE 342
-#define FALSE 343
-#define BIT 344
-#define HEX 345
-#define NULL_VAL 346
-#define ID 347
-#define TIMES_OP 348
-#define DIV_OP 349
-#define PLUS_OP 350
-#define MINUS_OP 351
-#define LE_OP 352
-#define GE_OP 353
-#define L_OP 354
-#define G_OP 355
-#define EQ_OP 356
-#define NEQ_OP 357
-#define AND_OP 358
-#define OR_OP 359
+#define INNER 276
+#define OUTER 277
+#define FULL 278
+#define ON 279
+#define USING 280
+#define CREATE 281
+#define TABLE 282
+#define VIEW 283
+#define UPDATE 284
+#define SET 285
+#define INSERT 286
+#define INTO 287
+#define VALUES 288
+#define DELETE 289
+#define AND 290
+#define OR 291
+#define IS 292
+#define NOT 293
+#define BETWEEN 294
+#define IN 295
+#define LIKE 296
+#define NULL_KEYWORD 297
+#define OVERLAPS 298
+#define CASE 299
+#define END 300
+#define WHEN 301
+#define THEN 302
+#define ELSE 303
+#define TYPE_INT 304
+#define TYPE_FLOAT 305
+#define TYPE_STRING 306
+#define TYPE_DATE 307
+#define TYPE_BOOLEAN 308
+#define TYPE_HEX 309
+#define FUNCTION 310
+#define LOCAL_ASSIGN 311
+#define ABS 312
+#define AVG 313
+#define COUNT 314
+#define DISTINCT 315
+#define DROP 316
+#define FILL 317
+#define FIRST 318
+#define LAST 319
+#define MAX 320
+#define MIN 321
+#define MOD 322
+#define NEXT 323
+#define PREV 324
+#define PRD 325
+#define REV 326
+#define SUM 327
+#define STDDEV 328
+#define AVGS 329
+#define DELTAS 330
+#define MAXS 331
+#define MINS 332
+#define PRDS 333
+#define SUMS 334
+#define MAKENULL 335
+#define FLOAT 336
+#define INT 337
+#define TRUE 338
+#define FALSE 339
+#define DATE 340
+#define HEX 341
+#define ID 342
+#define STRING 343
+#define EXP_OP 344
+#define TIMES_OP 345
+#define DIV_OP 346
+#define PLUS_OP 347
+#define MINUS_OP 348
+#define LE_OP 349
+#define GE_OP 350
+#define L_OP 351
+#define G_OP 352
+#define EQ_OP 353
+#define NEQ_OP 354
+#define AND_OP 355
+#define OR_OP 356
 
 
 
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
-typedef int YYSTYPE;
+typedef union YYSTYPE
+#line 136 "aquery.y"
+{
+  int   intval;
+  float floatval;
+  char* str;
+  struct ExprNode *exprnode;
+  //UDF related
+  struct UDFDefNode *udfdef;
+  struct IDListNode *idlist;
+  struct LocalVarDefNode *localvardef;
+  struct UDFBodyNode *udfbody;
+  struct FullQueryNode *fullquery; 
+  struct LogicalQueryNode *plan;
+  struct OrderNode *order;
+  struct NamedExprNode *namedexpr;
+  struct InsertNode *insert;
+}
+/* Line 1529 of yacc.c.  */
+#line 268 "aquery.tab.h"
+	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1
 # define YYSTYPE_IS_TRIVIAL 1

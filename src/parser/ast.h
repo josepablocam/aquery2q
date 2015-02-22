@@ -179,8 +179,10 @@ LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_flatten(LogicalQueryNode *t);
 LogicalQueryNode *make_project(LogicalQueryNodeType proj_type, LogicalQueryNode *t, NamedExprNode *namedexprs);
 LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols);
-OrderNode *make_OrderNode(OrderNodeType type, ExprNode *cols);
+OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col);
 LogicalQueryNode *make_sort(LogicalQueryNode *t, OrderNode *order);
+LogicalQueryNode *make_values(ExprNode *exprs);
+
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs);
 LogicalQueryNode *assemble_logical(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 
@@ -198,6 +200,22 @@ typedef struct FullQueryNode {
 	LocalQueryNode *local_queries;
 	LogicalQueryNode *query_plan;
 } FullQueryNode;
+
+LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames, LogicalQueryNode *plan);
+FullQueryNode *make_FullQueryNode(LocalQueryNode *local, LogicalQueryNode *plan);
+
+
+
+//Insertion
+typedef struct InsertNode {
+	LogicalQueryNode *dest; //destination for data
+	IDListNode *modifier;
+	FullQueryNode *src; //source of data
+} InsertNode;
+
+
+InsertNode *make_insert(LogicalQueryNode *dest, IDListNode *modifier, FullQueryNode *src);
+
 
 // Section 2.7: user defined functions definition
 typedef struct UDFArgsNode {

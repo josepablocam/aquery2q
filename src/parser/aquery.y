@@ -85,7 +85,7 @@ void yyerror(const char *);
  
  /* Abstract Syntax Tree Types */
 /* types for expressions */
-%type <exprnode> constant truth_value table_constant column_dot_access
+%type <exprnode> constant truth_value table_constant 
 %type <exprnode> case_expression case_clause when_clauses when_clause when_clauses_tail else_clause
 %type <exprnode> call built_in_fun 
 %type <exprnode> main_expression
@@ -120,6 +120,17 @@ void yyerror(const char *);
 %type <namedexpr> select_elem select_clause_tail
 %type <exprnode> column_name
 
+
+/* update, insert, delete */
+%type <plan> update_statement
+%type <namedexpr> set_clause set_clauses set_clauses_tail
+%type <fullquery> insert_source
+%type <idlist> insert_modifier
+%type <insert> insert_statement
+%type <plan> delete_statement
+
+
+
 %start program
 
 %union {
@@ -136,6 +147,7 @@ void yyerror(const char *);
   struct LogicalQueryNode *plan;
   struct OrderNode *order;
   struct NamedExprNode *namedexpr;
+  struct InsertNode *insert;
 }
 
 
@@ -198,21 +210,6 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{$$ = make_IDListN
 	|	/* epsilon */											{ $$ = NULL; }
 	;
 
-column_list: column_name column_list_tail ;
-
-column_name: ID 									{ $$ = make_id(env, $1); }
-	| column_dot_access 							{ $$ = $1; }
-	;
-
-column_dot_access: ID '.' ID  {$$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
-	;
-
-column_list_tail: ',' column_name column_list_tail
-	| /* epsilon */
-	;
-
-
-
  /******* 2.3: Base query *******/
  
 base_query: select_clause from_clause order_clause where_clause groupby_clause  {$$ = assemble_logical($1, $2, $3, $4, $5); print_logical_query($$);}
@@ -242,6 +239,10 @@ order_specs: order_spec order_specs_tail  {$1->next = $2; $$ = $1; }
 order_spec: ASC column_name							{$$ = make_OrderNode(ASC_SORT, $2); }
 	 | DESC column_name								{$$ = make_OrderNode(DESC_SORT, $2); }
 	 ;
+
+column_name: ID 									{ $$ = make_id(env, $1); }
+	| ID '.' ID  									{$$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
+	;	 
 	 
 order_specs_tail: ',' order_spec order_specs_tail 		{$2->next = $3; $$ = $2; }
 	| /* epsilon */										{$$ = NULL; }
@@ -368,7 +369,7 @@ create_table_or_view: CREATE TABLE ID create_spec             { put_sym(env, $3,
 	| CREATE VIEW ID create_spec                              { put_sym(env, $3, VIEW_TYPE);  }
 	;
 
-create_spec: UC_AS global_query	
+create_spec: UC_AS full_query	
 	|	'(' schema ')'
  	;
 	
@@ -384,28 +385,32 @@ type_name: TYPE_INT | TYPE_FLOAT | TYPE_STRING | TYPE_DATE | TYPE_BOOLEAN | TYPE
 
 
 /******* 2.6: update, insert, delete statements *******/
-update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause;
-
-set_clauses: set_clause set_clauses_tail ;
-
-set_clauses_tail: ',' set_clause set_clauses_tail
-	| /* epsilon */
+update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause { $$  = assemble_logical(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7); print_logical_query($$);}
 	;
 
-set_clause: ID EQ_OP value_expression ;
+set_clauses: set_clause set_clauses_tail {$1->next_sibling = $2; $$ = $1; }
+	;
 
-insert_statement: INSERT INTO ID order_clause insert_modifier insert_source;
+set_clauses_tail: ',' set_clause set_clauses_tail	{$2->next_sibling = $3; $$ = $2; }
+	| /* epsilon */									{ $$ = NULL; }
+	;
 
-insert_modifier: '(' comma_identifier_list ')'	
-	| /* epsilon */
+set_clause: ID EQ_OP value_expression 			{$$ = make_NamedExprNode($1, $3); }
+	;
+
+insert_statement: INSERT INTO ID order_clause insert_modifier insert_source {$$ = make_insert(assemble_logical(NULL, make_table($3), $4, NULL, NULL), $5, $6); }
+	;
+
+insert_modifier: '(' comma_identifier_list ')'					{  $$ = $2; }
+	| /* epsilon */												{  $$ = NULL; }
 	;
 	
-insert_source: global_query
-	| VALUES '(' comma_value_expression_list ')'
+insert_source: full_query								{$$ = $1; }
+	| VALUES '(' comma_value_expression_list ')'		{$$ = make_FullQueryNode(NULL, make_values($3)); }
 	;
 	
-delete_statement: DELETE from_clause order_clause where_clause
-	| DELETE column_list from_clause 
+delete_statement: DELETE FROM ID order_clause where_clause					{$$ = assemble_logical(make_delete(NULL, NULL),make_table($3), $4, $5, NULL);  print_logical_query($$);}
+	| DELETE comma_identifier_list FROM ID 									{$$ = assemble_logical(make_delete(NULL, $2), make_table($4), NULL, NULL, NULL); print_logical_query($$);}
 	;
 
 /******* 2.7: user defined functions *******/
@@ -453,7 +458,7 @@ constant: INT 				{ $$ = make_int($1); }
 		;
 
 table_constant:  ROWID 					{ $$ = make_rowId(); }
-				| column_dot_access 	{ $$ = $1; 			}
+				| ID '.' ID 			{ $$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
 				| TIMES_OP 				{ $$ = make_allColsNode(); }
 				;
 

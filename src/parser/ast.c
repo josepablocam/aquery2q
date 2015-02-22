@@ -312,42 +312,6 @@ ExprNode *make_predNode(char *nm)
 
 
 ///****** Queries and their nodes etc *//////////
-/*
-FullQueryNode *make_FullQueryNode(LocalQueryNode *local, LogicalQueryNode *plan)
-{
-	FullQueryNode *query = malloc(sizeof(FullQueryNode));
-	query->local_queries = local;
-	query->query_plan = plan;
-	return query;
-}
-
-
-LogicalQueryNode *make_LogicalQueryNode(LogicalQueryType type)
-{
-	LogicalQueryNode *plan = malloc(sizeof(LogicalQueryNode));
-	plan->node_type = type;
-	plan->first_table = plan->second_table = NULL;
-	return plan;
-}
-
-LogicalQueryNode *make_
-
-
-
-
-
-
-LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames, LogicalQueryNode *plan)
-{
-	LocalQueryNode *local_query = malloc(sizeof(LocalQueryNode));
-	local_query->name = name;
-	local_query->col_names = colnames;
-	local_query->query_plan = plan;
-	local_query->next = NULL;
-	return local_query;
-}
-
-*/
 
 OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col)
 {
@@ -547,6 +511,13 @@ LogicalQueryNode *make_sort(LogicalQueryNode *t, OrderNode *order)
 	return sort;
 }
 
+LogicalQueryNode *make_values(ExprNode *exprs)
+{
+	LogicalQueryNode *vals = make_EmptyLogicalQueryNode(EXPLICIT_VALUES);
+	vals->params.exprs = exprs;
+	return vals;
+}
+
 
 //We need a way to send down an argument into the logical query plan
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs)
@@ -577,6 +548,39 @@ LogicalQueryNode *assemble_logical(LogicalQueryNode *proj, LogicalQueryNode *fro
 	plan = pushdown_logical(grouphaving, plan);
 	return pushdown_logical(proj, plan);
 }
+//Full query node
+
+LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames, LogicalQueryNode *plan)
+{
+	LocalQueryNode *local_query = malloc(sizeof(LocalQueryNode));
+	local_query->name = name;
+	local_query->col_names = colnames;
+	local_query->query_plan = plan;
+	local_query->next_sibling = NULL;
+	return local_query;
+}
+
+FullQueryNode *make_FullQueryNode(LocalQueryNode *local, LogicalQueryNode *plan)
+{
+	FullQueryNode *query = malloc(sizeof(FullQueryNode));
+	query->local_queries = local;
+	query->query_plan = plan;
+	return query;
+}
+
+
+InsertNode *make_insert(LogicalQueryNode *dest, IDListNode *modifier, FullQueryNode *src)
+{
+	InsertNode *ins= malloc(sizeof(InsertNode));
+	ins->dest = dest;
+	ins->modifier = modifier;
+	ins->src = src;
+	return ins;
+}
+
+//Full
+
+
 
 
 #if STAND_ALONE

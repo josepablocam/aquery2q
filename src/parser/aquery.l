@@ -69,7 +69,7 @@ void consume_single_line_comment();
  /* SQL: search conditions */
 "AND"		{ count(); return AND;          }
 "OR"		{ count(); return OR;           }
-"IS"		{ count(); return IS;           }
+"IS"		{ count(); yylval.str = strdup(yytext); return IS;           }
 "NOT"		{ count(); yylval.str = strdup(yytext); return NOT;          }
 "BETWEEN"	{ count(); yylval.str = strdup(yytext); return BETWEEN;      }
 "IN"		{ count(); yylval.str = strdup(yytext); return IN;           }
