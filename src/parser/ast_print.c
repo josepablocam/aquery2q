@@ -85,7 +85,15 @@ const char *OrderNodeTypeName[] = {
 //Printing in Dot
 void print_node(int id, const char *label)
 {
-	printf("\t%d [label=\"%s\"];\n", id, label);
+	if(label[0] != '"')
+	{ //strings need to be handled 
+		printf("\t%d [label=\"%s\"];\n", id, label);
+	}
+	else
+	{
+		printf("\t%d [label=%s];\n", id, label);
+	}
+	
 }
 
 void print_edge(int src, int dest)
@@ -345,7 +353,6 @@ void print_expr(ExprNode *expr, int parent_id, int *id)
 		
 		if(expr->node_type == CONSTANT_EXPR || expr->node_type == ID_EXPR)
 		{
-			
 			if(expr->data_type == INT_TYPE || expr->data_type == BOOLEAN_TYPE)
 			{
 				sprintf(val,"%d", expr->data.ival);
@@ -355,6 +362,10 @@ void print_expr(ExprNode *expr, int parent_id, int *id)
 			{
 				sprintf(val,"%f", expr->data.fval);
 				int self_id = print_self(parent_id, id, val);
+			}
+			else if(expr->data_type == STRING_TYPE || expr->data_type == DATE_TYPE)
+			{
+				int self_id = print_self(parent_id, id, expr->data.str);
 			}
 			else
 			{
