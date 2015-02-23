@@ -1,10 +1,12 @@
 #ifndef AST_PRINT_H
 #define AST_PRINT_H
 
-
+//generic utilitiest
 void print_node(int id, const char *label);
 void print_edge(int src, int dest);
 int print_self(int parent_id, int *id, const char *label);
+
+//program
 void print_dot(TopLevelNode *prog);
 
 //toplevel
@@ -36,8 +38,13 @@ void print_order(OrderNode *order, int parent_id, int *id);
 void print_body(UDFBodyNode *body, int parent_id, int *id);
 void print_udf_def(UDFDefNode *udf, int parent_id, int *id);
 
+//Create statements
+void print_create(CreateNode *cr, int parent_id, int *id);
+void print_create_source(CreateSourceNode *src, int parent_id, int *id);
+void print_schema(SchemaNode *elem, int parent_id, int *id);
 
-
+//insert statements
+void print_insert(InsertNode *ins, int parent_id, int *id);
 
 
 #endif

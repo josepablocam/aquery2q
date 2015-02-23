@@ -43,13 +43,6 @@ char *ExprNodeTypeName[]= {
 	"OR",
 	};
 
-const char* UDFBodyNodeTypeName[] = {
-	"UDF_body_expr",
-	"UDF_var_def",
-	"UDF_query"
-};
-
-
 const char* LogicalQueryNodeTypeName[] = {
 	"project_select", 
 	"project_update", 
@@ -70,8 +63,8 @@ const char* LogicalQueryNodeTypeName[] = {
 };
 
 const char* CreateNodeTypeName[] = {
-	"CREATE_TABLE",
-	"CREATE_VIEW"
+	"create_table",
+	"create_view"
 };
 
 const char* TopLevelNodeTypeName[] = {
@@ -135,16 +128,13 @@ void print_top_level(TopLevelNode *top, int parent_id, int *id)
 				print_udf_def(top->elem.udf, self_id, id);
 				break;	
 			case CREATE_STMT:
-			//	printf("NEED TO IMPLEMENT CREATE\n");
-			//	print_create(top->elem.create, self_id, id);
+				print_create(top->elem.create, self_id, id);
 				break;
 			case INSERT_STMT:
-			//	print_insert(top->elem.insert, self_id, id);
-			//	printf("NEED TO IMPLEMENT INSERT\n");
+				print_insert(top->elem.insert, self_id, id);
 				break;
 			case UPDATE_DELETE_STMT:
-			//	print_logical_query(top->elem.updatedelete, self_id, id);
-			//	printf("NEED TO IMPLEMENT UPDATE\n");
+				print_logical_query(top->elem.updatedelete, self_id, id);
 				break;
 			}
 	
@@ -398,10 +388,13 @@ void print_named_expr(NamedExprNode *nexpr, int parent_id, int *id)
 
 void print_order(OrderNode *order, int parent_id, int *id)
 {
-	int self_id = print_self(parent_id, id, "ordering");
-	print_name(OrderNodeTypeName[order->node_type], self_id, id);
-	print_expr(order->col, self_id, id);
-	print_order(order->next, self_id, id);
+	if(order != NULL)
+	{
+		int self_id = print_self(parent_id, id, "ordering");
+		print_name(OrderNodeTypeName[order->node_type], self_id, id);
+		print_expr(order->col, self_id, id);
+		print_order(order->next, self_id, id);
+	}
 }
 
 
@@ -440,8 +433,55 @@ void print_body(UDFBodyNode *body, int parent_id, int *id)
 	}
 }
 
+//Create statement
+void print_create(CreateNode *cr, int parent_id, int *id)
+{
+	int self_id = print_self(parent_id, id, CreateNodeTypeName[cr->node_type]);
+	int name_id = print_self(self_id, id, "name");
+	print_create_source(cr->src, self_id, id);
+}
 
+void print_create_source(CreateSourceNode *src, int parent_id, int *id)
+{
+	int source_id;
+	
+	switch(src->node_type)
+	{
+		case SCHEMA_SOURCE:
+		{
+			int source_id = print_self(parent_id, id, "schema");
+			print_schema(src->load.schema, source_id, id);
+			break;
+		}
+		case QUERY_SOURCE:
+			print_full_query(src->load.query, parent_id, id);
+			break;
+	}
+}
 
+void print_schema(SchemaNode *elem, int parent_id, int *id)
+{
+	if(elem != NULL)
+	{
+		int self_id = print_self(parent_id, id, "schema_elem");
+		print_name(elem->fieldname, self_id, id);
+		print_name(elem->typename, self_id, id);
+		print_schema(elem->next_sibling, parent_id, id);
+	}
+}
+
+void print_insert(InsertNode *ins, int parent_id, int *id)
+{
+	int dest_id = print_self(parent_id, id, "destination");
+	print_logical_query(ins->dest, dest_id, id);
+	
+	if(ins->modifier != NULL)
+	{
+		int mod_id = print_self(parent_id, id, "modifier");
+		print_id_list(ins->modifier, mod_id, id);
+	}
+	print_full_query(ins->src, parent_id, id);
+}
 
 //#ifdef STAND_ALONE
 //	int main()
