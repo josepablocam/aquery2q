@@ -103,26 +103,6 @@ void print_expr(ExprNode *n, ExprNodeType p, int type, int indent);
 
 
 
-/*
-// Section 2.1: Top level program definition
-
-typedef struct TopLevelNode {
-	TopLevelNodeType node_type;
-	union {
-		FullQueryNode *global_query; //top level query
-		UDFDefNode *udf_def; //user function definition
-		CreateNode *create; //create table/view
-		ModifyNode *modify; //update/delete/select
-	} elem;
-	struct TopLevelNode *next_sibling;
-} TopLevelNode;
-
-typedef enum TopLevelType { GLOBAL_QUERY_N, UDF_DEF_N, MODIFY_N, CREATE_N } TopLevelType;
-*/
-
-
-
-
 //Logical Query Plan Nodes
 
 typedef struct IDListNode {
@@ -258,6 +238,65 @@ UDFBodyNode *make_UDFExpr(ExprNode *expr);
 UDFBodyNode *make_UDFVardef(LocalVarDefNode *vardef);
 UDFBodyNode *make_UDFQuery(FullQueryNode *query);
 UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body);
+
+
+//Creating Nodes
+typedef struct SchemaNode {
+	char *fieldname;
+	char *typename;
+	struct SchemaNode *next_sibling;
+} SchemaNode;
+
+typedef enum CreateSourceNodeType { SCHEMA_SOURCE, QUERY_SOURCE } CreateSourceNodeType;
+
+typedef struct CreateSourceNode {
+	CreateSourceNodeType node_type;
+	union {
+		FullQueryNode *query;
+		SchemaNode *schema;
+	} load;
+} CreateSourceNode ;
+
+
+typedef enum CreateNodeType { CREATE_TABLE, CREATE_VIEW } CreateNodeType ;
+
+typedef struct CreateNode {
+	CreateNodeType node_type;
+	char *name;
+	CreateSourceNode *src;
+} CreateNode;
+
+
+CreateNode *make_createNode(CreateNodeType type, char *name, CreateSourceNode *src);
+SchemaNode *make_schemaNode(char *fieldname, char *typename);
+CreateSourceNode *make_schemaSource(SchemaNode *schema);
+CreateSourceNode *make_querySource(FullQueryNode *query);
+
+
+//Top level
+
+// Section 2.1: Top level program definition
+typedef enum TopLevelNodeType { GLOBAL_QUERY, UDF_DEF, INSERT_STMT, UPDATE_DELETE_STMT, CREATE_STMT } TopLevelNodeType;
+
+typedef struct TopLevelNode {
+	TopLevelNodeType node_type;
+	union {
+		FullQueryNode *query; //top level query
+		UDFDefNode *udf; //user function definition
+		CreateNode *create; //create table/view
+		InsertNode *insert; //insert statement
+		LogicalQueryNode *updatedelete;
+	} elem;
+	struct TopLevelNode *next_sibling;
+} TopLevelNode;
+
+TopLevelNode *make_EmptyTopLevelNode(TopLevelNodeType type);
+TopLevelNode *make_Top_GlobalQuery(FullQueryNode *query, TopLevelNode *next);
+TopLevelNode *make_Top_UDF(UDFDefNode *def, TopLevelNode *next);
+TopLevelNode *make_Top_Create(CreateNode *create, TopLevelNode *next);
+TopLevelNode *make_Top_Insert(InsertNode *ins, TopLevelNode *next);
+TopLevelNode *make_Top_UpdateDelete(LogicalQueryNode *ud, TopLevelNode *next);
+
 
 
 

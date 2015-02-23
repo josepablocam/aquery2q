@@ -85,12 +85,12 @@ void consume_single_line_comment();
 "ELSE"	{ count(); return ELSE; }
  
  /* SQL: type names */
-"INT"		{ count(); return TYPE_INT;     }
-"FLOAT"		{ count(); return TYPE_FLOAT;   }
-"STRING"	{ count(); return TYPE_STRING;  }
-"DATE"		{ count(); return TYPE_DATE;    }
-"BOOLEAN"	{ count(); return TYPE_BOOLEAN; }
-"HEX"		{ count(); return TYPE_HEX;     }
+"INT"		{ count(); yylval.str = strdup(yytext); return TYPE_INT;     }
+"FLOAT"		{ count(); yylval.str = strdup(yytext); return TYPE_FLOAT;   }
+"STRING"	{ count(); yylval.str = strdup(yytext); return TYPE_STRING;  }
+"DATE"		{ count(); yylval.str = strdup(yytext); return TYPE_DATE;    }
+"BOOLEAN"	{ count(); yylval.str = strdup(yytext); return TYPE_BOOLEAN; }
+"HEX"		{ count(); yylval.str = strdup(yytext); return TYPE_HEX;     }
 
  /* SQL: user defined functions */
 "FUNCTION"	{ count(); return FUNCTION;     }

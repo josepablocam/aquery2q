@@ -6,7 +6,7 @@
 #include "symtable.h"
 #include "ast_print.h"
 
-#define AST_DEBUG 1
+#define AST_DEBUG 0
 #define AST_PRINT_DEBUG(str) if(AST_DEBUG) printf("---->AST DEBUGGING: %s\n", str)
 
 #define STAND_ALONE 0
@@ -578,10 +578,89 @@ InsertNode *make_insert(LogicalQueryNode *dest, IDListNode *modifier, FullQueryN
 	return ins;
 }
 
-//Full
+//Create statements
+CreateNode *make_createNode(CreateNodeType type, char *name, CreateSourceNode *src)
+{
+	CreateNode *create = malloc(sizeof(CreateNode));
+	create->node_type = type;
+	create->name = name;
+	create->src = src;
+	return create;
+}
 
 
+SchemaNode *make_schemaNode(char *fieldname, char *typename)
+{
+	SchemaNode *schema = malloc(sizeof(SchemaNode));
+	schema->fieldname = fieldname;
+	schema->typename = typename;
+	schema->next_sibling = NULL;
+	return schema;
+}
 
+CreateSourceNode *make_schemaSource(SchemaNode *schema)
+{
+	CreateSourceNode *src = malloc(sizeof(CreateSourceNode));
+	src->node_type = SCHEMA_SOURCE;
+	src->load.schema = schema;
+	return src;
+}
+
+CreateSourceNode *make_querySource(FullQueryNode *query)
+{
+	CreateSourceNode *src = malloc(sizeof(CreateSourceNode));
+	src->node_type = QUERY_SOURCE;
+	src->load.query = query;
+	return src;
+}
+//Top level
+TopLevelNode *make_EmptyTopLevelNode(TopLevelNodeType type)
+{
+	TopLevelNode *node = malloc(sizeof(TopLevelNode));
+	node->node_type = type;
+	node->next_sibling = NULL;
+	return node;
+}
+
+TopLevelNode *make_Top_GlobalQuery(FullQueryNode *query, TopLevelNode *next)
+{
+	TopLevelNode *top = make_EmptyTopLevelNode(GLOBAL_QUERY);
+	top->elem.query = query;
+	top->next_sibling = next;
+	return top;
+}
+
+TopLevelNode *make_Top_UDF(UDFDefNode *def, TopLevelNode *next)
+{
+	TopLevelNode *top = make_EmptyTopLevelNode(UDF_DEF);
+	top->elem.udf = def;
+	top->next_sibling = next;
+	return top;
+}
+
+TopLevelNode *make_Top_Create(CreateNode *create, TopLevelNode *next)
+{
+	TopLevelNode *top = make_EmptyTopLevelNode(CREATE_STMT);
+	top->elem.create = create;
+	top->next_sibling = next;
+	return top;
+}
+
+TopLevelNode *make_Top_Insert(InsertNode *ins, TopLevelNode *next)
+{
+	TopLevelNode *top = make_EmptyTopLevelNode(INSERT_STMT);
+	top->elem.insert = ins;
+	top->next_sibling = next;
+	return top;
+}
+
+TopLevelNode *make_Top_UpdateDelete(LogicalQueryNode *ud, TopLevelNode *next)
+{
+	TopLevelNode *top = make_EmptyTopLevelNode(UPDATE_DELETE_STMT);
+	top->elem.updatedelete = ud;
+	top->next_sibling = next;
+	return top;
+}
 
 #if STAND_ALONE
 int main()

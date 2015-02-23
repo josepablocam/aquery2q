@@ -49,6 +49,32 @@ const char* UDFBodyNodeTypeName[] = {
 };
 
 
+const char* LogicalQueryNodeTypeName[] = {
+	"PROJECT_SELECT", 
+	"PROJECT_UPDATE", 
+	"DELETION", 
+	"FILTER_WHERE", 
+	"FILTER_HAVING", 
+	"CARTESIAN_PROD", 
+	"INNER_JOIN_ON",
+	"FULL_OUTER_JOIN_ON", 
+	"INNER_JOIN_USING", 
+	"FULL_OUTER_JOIN_USING",
+	"GROUP", 
+	"SIMPLE_TABLE", 
+	"ALIAS", 
+	"SORT", 
+	"FLATTEN_FUN", 
+	"EXPLICIT_VALUES"
+};
+
+const char* CreateNodeTypeName[] = {
+	"CREATE_TABLE",
+	"CREATE_VIEW"
+};
+
+
+
 
 //Printing Expressions
 void print_expr(ExprNode *n, ExprNodeType p, int type, int indent)
@@ -135,5 +161,109 @@ void print_var_def(LocalVarDefNode *vardef)
 }
 
 
+void print_logical_query(LogicalQueryNode *l)
+{
+	printf("--->%s at %d\n", LogicalQueryNodeTypeName[l->node_type], l);
+	if(l->arg != NULL) print_logical_query(l->arg);
+	if(l->next_arg != NULL) print_logical_query(l->next_arg);
+}
 
+void print_full_query(FullQueryNode *full)
+{
+	printf("--->full query node\n");
+	if(full != NULL)
+	{
+		printf("local queries\n");
+		print_local_queries(full->local_queries);
+		printf("main query\n");
+		print_logical_query(full->query_plan);
+	}
+	
+}
+
+void print_local_queries(LocalQueryNode *local)
+{
+	if(local != NULL)
+	{
+		printf("-->local query node\n");
+		printf("local table:%s\n", local->name);
+		//skipping column names
+		print_logical_query(local->query_plan);
+		print_local_queries(local->next_sibling);
+	}
+}
+
+void print_create(CreateNode *create)
+{
+	printf("--->%s with name %s at %d\n", CreateNodeTypeName[create->node_type], create->name, create);
+	print_create_source(create->src);
+}
+
+void print_create_source(CreateSourceNode *src)
+{
+	printf("--->source\n");
+	//printf("source is null:%d\n", src == NULL);
+	if(src->node_type == SCHEMA_SOURCE)
+	{
+		print_schema(src->load.schema);
+	}
+	else
+	{
+		print_full_query(src->load.query);
+	}
+}
+
+void print_schema(SchemaNode *schema)
+{
+	printf("schema goes here\n");
+}
+
+void print_top_level(TopLevelNode *top)
+{
+	if(top != NULL)
+	{
+		printf("------>****top level element*****\n");
+		switch(top->node_type)
+		{
+			case GLOBAL_QUERY:
+				print_full_query(top->elem.query);
+				break;
+			case UDF_DEF:
+				print_udf_def(top->elem.udf);
+				break;	
+			case CREATE_STMT:
+				print_create(top->elem.create);
+				break;
+			case INSERT_STMT:
+				print_insert(top->elem.insert);
+				break;
+			case UPDATE_DELETE_STMT:
+				print_logical_query(top->elem.updatedelete);
+				break;
+		}
+		
+		print_top_level(top->next_sibling);
+	}
+}
+
+
+void print_insert(InsertNode *ins)
+{
+	printf("Insert statement\n");
+	print_logical_query(ins->dest);
+	print_id_list(ins->modifier);
+	print_full_query(ins->src);
+}
+
+
+void print_id_list(IDListNode *ids)
+{
+	IDListNode *curr = ids;
+	
+	while(curr != NULL)
+	{
+		printf("id: %s\n", curr->name);
+		curr = curr->next_sibling;
+	}
+}
 
