@@ -112,7 +112,7 @@ ExprNode *make_id(Symtable *symtable, char *id)
 	AST_PRINT_DEBUG("making id node");
 	ExprNode *node = make_EmptyExprNode(ID_EXPR);
 	Symentry *info = lookup_sym(symtable, id);
-	node->data_type = (info != NULL) ? info->type : UNKNOWN_TYPE;
+	node->data_type = UNKNOWN_TYPE; //TODO: fix this: (info != NULL) ? info->type : 
 	node->data.str = id;
 	return node;
 }
@@ -325,13 +325,7 @@ OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col)
 
 
 /// User Defined Functions 
-LocalVarDefNode *make_LocalVarDefNode(char *name, ExprNode *expr)
-{
-	LocalVarDefNode *vardef = malloc(sizeof(LocalVarDefNode));
-	vardef->name = name;
-	vardef->expr = expr;
-	return vardef;
-}
+
 
 
 
@@ -368,7 +362,7 @@ UDFBodyNode *make_UDFExpr(ExprNode *expr)
 	return body_elem;
 }
 
-UDFBodyNode *make_UDFVardef(LocalVarDefNode *vardef)
+UDFBodyNode *make_UDFVardef(NamedExprNode *vardef)
 {
 	UDFBodyNode *body_elem = make_UDFEmptyBodyNode(VARDEF);
 	body_elem->elem.vardef = vardef;
@@ -409,7 +403,7 @@ LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type)
 	AST_PRINT_DEBUG("making logical query node");
 	LogicalQueryNode *logical_unit =  malloc(sizeof(LogicalQueryNode));
 	logical_unit->node_type = type;
-	logical_unit->arg = logical_unit->next_arg = NULL;
+	logical_unit->after = logical_unit->arg = logical_unit->next_arg = NULL;
 	return logical_unit;
 } 
 
@@ -536,6 +530,7 @@ LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs)
 	else
 	{ //place into the empty spot found
 		prev->arg = rhs;
+		rhs->after = prev; //next step in logical plan
 		return lhs;
 	}
 }

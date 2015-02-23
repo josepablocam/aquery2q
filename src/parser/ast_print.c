@@ -132,8 +132,7 @@ void print_top_level(TopLevelNode *top, int parent_id, int *id)
 				print_full_query(top->elem.query, self_id, id);
 				break;
 			case UDF_DEF:
-			//	printf("NEED TO IMPLEMENT UDF\n");
-			//	print_udf_def(top->elem.udf, self_id, id);
+				print_udf_def(top->elem.udf, self_id, id);
 				break;	
 			case CREATE_STMT:
 			//	printf("NEED TO IMPLEMENT CREATE\n");
@@ -160,8 +159,11 @@ void print_full_query(FullQueryNode *full, int parent_id, int *id)
 	{
 		int main_id = print_self(parent_id, id, "Fully Query");
 		//Printing local queries
-		int local_queries_id = print_self(main_id, id, "local_queries");
-		print_local_query(full->local_queries, local_queries_id, id);
+		if(full->local_queries != NULL)
+		{
+			int local_queries_id = print_self(main_id, id, "local_queries");
+			print_local_query(full->local_queries, local_queries_id, id);
+		}
 		//Print logical query plan for main query
 		int plan_id = print_self(main_id, id, "query_plan");
 		print_logical_query(full->query_plan, plan_id, id);
@@ -256,21 +258,24 @@ void print_logical_query(LogicalQueryNode *step, int parent_id, int *id)
 void print_project(LogicalQueryNode *proj, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[proj->node_type]);
-	print_named_expr(proj->params.namedexprs, self_id, id);
+	int cols_id = print_self(self_id, id, "expressions");
+	print_named_expr(proj->params.namedexprs, cols_id, id);
 	print_logical_query(proj->arg, self_id, id);
 }
 
 void print_delete(LogicalQueryNode *del, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[del->node_type]);
-	print_id_list(del->params.cols, self_id, id);
+	int cols_id = print_self(self_id, id, "cols");
+	print_id_list(del->params.cols, cols_id, id);
 	print_logical_query(del->arg, self_id, id);
 }	
 
 void print_filter(LogicalQueryNode *filter, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[filter->node_type]);
-	print_expr(filter->params.exprs, self_id, id);
+	int conds_id = print_self(self_id, id, "conds");
+	print_expr(filter->params.exprs, conds_id, id);
 	print_logical_query(filter->arg, self_id, id);
 }	
 
@@ -284,7 +289,8 @@ void print_cartesian(LogicalQueryNode *cart, int parent_id, int *id)
 void print_joinOn(LogicalQueryNode *joinOn, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[joinOn->node_type]);
-	print_expr(joinOn->params.exprs, self_id, id);
+	int conds_id = print_self(self_id, id, "on_conds");
+	print_expr(joinOn->params.exprs, conds_id, id);
 	print_logical_query(joinOn->arg, self_id, id);
 	print_logical_query(joinOn->next_arg, self_id, id);
 }
@@ -292,7 +298,8 @@ void print_joinOn(LogicalQueryNode *joinOn, int parent_id, int *id)
 void print_joinUsing(LogicalQueryNode *joinUsing, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[joinUsing->node_type]);
-	print_id_list(joinUsing->params.cols, self_id, id);
+	int cols_id = print_self(self_id, id, "using_cols");
+	print_id_list(joinUsing->params.cols, cols_id, id);
 	print_logical_query(joinUsing->arg, self_id, id);
 	print_logical_query(joinUsing->next_arg, self_id, id);
 }
@@ -300,7 +307,8 @@ void print_joinUsing(LogicalQueryNode *joinUsing, int parent_id, int *id)
 void print_groupBy(LogicalQueryNode *groupBy, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[groupBy->node_type]);
-	print_expr(groupBy->params.exprs, self_id, id);
+	int groups_id = print_self(self_id, id, "group_exprs");
+	print_expr(groupBy->params.exprs, groups_id, id);
 	print_logical_query(groupBy->arg, self_id, id);
 }
 
@@ -313,14 +321,16 @@ void print_table(LogicalQueryNode *table, int parent_id, int *id)
 void print_alias(LogicalQueryNode *alias, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[alias->node_type]);
-	print_name(alias->params.name, self_id, id);
+	int alias_id = print_self(self_id, id, "aka");
+	print_name(alias->params.name, alias_id, id);
 	print_logical_query(alias->arg, self_id, id);
 }
 
 void print_sort(LogicalQueryNode *sort, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[sort->node_type]);
-	print_order(sort->params.order, self_id, id);
+	int ords_id = print_self(self_id, id, "ordering");
+	print_order(sort->params.order, ords_id, id);
 	print_logical_query(sort->arg, self_id, id);
 }
 
@@ -360,13 +370,15 @@ void print_expr(ExprNode *expr, int parent_id, int *id)
 			{
 				int self_id = print_self(parent_id, id, expr->data.str);
 			}
+			
 		}
 		else
 		{
 			int self_id = print_self(parent_id, id, ExprNodeTypeName[expr->node_type]);
 			print_expr(expr->first_child, self_id, id);
-			print_expr(expr->next_sibling, parent_id, id);	
 		}
+		
+		print_expr(expr->next_sibling, parent_id, id);
 	}
 }
 
@@ -377,7 +389,7 @@ void print_named_expr(NamedExprNode *nexpr, int parent_id, int *id)
 {
 	if(nexpr != NULL)
 	{
-		int self_id = print_self(parent_id, id, "named_expr_assign");
+		int self_id = print_self(parent_id, id, "assign");
 		print_name(nexpr->name, self_id, id);
 		print_expr(nexpr->expr, self_id, id);
 		print_named_expr(nexpr->next_sibling, parent_id, id);
@@ -391,6 +403,44 @@ void print_order(OrderNode *order, int parent_id, int *id)
 	print_expr(order->col, self_id, id);
 	print_order(order->next, self_id, id);
 }
+
+
+void print_udf_def(UDFDefNode *udf, int parent_id, int *id)
+{
+	int name_id = print_self(parent_id, id, "name");
+	print_name(udf->name, name_id, id);
+	int args_id = print_self(parent_id, id, "args");
+	print_id_list(udf->args, args_id, id);
+	int body_id = print_self(parent_id, id, "body");
+	print_body(udf->body, body_id, id);
+}
+
+
+void print_body(UDFBodyNode *body, int parent_id, int *id)
+{
+	if(body != NULL)
+	{
+		switch(body->node_type)
+		{
+			case EXPR:
+			{
+				int expr_id = print_self(parent_id, id, "expr");
+				print_expr(body->elem.expr, expr_id, id);
+				break;
+			}
+			case VARDEF:
+				print_named_expr(body->elem.vardef, parent_id, id);
+				break;
+			case QUERY:
+				print_full_query(body->elem.query, parent_id, id);
+				break;
+		}
+		
+		print_body(body->next_sibling, parent_id, id);	
+	}
+}
+
+
 
 
 //#ifdef STAND_ALONE

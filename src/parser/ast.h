@@ -40,8 +40,7 @@ typedef enum ExprNodeType {
   //search conditions
   PRED_EXPR, //predicate
   WHERE_AND_EXPR,
-  WHERE_OR_EXPR,
-  DUMMY
+  WHERE_OR_EXPR
 } ExprNodeType;
 
 
@@ -99,7 +98,6 @@ ExprNode *make_exprListNode(ExprNode *data);
 ExprNode *make_predNode(char *nm);
 
 
-void print_expr(ExprNode *n, ExprNodeType p, int type, int indent);
 
 
 
@@ -133,6 +131,7 @@ typedef enum LogicalQueryNodeType { PROJECT_SELECT, PROJECT_UPDATE, DELETION, FI
 
 typedef struct LogicalQueryNode {
 	LogicalQueryNodeType node_type;
+	struct LogicalQueryNode *after; //we will move a lot of these around
 	struct LogicalQueryNode *arg; //argument to operation
 	struct LogicalQueryNode *next_arg; //potential additional arguments
 	union {
@@ -198,11 +197,6 @@ InsertNode *make_insert(LogicalQueryNode *dest, IDListNode *modifier, FullQueryN
 
 
 // Section 2.7: user defined functions definition
-typedef struct UDFArgsNode {
-	char *name;
-	struct UDFArgsNode *next_sibling;
-} UDFArgsNode;
-
 typedef struct LocalVarDefNode {
 	char *name;
 	ExprNode *expr;
@@ -215,7 +209,7 @@ typedef struct UDFBodyNode {
 	UDFBodyNodeType node_type;
 	union {
 		ExprNode *expr;
-		LocalVarDefNode *vardef;
+		NamedExprNode *vardef;
 		FullQueryNode *query;
 	} elem;
 	struct UDFBodyNode *next_sibling;
@@ -235,7 +229,7 @@ LocalVarDefNode *make_LocalVarDefNode(char *name, ExprNode *expr);
 IDListNode *make_IDListNode(char *arg, IDListNode *next);
 UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type);
 UDFBodyNode *make_UDFExpr(ExprNode *expr);
-UDFBodyNode *make_UDFVardef(LocalVarDefNode *vardef);
+UDFBodyNode *make_UDFVardef(NamedExprNode *vardef);
 UDFBodyNode *make_UDFQuery(FullQueryNode *query);
 UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body);
 

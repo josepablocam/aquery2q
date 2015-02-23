@@ -32,6 +32,11 @@ void print_expr(ExprNode *expr, int parent_id, int *id);
 void print_named_expr(NamedExprNode *nexpr, int parent_id, int *id);
 void print_order(OrderNode *order, int parent_id, int *id);
 
+//UDFs
+void print_body(UDFBodyNode *body, int parent_id, int *id);
+void print_udf_def(UDFDefNode *udf, int parent_id, int *id);
+
+
 
 
 
