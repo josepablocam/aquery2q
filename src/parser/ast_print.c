@@ -110,7 +110,7 @@ int print_self(int parent_id, int *id, const char *label)
 }
 
 
-void print_dot(TopLevelNode *prog)
+void print_ast(TopLevelNode *prog)
 {
 	int id = 0;
 	printf("digraph a2q{\n");
@@ -155,7 +155,7 @@ void print_full_query(FullQueryNode *full, int parent_id, int *id)
 {
 	if(full != NULL)
 	{
-		int main_id = print_self(parent_id, id, "Fully Query");
+		int main_id = print_self(parent_id, id, "full query");
 		//Printing local queries
 		if(full->local_queries != NULL)
 		{
@@ -327,8 +327,7 @@ void print_alias(LogicalQueryNode *alias, int parent_id, int *id)
 void print_sort(LogicalQueryNode *sort, int parent_id, int *id)
 {
 	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[sort->node_type]);
-	int ords_id = print_self(self_id, id, "ordering");
-	print_order(sort->params.order, ords_id, id);
+	print_order(sort->params.order, self_id, id);
 	print_logical_query(sort->arg, self_id, id);
 }
 

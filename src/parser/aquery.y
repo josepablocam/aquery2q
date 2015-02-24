@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include "symtable.h"	
-#include "ast.h"
-#include "ast_print.h"
+#include <unistd.h>
+#include "symtable.h" /* manages the symbol table, to enable meta data lookup */	
+#include "ast.h"    /* builds ast for parser */
+#include "ast_print.h" /* provides dot printing of ast */
 
 	
 #define YYDEBUG 1
@@ -21,6 +22,9 @@ extern int col_num;
 
 //Symbol table
 Symtable *env;	
+
+//AST
+TopLevelNode* ast;
 
 
 void yyerror(const char *);
@@ -101,7 +105,7 @@ void yyerror(const char *);
 %type <exprnode> in_pred_spec range_value_expression
 
 /* UDF related */
-%type <localvardef> function_local_var_def;
+%type <namedexpr> function_local_var_def;
 %type <udfbody> function_body function_body_tail function_body_elem 
 %type <idlist> def_arg_list def_arg_list_tail	
 %type <udfdef> user_function_definition
@@ -184,7 +188,7 @@ void yyerror(const char *);
  
  /******* 2.1: Top level program definition *******/
 
-program: top_level						{$$ = $1; print_top_level($$); }												
+program: top_level						{ $$ = $1; ast = $$; }												
 
 top_level: global_query top_level			{$$ = make_Top_GlobalQuery($1, $2); }
 	|	create_table_or_view top_level		{$$ = make_Top_Create($1, $2); }
@@ -250,7 +254,7 @@ select_clause_tail: ',' select_elem select_clause_tail		{$2->next_sibling = $3; 
 from_clause: FROM table_expressions {$$ = $2; }
 	;
 
-order_clause: ASSUMING order_specs	{ $$ = make_sort(NULL, $2); }
+order_clause: ASSUMING order_specs	{ $$ = make_sort(NULL, $2);}
 	| /* epsilon */					{ $$ = NULL; }
 	;
 	
@@ -474,7 +478,7 @@ function_body_elem: value_expression		{$$ = make_UDFExpr($1);   }
 	| full_query							{$$ = make_UDFQuery($1);  }
 	;
 	
-function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE);    $$ = make_LocalVarDefNode($1, $3); } ;
+function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE);    $$ = make_NamedExprNode($1, $3); } ;
 
 
 /******* 2.8: value expressions *******/
@@ -487,7 +491,7 @@ constant: INT 				{ $$ = make_int($1); }
 		;
 
 table_constant:  ROWID 					{ $$ = make_rowId(); }
-				| ID '.' ID 			{ $$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
+				| ID '.' ID 			{ $$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3));}
 				| TIMES_OP 				{ $$ = make_allColsNode(); }
 				;
 
@@ -635,21 +639,50 @@ void yyerror(const char *s)
 	exit(1);
 }
 
+void help()
+{
+	printf("Usage: ./a2q [-p] aquery_file\n");
+	printf("-p  print dot file AST to stdout\n");
+}
+
+
 int main(int argc, char *argv[]) {
-	
 	yydebug = 0;
 	
-	if(argc < 2) 
+	/* Aquery compiler flags */
+	int print_ast_flag = 0;
+	
+	/* getopt values */
+	int op;
+	
+	
+	while((op = getopt(argc, argv, "ph")) != -1)
 	{
-		printf("Usage: aquery <file_name_to_parse>\n");
+		switch(op)
+		{
+			case 'p':
+				print_ast_flag = 1;
+				break;
+			case 'h':
+				help();
+				break;
+			default:
+ 				exit(1);
+		}
+	}
+	
+	if(1 > argc - optind) 
+	{ //Did we get a file to analyze?
+		help();
 		exit(1);
 	}
 	
-	FILE *to_parse = fopen(argv[1], "r");
+	FILE *to_parse = fopen(argv[optind], "r");
 	
 	if(to_parse == NULL)
 	{
-		printf("Unable to open %s for reading\n", argv[1]);
+		printf("Unable to open %s for reading\n", argv[optind]);
+		help();
 		exit(1);
 	}
 	else
@@ -665,8 +698,10 @@ int main(int argc, char *argv[]) {
 	} 
 	while(!feof(yyin));
 	
-	print_symtable(env);
-	
-	printf("File conforms to Aquery grammar... now on to building AST\n");
+	if(print_ast_flag)
+	{
+		print_ast(ast);
+	}		
+		
 }
 

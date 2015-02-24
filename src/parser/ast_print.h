@@ -7,7 +7,7 @@ void print_edge(int src, int dest);
 int print_self(int parent_id, int *id, const char *label);
 
 //program
-void print_dot(TopLevelNode *prog);
+void print_ast(TopLevelNode *prog);
 
 //toplevel
 void print_top_level(TopLevelNode *top, int parent_id, int *id);
