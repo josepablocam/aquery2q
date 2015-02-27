@@ -1,6 +1,6 @@
 #ifndef AQUERY_AST_H
 #define AQUERY_AST_H
-//#include "aquery_types.h"
+#include "aquery_types.h"
 #include "symtable.h"
 
 /* Section 2.8: Value Expressions */
@@ -40,13 +40,19 @@ typedef enum ExprNodeType {
   //search conditions
   PRED_EXPR, //predicate
   WHERE_AND_EXPR,
-  WHERE_OR_EXPR
+  WHERE_OR_EXPR,
+  
+  //sorting optimizations
+  SORT_IX,
+  DE_SORT_IX,
+  SINGLE_COL_IX_SORT
 } ExprNodeType;
 
 
 typedef struct ExprNode {
 	ExprNodeType node_type;
 	DataType data_type;
+	int order_dep; //order dependent expression
 	union {
 		int ival;
 		float fval;
@@ -76,7 +82,7 @@ ExprNode *make_everynix(int ix);
 ExprNode *make_indexNode(ExprNode *src, ExprNode *ix);
 
 ExprNode *make_callNode(ExprNode *fun, ExprNode *args);
-ExprNode *make_builtInFunNode(char *nm);
+ExprNode *make_builtInFunNode(Symtable *symtable, char *nm);
 ExprNode *make_udfNode(Symtable *symtable, char *nm);
 
 
@@ -120,12 +126,13 @@ typedef struct OrderNode {
 typedef struct NamedExprNode {
 	char *name;
 	ExprNode *expr;
+	int order_dep;
 	struct NamedExprNode *next_sibling;
 } NamedExprNode;
 
 typedef enum LogicalQueryNodeType { PROJECT_SELECT, PROJECT_UPDATE, DELETION, FILTER_WHERE, FILTER_HAVING, CARTESIAN_PROD, 
 	INNER_JOIN_ON, FULL_OUTER_JOIN_ON, INNER_JOIN_USING, FULL_OUTER_JOIN_USING,
-	GROUP_BY, SIMPLE_TABLE, ALIAS, SORT, FLATTEN_FUN, EXPLICIT_VALUES
+	GROUP_BY, SIMPLE_TABLE, ALIAS, SORT, FLATTEN_FUN, EXPLICIT_VALUES, COMPUTE_SORT_IX
 	} LogicalQueryNodeType;
 
 
@@ -134,6 +141,7 @@ typedef struct LogicalQueryNode {
 	struct LogicalQueryNode *after; //we will move a lot of these around
 	struct LogicalQueryNode *arg; //argument to operation
 	struct LogicalQueryNode *next_arg; //potential additional arguments
+	int order_dep;
 	union {
 		char *name		 		; //table name or alias
 		NamedExprNode 	*namedexprs; //c1 * 2 as c2, c1 * 2 (nil)
@@ -163,8 +171,10 @@ LogicalQueryNode *make_sort(LogicalQueryNode *t, OrderNode *order);
 LogicalQueryNode *make_values(ExprNode *exprs);
 
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs);
-LogicalQueryNode *assemble_logical(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
+LogicalQueryNode *assemble_base(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 
+//Optimization related nodes
+LogicalQueryNode *make_computeSortIx(LogicalQueryNode *ord);
 
 
 
@@ -290,11 +300,6 @@ TopLevelNode *make_Top_UDF(UDFDefNode *def, TopLevelNode *next);
 TopLevelNode *make_Top_Create(CreateNode *create, TopLevelNode *next);
 TopLevelNode *make_Top_Insert(InsertNode *ins, TopLevelNode *next);
 TopLevelNode *make_Top_UpdateDelete(LogicalQueryNode *ud, TopLevelNode *next);
-
-
-
-
-
 
 
 #endif

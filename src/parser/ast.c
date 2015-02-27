@@ -10,7 +10,8 @@
 #define AST_PRINT_DEBUG(str) if(AST_DEBUG) printf("---->AST DEBUGGING: %s\n", str)
 
 #define STAND_ALONE 0
-
+//extract order dependency information safely
+#define SAFE_ORDER_DEP(x) ((x) != NULL && (x)->order_dep)
 
 
 
@@ -28,6 +29,7 @@ ExprNode *make_EmptyExprNode(ExprNodeType type)
 	node->first_child = node->next_sibling = NULL;
 	node->node_type = type;
 	node->data_type = UNKNOWN_TYPE;
+	node->order_dep = 0;
 	return node;
 }
 
@@ -114,6 +116,7 @@ ExprNode *make_id(Symtable *symtable, char *id)
 	Symentry *info = lookup_sym(symtable, id);
 	node->data_type = UNKNOWN_TYPE; //TODO: fix this: (info != NULL) ? info->type : 
 	node->data.str = id;
+	node->order_dep = 0; //columns are inherently order dependent
 	return node;
 }
 
@@ -143,6 +146,7 @@ ExprNode *make_indexNode(ExprNode *src, ExprNode *ix)
 	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
 	new_node->first_child = src;
 	src->next_sibling = ix;
+	new_node->order_dep = src->order_dep; //same order dependence as child
 	return new_node;
 }
 
@@ -153,14 +157,18 @@ ExprNode *make_callNode(ExprNode *fun, ExprNode *args)
 	new_node->data_type = UNKNOWN_TYPE;
 	new_node->first_child = fun;
 	fun->next_sibling = args;
+	new_node->order_dep |= SAFE_ORDER_DEP(fun);
+	new_node->order_dep |= SAFE_ORDER_DEP(args);
 	return new_node;	
 }
 
-ExprNode *make_builtInFunNode(char *nm)
+ExprNode *make_builtInFunNode(Symtable *symtable, char *nm)
 {
 	AST_PRINT_DEBUG("making built in function node");
 	ExprNode *new_node = make_EmptyExprNode(BUILT_IN_FUN_CALL);
+	Symentry *meta_info = lookup_sym(symtable, nm);
 	new_node->data.str = nm;
+	new_node->order_dep = meta_info->order_dep;
 	return new_node;
 }
 
@@ -175,6 +183,8 @@ ExprNode *make_udfNode(Symtable *symtable, char *nm)
 		new_node->data_type = ERROR_TYPE; //TODO: add reporting here....
 	}
 	
+	//TODO: we should reason about whether a user function is order dependent, not assume
+	new_node->order_dep = entry == NULL || SAFE_ORDER_DEP(entry);
 	return new_node;
 }
 
@@ -188,6 +198,9 @@ ExprNode *make_caseNode(ExprNode *case_clause, ExprNode *when_clauses, ExprNode 
 	new_node->first_child = case_clause;
 	case_clause->next_sibling = when_clauses;
 	when_clauses->next_sibling = else_clause;
+	new_node->order_dep |= SAFE_ORDER_DEP(case_clause);
+	new_node->order_dep |= SAFE_ORDER_DEP(when_clauses);
+	new_node->order_dep |= SAFE_ORDER_DEP(else_clause);
 	return new_node;
 }
 
@@ -196,6 +209,7 @@ ExprNode *make_caseClauseNode(ExprNode *exp)
 	AST_PRINT_DEBUG("making case clause node");
 	ExprNode *new_node = make_EmptyExprNode(CASE_CLAUSE);
 	new_node->first_child = exp;
+	new_node->order_dep = SAFE_ORDER_DEP(exp);
 	return new_node;
 }
 
@@ -205,6 +219,7 @@ ExprNode *make_caseWhenNode(ExprNode *when, ExprNode *conseq)
 	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSE);
 	new_node->first_child = when;
 	when->next_sibling = conseq;
+	new_node->order_dep = SAFE_ORDER_DEP(when) || SAFE_ORDER_DEP(conseq);
 	return new_node;
 }
 
@@ -214,6 +229,7 @@ ExprNode *make_whenClausesNode(ExprNode *h, ExprNode *t)
 	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSES);
 	new_node->first_child = h;
 	h->next_sibling = t;
+	new_node->order_dep = SAFE_ORDER_DEP(h) || SAFE_ORDER_DEP(t);
 	return new_node;
 }
 
@@ -222,6 +238,7 @@ ExprNode *make_elseClauseNode(ExprNode *exp)
 	AST_PRINT_DEBUG("making else clause node");
 	ExprNode *new_node = make_EmptyExprNode(CASE_ELSE_CLAUSE);
 	new_node->first_child = exp;
+	new_node->order_dep = SAFE_ORDER_DEP(exp);
 	return new_node;
 }
 
@@ -259,6 +276,7 @@ ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	new_node->data_type = unif_comp(x->data_type, y->data_type);
 	new_node->first_child = x;
 	x->next_sibling = y;
+	new_node->order_dep = SAFE_ORDER_DEP(x) || SAFE_ORDER_DEP(y);
 	return new_node;	
 }
 
@@ -270,6 +288,7 @@ ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	new_node->data_type = unif_logic(x->data_type, y->data_type);
 	new_node->first_child = x;
 	x->next_sibling = y;
+	new_node->order_dep = SAFE_ORDER_DEP(x) || SAFE_ORDER_DEP(y);
 	return new_node;
 }
 
@@ -287,6 +306,7 @@ ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	
 	new_node->first_child = x;
 	x->next_sibling = y;
+	new_node->order_dep = SAFE_ORDER_DEP(x) || SAFE_ORDER_DEP(y);
 	return new_node;
 }
 
@@ -295,6 +315,7 @@ ExprNode *make_exprListNode(ExprNode *data)
 	AST_PRINT_DEBUG("making expression list");
 	ExprNode *list = make_EmptyExprNode(LIST_EXPR);
 	list->first_child = data;
+	list->order_dep = SAFE_ORDER_DEP(data);
 	return list;
 }
 
@@ -306,6 +327,7 @@ ExprNode *make_predNode(char *nm)
 	new_node->data.str = nm;
 	return new_node;
 }
+
 
 
 
@@ -395,6 +417,7 @@ NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr)
 	new_tuple->name = name;
 	new_tuple->expr = expr;
 	new_tuple->next_sibling = NULL;
+	new_tuple->order_dep = SAFE_ORDER_DEP(expr);
 	return new_tuple;
 }
 
@@ -404,6 +427,7 @@ LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type)
 	LogicalQueryNode *logical_unit =  malloc(sizeof(LogicalQueryNode));
 	logical_unit->node_type = type;
 	logical_unit->after = logical_unit->arg = logical_unit->next_arg = NULL;
+	logical_unit->order_dep = 0;
 	return logical_unit;
 } 
 
@@ -429,6 +453,7 @@ LogicalQueryNode *make_joinOn(LogicalQueryNodeType jointype, LogicalQueryNode *t
 	join->arg = t1;
 	join->next_arg = t2;
 	join->params.exprs = cond;
+	join->order_dep = SAFE_ORDER_DEP(cond);
 	return join;
 }
 
@@ -454,6 +479,7 @@ LogicalQueryNode *make_filterWhere(LogicalQueryNode *t, ExprNode *conds)
 	LogicalQueryNode *where = make_EmptyLogicalQueryNode(FILTER_WHERE);
 	where->arg = t;
 	where->params.exprs = conds;
+	where->order_dep = SAFE_ORDER_DEP(conds);
 	return where;
 }
 
@@ -462,6 +488,7 @@ LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds)
 	LogicalQueryNode *having = make_EmptyLogicalQueryNode(FILTER_HAVING);
 	having->arg = t;
 	having->params.exprs = conds;
+	having->order_dep = SAFE_ORDER_DEP(conds);
 	return having;
 	
 }
@@ -478,6 +505,7 @@ LogicalQueryNode *make_project(LogicalQueryNodeType proj_type, LogicalQueryNode 
 	LogicalQueryNode *proj = make_EmptyLogicalQueryNode(proj_type);
 	proj->arg = t;
 	proj->params.namedexprs = namedexprs;
+	proj->order_dep = SAFE_ORDER_DEP(namedexprs);
 	return proj;
 }
 
@@ -494,6 +522,7 @@ LogicalQueryNode *make_groupby(LogicalQueryNode *t, ExprNode *exprs)
 	LogicalQueryNode *group = make_EmptyLogicalQueryNode(GROUP_BY);
  	group->arg = t;
 	group->params.exprs = exprs;
+	group->order_dep = SAFE_ORDER_DEP(exprs);
 	return group;
 }
 
@@ -535,7 +564,7 @@ LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs)
 	}
 }
 
-LogicalQueryNode *assemble_logical(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+LogicalQueryNode *assemble_base(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
 	LogicalQueryNode *plan = from;
 	plan = pushdown_logical(order, plan);

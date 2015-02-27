@@ -6,10 +6,11 @@
 #include "symtable.h" /* manages the symbol table, to enable meta data lookup */	
 #include "ast.h"    /* builds ast for parser */
 #include "ast_print.h" /* provides dot printing of ast */
-
+#include "optimizer.h" /* optimizing for query plans */
 	
 #define YYDEBUG 1
 #define ERRORCOLOR  "\x1B[32m"
+#define SAFE_ORDER_DEP(x) ((x) != NULL && (x)->order_dep);
 
 extern int yyleng;
 extern FILE *yyin;
@@ -221,7 +222,7 @@ local_queries_tail: local_query local_queries_tail	{$1->next_sibling = $2; $$ = 
 
 local_query: ID                        
              col_aliases 				
-			 UC_AS '(' base_query ')'  { put_sym(env, $1, TABLE_TYPE); $$ = make_LocalQueryNode($1, $2, $5); }
+			 UC_AS '(' base_query ')'  { put_sym(env, $1, TABLE_TYPE, 0, 0); $$ = make_LocalQueryNode($1, $2, $5); }
 			 ; 
 
 col_aliases: '(' comma_identifier_list ')' 			{$$ = $2; }
@@ -236,8 +237,8 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{$$ = make_IDListN
 	;
 
  /******* 2.3: Base query *******/
- 
-base_query: select_clause from_clause order_clause where_clause groupby_clause  {$$ = assemble_logical($1, $2, $3, $4, $5); /*print_logical_query($$);*/}
+ //TODO: make this better.....
+base_query: select_clause from_clause order_clause where_clause groupby_clause  {$$ = assemble_plan($1, $2, $3, $4, $5); /*assemble_logical($1, $2, $3, $4, $5);*/ /*print_logical_query($$);*/}
 	; 
  
 select_clause: SELECT select_elem select_clause_tail {$2->next_sibling = $3; $$ = make_project(PROJECT_SELECT, NULL, $2); }
@@ -390,8 +391,8 @@ table_expressions_tail: ',' joined_table table_expressions_tail	 	 {if($3 == NUL
 	;
 
 /******* 2.5: table and view creation *******/	 
-create_table_or_view: CREATE TABLE ID create_spec             { put_sym(env, $3, TABLE_TYPE); $$ = make_createNode(CREATE_TABLE, $3, $4); /*print_create($$);*/}
-	| CREATE VIEW ID create_spec                              { put_sym(env, $3, VIEW_TYPE);  $$ = make_createNode(CREATE_VIEW, $3, $4); /*print_create($$);*/ }
+create_table_or_view: CREATE TABLE ID create_spec             { put_sym(env, $3, TABLE_TYPE, 0, 0); $$ = make_createNode(CREATE_TABLE, $3, $4); /*print_create($$);*/}
+	| CREATE VIEW ID create_spec                              { put_sym(env, $3, VIEW_TYPE, 0, 0);  $$ = make_createNode(CREATE_VIEW, $3, $4); /*print_create($$);*/ }
 	;
 
 create_spec: UC_AS full_query		{ $$ = make_querySource($2); }
@@ -418,7 +419,7 @@ type_name: TYPE_INT 	{$$ = $1; }
 
 
 /******* 2.6: update, insert, delete statements *******/
-update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause { $$  = assemble_logical(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7); /*print_logical_query($$);*/}
+update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause { $$  = assemble_base(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7); /*print_logical_query($$);*/}
 	;
 
 set_clauses: set_clause set_clauses_tail {$1->next_sibling = $2; $$ = $1; }
@@ -431,7 +432,7 @@ set_clauses_tail: ',' set_clause set_clauses_tail	{$2->next_sibling = $3; $$ = $
 set_clause: ID EQ_OP value_expression 			{$$ = make_NamedExprNode($1, $3); }
 	;
 
-insert_statement: INSERT INTO ID order_clause insert_modifier insert_source {$$ = make_insert(assemble_logical(NULL, make_table($3), $4, NULL, NULL), $5, $6); }
+insert_statement: INSERT INTO ID order_clause insert_modifier insert_source {$$ = make_insert(assemble_base(NULL, make_table($3), $4, NULL, NULL), $5, $6); }
 	;
 
 insert_modifier: '(' comma_identifier_list ')'					{  $$ = $2; }
@@ -442,12 +443,13 @@ insert_source: full_query								{$$ = $1; }
 	| VALUES '(' comma_value_expression_list ')'		{$$ = make_FullQueryNode(NULL, make_values($3)); }
 	;
 	
-delete_statement: DELETE FROM ID order_clause where_clause					{$$ = assemble_logical(make_delete(NULL, NULL),make_table($3), $4, $5, NULL);  /*print_logical_query($$);*/}
-	| DELETE comma_identifier_list FROM ID 									{$$ = assemble_logical(make_delete(NULL, $2), make_table($4), NULL, NULL, NULL); /*print_logical_query($$);*/}
+delete_statement: DELETE FROM ID order_clause where_clause					{$$ = assemble_base(make_delete(NULL, NULL),make_table($3), $4, $5, NULL);  /*print_logical_query($$);*/}
+	| DELETE comma_identifier_list FROM ID 									{$$ = assemble_base(make_delete(NULL, $2), make_table($4), NULL, NULL, NULL); /*print_logical_query($$);*/}
 	;
 
 /******* 2.7: user defined functions *******/
-user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE); env = push_env(env);  /* define function, create new scope for args*/ }
+		//TODO: we need to infer the properties of the function based on the function_body
+user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE, 1, 1); env = push_env(env);  /* define function, create new scope for args*/ }
                         '(' 
 						    def_arg_list 	  
 					     ')' 
@@ -456,11 +458,11 @@ user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE);
 						'}'                   { env = pop_env(env); $$ =  make_UDFDefNode($2, $5, $8); /*print_udf_def($$);*/ } 
 						; 
 
-def_arg_list: ID  def_arg_list_tail		{ put_sym(env, $1, UNKNOWN_TYPE); $$ = make_IDListNode($1, $2); }			 
+def_arg_list: ID  def_arg_list_tail		{ put_sym(env, $1, UNKNOWN_TYPE, 1, 0); $$ = make_IDListNode($1, $2); }			 
 	| /* epsilon */						{ $$ = NULL; }	
 	;
 	
-def_arg_list_tail: ',' ID def_arg_list_tail { put_sym(env, $2, UNKNOWN_TYPE ); $$ = make_IDListNode($2, $3); }
+def_arg_list_tail: ',' ID def_arg_list_tail { put_sym(env, $2, UNKNOWN_TYPE, 1, 0); $$ = make_IDListNode($2, $3); }
 	| /* epsilon */							 {$$ = NULL; } 
 	;
 
@@ -478,7 +480,7 @@ function_body_elem: value_expression		{$$ = make_UDFExpr($1);   }
 	| full_query							{$$ = make_UDFQuery($1);  }
 	;
 	
-function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE);    $$ = make_NamedExprNode($1, $3); } ;
+function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE, 1, 0);    $$ = make_NamedExprNode($1, $3); } ;
 
 
 /******* 2.8: value expressions *******/
@@ -537,30 +539,30 @@ indexing: ODD 				{$$ = make_oddix();     }
 		| EVERY INT 		{$$ = make_everynix($2); }
 		;
 
-built_in_fun: ABS 				{ $$ = make_builtInFunNode($1); }
-	| AVG 						{ $$ = make_builtInFunNode($1); }
-	| AVGS 						{ $$ = make_builtInFunNode($1); }
-	| COUNT 				{ $$ = make_builtInFunNode($1); }
-	| DELTAS 			{ $$ = make_builtInFunNode($1); }
-	| DISTINCT 			{ $$ = make_builtInFunNode($1); }
-	| DROP 	{ $$ = make_builtInFunNode($1); }
-	| FILL 	{ $$ = make_builtInFunNode($1); }
-	| FIRST 	{ $$ = make_builtInFunNode($1); }
-	| LAST 	{ $$ = make_builtInFunNode($1); }
-	| MAX 	{ $$ = make_builtInFunNode($1); }
-	| MAXS 	{ $$ = make_builtInFunNode($1); }
-	| MIN	{ $$ = make_builtInFunNode($1); }
-	| MINS 	{ $$ = make_builtInFunNode($1); }
-	| MOD 	{ $$ = make_builtInFunNode($1); }
-	| NEXT 		{ $$ = make_builtInFunNode($1); }
-	| PREV 	{ $$ = make_builtInFunNode($1); }
-	| PRD 	{ $$ = make_builtInFunNode($1); }
-	| PRDS 	{ $$ = make_builtInFunNode($1); }
-	| REV 	{ $$ = make_builtInFunNode($1); }
-	| SUM 	{ $$ = make_builtInFunNode($1); }
-	| SUMS 		{ $$ = make_builtInFunNode($1); }
-	| STDDEV 	{ $$ = make_builtInFunNode($1); }
-	| MAKENULL	{ $$ = make_builtInFunNode($1); }
+built_in_fun: ABS 				{ $$ = make_builtInFunNode(env, $1); }
+	| AVG 						{ $$ = make_builtInFunNode(env, $1); }
+	| AVGS 						{ $$ = make_builtInFunNode(env, $1); }
+	| COUNT 				{ $$ = make_builtInFunNode(env, $1); }
+	| DELTAS 			{ $$ = make_builtInFunNode(env, $1); }
+	| DISTINCT 			{ $$ = make_builtInFunNode(env, $1); }
+	| DROP 	{ $$ = make_builtInFunNode(env, $1); }
+	| FILL 	{ $$ = make_builtInFunNode(env, $1); }
+	| FIRST 	{ $$ = make_builtInFunNode(env, $1); }
+	| LAST 	{ $$ = make_builtInFunNode(env, $1); }
+	| MAX 	{ $$ = make_builtInFunNode(env, $1); }
+	| MAXS 	{ $$ = make_builtInFunNode(env, $1); }
+	| MIN	{ $$ = make_builtInFunNode(env, $1); }
+	| MINS 	{ $$ = make_builtInFunNode(env, $1); }
+	| MOD 	{ $$ = make_builtInFunNode(env, $1); }
+	| NEXT 		{ $$ = make_builtInFunNode(env, $1); }
+	| PREV 	{ $$ = make_builtInFunNode(env, $1); }
+	| PRD 	{ $$ = make_builtInFunNode(env, $1); }
+	| PRDS 	{ $$ = make_builtInFunNode(env, $1); }
+	| REV 	{ $$ = make_builtInFunNode(env, $1); }
+	| SUM 	{ $$ = make_builtInFunNode(env, $1); }
+	| SUMS 		{ $$ = make_builtInFunNode(env, $1); }
+	| STDDEV 	{ $$ = make_builtInFunNode(env, $1); }
+	| MAKENULL	{ $$ = make_builtInFunNode(env, $1); }
 	;
 	
 exp_expression: call 				{ $$ = $1; }
@@ -602,10 +604,10 @@ value_expression: or_expression 					{ /*print_expr($1, DUMMY,0, 0);*/ $$ = $1; 
 	;
 
  
-comma_value_expression_list: value_expression comma_value_expression_list_tail 	{ $1->next_sibling = $2; $$ = make_exprListNode($1); }
+comma_value_expression_list: value_expression comma_value_expression_list_tail 	{ $1->next_sibling = $2; $1->order_dep |= SAFE_ORDER_DEP($2); $$ = make_exprListNode($1); }
 		;
 
-comma_value_expression_list_tail: ',' value_expression comma_value_expression_list_tail { $2->next_sibling = $3; $$ = $2; }
+comma_value_expression_list_tail: ',' value_expression comma_value_expression_list_tail { $2->next_sibling = $3; $2->order_dep |= SAFE_ORDER_DEP($3); $$ = $2; }
 	| /* epsilon */																		{ $$ = NULL; }
 	;
 	
@@ -690,7 +692,7 @@ int main(int argc, char *argv[]) {
 		yyin = to_parse;
 	}
 	
-	env = make_symtable(); //create the global environment
+	env = init_symtable(); //create the global environment
 	
 	do 
 	{

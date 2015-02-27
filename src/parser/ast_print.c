@@ -6,7 +6,7 @@
 
 #define STAND_ALONE 0
 
-char *ExprNodeTypeName[]= {
+const char *ExprNodeTypeName[]= {
 	"const",
 	"var",
 	"rowid",
@@ -41,6 +41,9 @@ char *ExprNodeTypeName[]= {
 	"predicate",
 	"AND",
 	"OR",
+	"sort_ix",
+	"de_sort_ix",
+	"sorting_single_col"
 	};
 
 const char* LogicalQueryNodeTypeName[] = {
@@ -59,7 +62,8 @@ const char* LogicalQueryNodeTypeName[] = {
 	"alias", 
 	"sort", 
 	"flatten", 
-	"values"
+	"values",
+	"compute_sort_ix"
 };
 
 const char* CreateNodeTypeName[] = {
@@ -247,6 +251,8 @@ void print_logical_query(LogicalQueryNode *step, int parent_id, int *id)
 				break;
 			case EXPLICIT_VALUES:
 				print_values(step, parent_id, id);
+			case COMPUTE_SORT_IX:
+				print_compute_sortix(step, parent_id, id);
 		}
 		
 	}
@@ -343,24 +349,31 @@ void print_values(LogicalQueryNode *vals, int parent_id, int *id)
 	print_expr(vals->params.exprs, self_id, id);
 }
 
+void print_compute_sortix(LogicalQueryNode *comp, int parent_id, int *id)
+{
+	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[comp->node_type]);
+	print_order(comp->params.order, self_id, id);
+	print_logical_query(comp->arg, self_id, id);
+}
+
 //print expr
 void print_expr(ExprNode *expr, int parent_id, int *id)
 {
 	if(expr != NULL)
 	{
-		char val[200];
+		char label[200];
 		
 		if(expr->node_type == CONSTANT_EXPR || expr->node_type == ID_EXPR)
 		{
 			if(expr->data_type == INT_TYPE || expr->data_type == BOOLEAN_TYPE)
 			{
-				sprintf(val,"%d", expr->data.ival);
-				int self_id = print_self(parent_id, id, val);
+				sprintf(label,"%d", expr->data.ival);
+				int self_id = print_self(parent_id, id, label);
 			}
 			else if(expr->data_type == FLOAT_TYPE)
 			{
-				sprintf(val,"%f", expr->data.fval);
-				int self_id = print_self(parent_id, id, val);
+				sprintf(label,"%f", expr->data.fval);
+				int self_id = print_self(parent_id, id, label);
 			}
 			else if(expr->data_type == STRING_TYPE || expr->data_type == DATE_TYPE)
 			{
@@ -374,7 +387,8 @@ void print_expr(ExprNode *expr, int parent_id, int *id)
 		}
 		else
 		{
-			int self_id = print_self(parent_id, id, ExprNodeTypeName[expr->node_type]);
+			sprintf(label, "%s, od:%d", ExprNodeTypeName[expr->node_type], expr->order_dep);
+			int self_id = print_self(parent_id, id, label);
 			print_expr(expr->first_child, self_id, id);
 		}
 		
