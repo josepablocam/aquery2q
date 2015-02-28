@@ -64,7 +64,7 @@ Approach
 
 
 New strategy:
-	- for filter_where, we solely sort if necessary (and directly indexing), and de sort at end if necessary
+	- for filter_where, we solely sort if necessary (and directly indexing), and de sort at end 
 	- if there is a group-by
 			if group-by is OI and projection is OI (ie only aggregates)
 					no sort necessary
@@ -95,6 +95,27 @@ Create a new query plan node
 compute_sort_ix takes order and table, and just returns table, and assigns a value to sort_ix as a side effect and a value to desort_ix, after that we can use both freely
 so a query plan could be 
 table -> compute_sort_ix -> filter(expressions) -> group_by(expressions) -> 
+
+
+
+---->
+if group-by
+	if group-by order dependent || projection order dependent
+			find all referenced cols (not just those that are order dependent) and sort them
+	else
+			nothing to do :)
+else
+	if projection order-dependent
+		find all order-dependent cols using similar pattern as in where, but instead of indexing, return list, create sort update and then compute
+	else
+		nothing to do :)
+
+
+Argument for why group-by complicates:
+	assume we group. Now assume a projection expression e_1 is OD. for e_1 to align correctly with groups, we need to sort groups. Which in turn means we need to sort non-OD data.
+	---> conclusion: Note that the argument only relies on e_1 or g_1 being order dependent, either one messes things up.....
+
+	
 
 
 
@@ -160,6 +181,8 @@ ExprNode *minsort_ixSortExpr(ExprNode *node, int create_ix)
 	{
 		OPTIM_PRINT_DEBUG("min sorting expression");
 		//printf("node:type:%s\n", ExprNodeTypeName[node->node_type]);
+		//printf("order dep:%d\n", node->order_dep);
+		
 		if(node->node_type == CALL_EXPR)
 		{ //only operators can change sorting behavior
 			//if we encounter a function that is order independent, we don't sort subtree for now, until we encounter a different operator
@@ -167,19 +190,19 @@ ExprNode *minsort_ixSortExpr(ExprNode *node, int create_ix)
 			OPTIM_PRINT_DEBUG("min sorting expression: found operator");
 			create_ix = node->first_child->order_dep; 
 			OPTIM_PRINT_DEBUG("explore arguments subtree");
-			node->first_child->next_sibling = minsort_ixSortExpr(node->first_child->next_sibling, create_ix);
-			
+			node->first_child = minsort_ixSortExpr(node->first_child, create_ix);
+			node->next_sibling = minsort_ixSortExpr(node->next_sibling, create_ix);	
 		}
 		else if(is_sortable(node->node_type) && create_ix)
 		{
 			node = make_singleColSort(node);
-			node->next_sibling = minsort_ixSortExpr(node->next_sibling, create_ix);
+			node->next_sibling = minsort_ixSortExpr(node->next_sibling, create_ix | node->order_dep);
 		}
 		else
 		{
 			OPTIM_PRINT_DEBUG("recursing sortability");
-			node->first_child = minsort_ixSortExpr(node->first_child, create_ix);
-			node->next_sibling = minsort_ixSortExpr(node->next_sibling, create_ix);
+			node->first_child = minsort_ixSortExpr(node->first_child, create_ix | node->order_dep);
+			node->next_sibling = minsort_ixSortExpr(node->next_sibling, create_ix | node->order_dep);
 		}
 		
 	}
@@ -206,10 +229,6 @@ LogicalQueryNode *minsort_where(LogicalQueryNode *where, LogicalQueryNode *order
 	return where;
 	
 }
-
-
-
-
 
 LogicalQueryNode *assemble_optim1(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
