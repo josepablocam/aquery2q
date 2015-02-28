@@ -3,9 +3,8 @@
 #include "aquery_types.h"
 #include "symtable.h"
 
-/* Section 2.8: Value Expressions */
+/******* 2.8: value expressions *******/
 typedef enum ExprNodeType {
-  ///value expressions
   CONSTANT_EXPR = 0,
   ID_EXPR,
   ROWID_EXPR,
@@ -37,22 +36,20 @@ typedef enum ExprNodeType {
   LOR_EXPR,
   LAND_EXPR,
   LIST_EXPR,
-  //search conditions
   PRED_EXPR, //predicate
   WHERE_AND_EXPR,
   WHERE_OR_EXPR,
-  
   //sorting optimizations
   SORT_IX,
   DE_SORT_IX,
-  SINGLE_COL_IX_SORT
 } ExprNodeType;
 
 
 typedef struct ExprNode {
 	ExprNodeType node_type;
 	DataType data_type;
-	int order_dep; //order dependent expression
+	int order_dep; //is this node order dependent
+    int sub_order_dep; //does it have an order dependency somewhere in subtree?
 	union {
 		int ival;
 		float fval;
@@ -62,7 +59,17 @@ typedef struct ExprNode {
 	struct ExprNode *next_sibling;
 } ExprNode;
 
-//Expressions
+typedef struct NamedExprNode {
+	char *name;
+	ExprNode *expr;
+	int order_dep;
+    int sub_order_dep;
+	struct NamedExprNode *next_sibling;
+ } NamedExprNode;
+
+
+/* Constants or Identifiers */
+void spread_order(ExprNode *parent, ExprNode *child);
 ExprNode *make_EmptyExprNode(ExprNodeType type);
 ExprNode *make_int(int i);
 ExprNode *make_float(float f);
@@ -71,68 +78,68 @@ ExprNode *make_string(char *str);
 ExprNode *make_hex(char *hex);
 ExprNode *make_bool(int boolean);
 ExprNode *make_id(Symtable *symtable, char *id);
-
+/* Table constants */
 ExprNode *make_rowId();
 ExprNode *make_colDotAccessNode(ExprNode *src, ExprNode *dest);
 ExprNode *make_allColsNode();
-
-ExprNode *make_oddix();
-ExprNode *make_evenix();
-ExprNode *make_everynix(int ix);
-ExprNode *make_indexNode(ExprNode *src, ExprNode *ix);
-
-ExprNode *make_callNode(ExprNode *fun, ExprNode *args);
-ExprNode *make_builtInFunNode(Symtable *symtable, char *nm);
-ExprNode *make_udfNode(Symtable *symtable, char *nm);
-
-
+/* Case Expressions */
 ExprNode *make_caseNode(ExprNode *case_clause, ExprNode *when_clauses, ExprNode *else_clause);
 ExprNode *make_caseClauseNode(ExprNode *exp);
 ExprNode *make_caseWhenNode(ExprNode *when, ExprNode *conseq);
 ExprNode *make_whenClausesNode(ExprNode *h, ExprNode *t);
 ExprNode *make_elseClauseNode(ExprNode *exp);
-
-
-
+/* Application of expressions: indexing, function calls */
+ExprNode *make_callNode(ExprNode *fun, ExprNode *args);
+ExprNode *make_indexNode(ExprNode *src, ExprNode *ix);
+/* Types of functions: built-ins vs UDF */
+ExprNode *make_builtInFunNode(Symtable *symtable, char *nm);
+ExprNode *make_udfNode(Symtable *symtable, char *nm);
+/* Safe indexing: EVEN/ODD/EVERY N */
+ExprNode *make_oddix();
+ExprNode *make_evenix();
+ExprNode *make_everynix(int ix);
+/* Simple arithmetic, comparison and logical operations */
 ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y);
 ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y);
 ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y);
-
+/* expression lists */
 ExprNode *make_exprListNode(ExprNode *data);
-
-
+/* exlusively for search conditions */
 ExprNode *make_predNode(char *nm);
 
-
-
-
-
-//Logical Query Plan Nodes
+ /******* Query related nodes *******/
 
 typedef struct IDListNode {
 	char *name;
 	struct IDListNode *next_sibling;
-} IDListNode;
+ } IDListNode;
 
-//Used to optimize queries
 typedef enum OrderNodeType { ASC_SORT, DESC_SORT } OrderNodeType;
 
 typedef struct OrderNode {
 	OrderNodeType node_type;
 	ExprNode *col;
 	struct OrderNode *next;
-} OrderNode;
+ } OrderNode;
 
-typedef struct NamedExprNode {
-	char *name;
-	ExprNode *expr;
-	int order_dep;
-	struct NamedExprNode *next_sibling;
-} NamedExprNode;
-
-typedef enum LogicalQueryNodeType { PROJECT_SELECT, PROJECT_UPDATE, DELETION, FILTER_WHERE, FILTER_HAVING, CARTESIAN_PROD, 
-	INNER_JOIN_ON, FULL_OUTER_JOIN_ON, INNER_JOIN_USING, FULL_OUTER_JOIN_USING,
-	GROUP_BY, SIMPLE_TABLE, ALIAS, SORT, FLATTEN_FUN, EXPLICIT_VALUES, COMPUTE_SORT_IX
+typedef enum LogicalQueryNodeType { 
+	PROJECT_SELECT, 
+	PROJECT_UPDATE, 
+	DELETION, 
+	FILTER_WHERE, 
+	FILTER_HAVING, 
+	CARTESIAN_PROD, 
+	INNER_JOIN_ON, 
+	FULL_OUTER_JOIN_ON, 
+	INNER_JOIN_USING,
+	FULL_OUTER_JOIN_USING,
+	GROUP_BY, 
+	SIMPLE_TABLE, 
+	ALIAS, 
+	SORT, 
+	FLATTEN_FUN, 
+	EXPLICIT_VALUES,
+	COMPUTE_SORT_IX
 	} LogicalQueryNodeType;
 
 
@@ -151,8 +158,6 @@ typedef struct LogicalQueryNode {
 		} params;
 } LogicalQueryNode;
 
-
-//Logical query nodes
 NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr);
 LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type);
 LogicalQueryNode *make_table(char *name);
@@ -173,11 +178,8 @@ LogicalQueryNode *make_values(ExprNode *exprs);
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs);
 LogicalQueryNode *assemble_base(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 
-//Optimization related nodes
-LogicalQueryNode *make_computeSortIx(LogicalQueryNode *ord);
 
-
-
+/******* 2.2: Local and global queries *******/
 typedef struct LocalQueryNode {
 	char *name;
 	IDListNode *col_names;
@@ -194,25 +196,7 @@ LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames, LogicalQue
 FullQueryNode *make_FullQueryNode(LocalQueryNode *local, LogicalQueryNode *plan);
 
 
-
-//Insertion
-typedef struct InsertNode {
-	LogicalQueryNode *dest; //destination for data
-	IDListNode *modifier;
-	FullQueryNode *src; //source of data
-} InsertNode;
-
-
-InsertNode *make_insert(LogicalQueryNode *dest, IDListNode *modifier, FullQueryNode *src);
-
-
-// Section 2.7: user defined functions definition
-typedef struct LocalVarDefNode {
-	char *name;
-	ExprNode *expr;
-} LocalVarDefNode;
-
-
+/******* 2.7: user defined functions *******/
 typedef enum UDFBodyNodeType { EXPR, VARDEF, QUERY } UDFBodyNodeType;
 
 typedef struct UDFBodyNode {
@@ -232,10 +216,7 @@ typedef struct UDFDefNode {
 } UDFDefNode;
 
 
-
-
 //UDFs
-LocalVarDefNode *make_LocalVarDefNode(char *name, ExprNode *expr);
 IDListNode *make_IDListNode(char *arg, IDListNode *next);
 UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type);
 UDFBodyNode *make_UDFExpr(ExprNode *expr);
@@ -244,7 +225,17 @@ UDFBodyNode *make_UDFQuery(FullQueryNode *query);
 UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body);
 
 
-//Creating Nodes
+
+/******* Mostly 2.6: update, insert, delete statements and 2.5: table and view creation *******/
+typedef struct InsertNode {
+	LogicalQueryNode *dest; //destination for data
+	IDListNode *modifier;
+	FullQueryNode *src; //source of data
+} InsertNode;
+
+
+InsertNode *make_insert(LogicalQueryNode *dest, IDListNode *modifier, FullQueryNode *src);
+
 typedef struct SchemaNode {
 	char *fieldname;
 	char *typename;
@@ -277,10 +268,15 @@ CreateSourceNode *make_schemaSource(SchemaNode *schema);
 CreateSourceNode *make_querySource(FullQueryNode *query);
 
 
-//Top level
+ /******* 2.1: Top level program definition *******/
 
-// Section 2.1: Top level program definition
-typedef enum TopLevelNodeType { GLOBAL_QUERY, UDF_DEF, INSERT_STMT, UPDATE_DELETE_STMT, CREATE_STMT } TopLevelNodeType;
+typedef enum TopLevelNodeType { 
+	GLOBAL_QUERY, 
+	UDF_DEF, 
+	INSERT_STMT, 
+	UPDATE_DELETE_STMT, 
+	CREATE_STMT 
+ } TopLevelNodeType;
 
 typedef struct TopLevelNode {
 	TopLevelNodeType node_type;

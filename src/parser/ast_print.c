@@ -42,8 +42,7 @@ const char *ExprNodeTypeName[]= {
 	"AND",
 	"OR",
 	"sort_ix",
-	"de_sort_ix",
-	"sorting_single_col"
+	"de_sort_ix"
 	};
 
 const char* LogicalQueryNodeTypeName[] = {
@@ -84,7 +83,6 @@ const char *OrderNodeTypeName[] = {
 	"descending"
 };
 
-////////////*************************/////
 
 //Printing in Dot
 void print_node(int id, const char *label)
@@ -387,7 +385,7 @@ void print_expr(ExprNode *expr, int parent_id, int *id)
 		}
 		else
 		{
-			sprintf(label, "%s, od:%d", ExprNodeTypeName[expr->node_type], expr->order_dep);
+			sprintf(label, "%s, od:%d, sod:%d", ExprNodeTypeName[expr->node_type], expr->order_dep, expr->sub_order_dep);
 			int self_id = print_self(parent_id, id, label);
 			print_expr(expr->first_child, self_id, id);
 		}

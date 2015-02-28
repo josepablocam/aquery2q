@@ -8,14 +8,18 @@
 
 #define AST_DEBUG 0
 #define AST_PRINT_DEBUG(str) if(AST_DEBUG) printf("---->AST DEBUGGING: %s\n", str)
-
 #define STAND_ALONE 0
-//extract order dependency information safely
 #define SAFE_ORDER_DEP(x) ((x) != NULL && (x)->order_dep)
+#define SAFE_SUB_ORDER_DEP(x) ((x) != NULL && (x)->sub_order_dep)
+
+void spread_order(ExprNode *parent, ExprNode *child)
+{
+    parent->order_dep |= SAFE_ORDER_DEP(child);
+    parent->sub_order_dep |= SAFE_ORDER_DEP(child) || SAFE_SUB_ORDER_DEP(child);
+}
 
 
-
-
+/******* 2.8: value expressions *******/
 
 ExprNode *make_EmptyExprNode(ExprNodeType type)
 {
@@ -30,31 +34,17 @@ ExprNode *make_EmptyExprNode(ExprNodeType type)
 	node->node_type = type;
 	node->data_type = UNKNOWN_TYPE;
 	node->order_dep = 0;
+    node->sub_order_dep = 0;
 	return node;
 }
 
-/*
-	TODO: USER DEFINED FUNCTIONS (2.7)
-	TODO: UPDATE/INSERT/DELETE STATEMENTS (2.6)
-	TODO: TABLE/VIEW CREATION (2.5)
-	TODO: TABLE EXPRESSIONS (2.3.2)
-	TODO: SEARCH CONDITION (2.3.1)
-	TODO: BASE QUERY (2.3)
-	TODO: LOCAL/GLOBAL QUERY (2.2)
-	TODO: TOP LEVEL (2.1)
-Consider breaking up node types by tyep of expression, so everything up until now
-has been expressio nodes
+/* Constants or Identifiers */
+/* 
+    Note: currently all values except int,boolean, and float are being stored as strings.
+    We'll have to eventually parse those or offload to q....
 
-set up query nodes as logical query plan (or close enough)
+ */
 
-create printers void (*print)(void *)
-just printout label
-
-*/
-
-
-
-// Expressions
 ExprNode *make_int(int i)
 {
 	AST_PRINT_DEBUG("making int node");
@@ -116,132 +106,10 @@ ExprNode *make_id(Symtable *symtable, char *id)
 	Symentry *info = lookup_sym(symtable, id);
 	node->data_type = UNKNOWN_TYPE; //TODO: fix this: (info != NULL) ? info->type : 
 	node->data.str = id;
-	node->order_dep = 0; //columns are inherently order dependent
 	return node;
 }
 
-ExprNode *make_oddix()
-{
-	AST_PRINT_DEBUG("making odd index");
-	return make_EmptyExprNode(ODD_IX);
-}
-
-ExprNode *make_evenix()
-{
-	AST_PRINT_DEBUG("making even index");
-	return make_EmptyExprNode(EVEN_IX);
-}
-
-ExprNode *make_everynix(int ix)
-{
-	AST_PRINT_DEBUG("making every n index node");
-	ExprNode *new_node = make_EmptyExprNode(EVERY_N_IX);
-	new_node->data.ival = ix;
-	return new_node;
-}
-
-ExprNode *make_indexNode(ExprNode *src, ExprNode *ix)
-{
-	AST_PRINT_DEBUG("making indexing node");
-	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
-	new_node->first_child = src;
-	src->next_sibling = ix;
-	new_node->order_dep = src->order_dep; //same order dependence as child
-	return new_node;
-}
-
-ExprNode *make_callNode(ExprNode *fun, ExprNode *args)
-{
-	AST_PRINT_DEBUG("making call node");
-	ExprNode *new_node = make_EmptyExprNode(CALL_EXPR);
-	new_node->data_type = UNKNOWN_TYPE;
-	new_node->first_child = fun;
-	fun->next_sibling = args;
-	new_node->order_dep |= SAFE_ORDER_DEP(fun);
-	new_node->order_dep |= SAFE_ORDER_DEP(args);
-	return new_node;	
-}
-
-ExprNode *make_builtInFunNode(Symtable *symtable, char *nm)
-{
-	AST_PRINT_DEBUG("making built in function node");
-	ExprNode *new_node = make_EmptyExprNode(BUILT_IN_FUN_CALL);
-	Symentry *meta_info = lookup_sym(symtable, nm);
-	new_node->data.str = nm;
-	new_node->order_dep = meta_info->order_dep;
-	return new_node;
-}
-
-ExprNode *make_udfNode(Symtable *symtable, char *nm)
-{
-	AST_PRINT_DEBUG("making udf node");
-	ExprNode *new_node = make_EmptyExprNode(UDF_CALL);
-	Symentry *entry = lookup_sym(symtable, nm);
-	
-	if(entry != NULL && entry->type != FUNCTION_TYPE)
-	{
-		new_node->data_type = ERROR_TYPE; //TODO: add reporting here....
-	}
-	
-	//TODO: we should reason about whether a user function is order dependent, not assume
-	new_node->order_dep = entry == NULL || SAFE_ORDER_DEP(entry);
-	return new_node;
-}
-
-///Case experssions
-ExprNode *make_caseNode(ExprNode *case_clause, ExprNode *when_clauses, ExprNode *else_clause)
-{
-	AST_PRINT_DEBUG("making case expression node");
-	ExprNode *new_node = make_EmptyExprNode(CASE_EXPR);
-	
-	//TODO: add error reporting
-	new_node->first_child = case_clause;
-	case_clause->next_sibling = when_clauses;
-	when_clauses->next_sibling = else_clause;
-	new_node->order_dep |= SAFE_ORDER_DEP(case_clause);
-	new_node->order_dep |= SAFE_ORDER_DEP(when_clauses);
-	new_node->order_dep |= SAFE_ORDER_DEP(else_clause);
-	return new_node;
-}
-
-ExprNode *make_caseClauseNode(ExprNode *exp)
-{
-	AST_PRINT_DEBUG("making case clause node");
-	ExprNode *new_node = make_EmptyExprNode(CASE_CLAUSE);
-	new_node->first_child = exp;
-	new_node->order_dep = SAFE_ORDER_DEP(exp);
-	return new_node;
-}
-
-ExprNode *make_caseWhenNode(ExprNode *when, ExprNode *conseq)
-{
-	AST_PRINT_DEBUG("making when clause node");
-	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSE);
-	new_node->first_child = when;
-	when->next_sibling = conseq;
-	new_node->order_dep = SAFE_ORDER_DEP(when) || SAFE_ORDER_DEP(conseq);
-	return new_node;
-}
-
-ExprNode *make_whenClausesNode(ExprNode *h, ExprNode *t)
-{
-	AST_PRINT_DEBUG("making when clauses node");
-	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSES);
-	new_node->first_child = h;
-	h->next_sibling = t;
-	new_node->order_dep = SAFE_ORDER_DEP(h) || SAFE_ORDER_DEP(t);
-	return new_node;
-}
-
-ExprNode *make_elseClauseNode(ExprNode *exp)
-{
-	AST_PRINT_DEBUG("making else clause node");
-	ExprNode *new_node = make_EmptyExprNode(CASE_ELSE_CLAUSE);
-	new_node->first_child = exp;
-	new_node->order_dep = SAFE_ORDER_DEP(exp);
-	return new_node;
-}
-
+/* Table constants */
 ExprNode *make_rowId()
 {
 	AST_PRINT_DEBUG("making row id node");
@@ -264,9 +132,146 @@ ExprNode *make_allColsNode()
 }
 
 
-//Simple arithmetic expressions
-/* Reduceable expressions */
-//comparison operations
+/* Case Expressions */
+//Case Node
+ExprNode *make_caseNode(ExprNode *case_clause, ExprNode *when_clauses, ExprNode *else_clause)
+{
+	AST_PRINT_DEBUG("making case expression node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_EXPR);
+	
+	//TODO: add error reporting
+	new_node->first_child = case_clause;
+	case_clause->next_sibling = when_clauses;
+	when_clauses->next_sibling = else_clause;
+    
+    spread_order(new_node, case_clause);
+    spread_order(new_node, when_clauses);
+    spread_order(new_node, else_clause);
+
+	return new_node;
+}
+
+//Case-clause, meaning CASE x .... x is this node.
+ExprNode *make_caseClauseNode(ExprNode *exp)
+{
+	AST_PRINT_DEBUG("making case clause node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_CLAUSE);
+	new_node->first_child = exp;
+    spread_order(new_node, exp);
+	return new_node;
+}
+
+ExprNode *make_caseWhenNode(ExprNode *when, ExprNode *conseq)
+{
+	AST_PRINT_DEBUG("making when clause node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSE);
+	new_node->first_child = when;
+	when->next_sibling = conseq;
+    spread_order(new_node, when);
+    spread_order(new_node, conseq);
+    return new_node;
+}
+
+ExprNode *make_whenClausesNode(ExprNode *h, ExprNode *t)
+{
+	AST_PRINT_DEBUG("making when clauses node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_WHEN_CLAUSES);
+	new_node->first_child = h;
+	h->next_sibling = t;
+    spread_order(new_node, h);
+    spread_order(new_node, t);
+	return new_node;
+}
+
+ExprNode *make_elseClauseNode(ExprNode *exp)
+{
+	AST_PRINT_DEBUG("making else clause node");
+	ExprNode *new_node = make_EmptyExprNode(CASE_ELSE_CLAUSE);
+	new_node->first_child = exp;
+	spread_order(new_node, exp);
+	return new_node;
+}
+
+
+
+/* Application of expressions: indexing, function calls */
+ExprNode *make_indexNode(ExprNode *src, ExprNode *ix)
+{
+	AST_PRINT_DEBUG("making indexing node");
+	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
+	new_node->first_child = src;
+	src->next_sibling = ix;
+    spread_order(new_node, src);
+	return new_node;
+}
+
+ExprNode *make_callNode(ExprNode *fun, ExprNode *args)
+{
+	AST_PRINT_DEBUG("making call node");
+	ExprNode *new_node = make_EmptyExprNode(CALL_EXPR);
+	new_node->data_type = UNKNOWN_TYPE;
+	new_node->first_child = fun;
+	fun->next_sibling = args;
+    spread_order(new_node, args);
+    new_node->order_dep = fun->order_dep;
+    new_node->sub_order_dep |= new_node->order_dep;
+	return new_node;	
+}
+
+/* Types of functions: built-ins vs UDF */
+ExprNode *make_builtInFunNode(Symtable *symtable, char *nm)
+{
+	AST_PRINT_DEBUG("making built in function node");
+	ExprNode *new_node = make_EmptyExprNode(BUILT_IN_FUN_CALL);
+	Symentry *meta_info = lookup_sym(symtable, nm);
+	new_node->data.str = nm;
+	new_node->order_dep = meta_info->order_dep;
+	return new_node;
+}
+
+ExprNode *make_udfNode(Symtable *symtable, char *nm)
+{
+	AST_PRINT_DEBUG("making udf node");
+	ExprNode *new_node = make_EmptyExprNode(UDF_CALL);
+	Symentry *entry = lookup_sym(symtable, nm);
+	
+	if(entry != NULL && entry->type != FUNCTION_TYPE)
+	{
+		new_node->data_type = ERROR_TYPE; //TODO: type error reporting add...
+	}
+	
+	//TODO: we should reason about whether a user function is order dependent, not assume
+	new_node->data.str = nm;
+    new_node->order_dep = entry == NULL || SAFE_ORDER_DEP(entry);
+	return new_node;
+}
+
+
+ /* Safe indexing: EVEN/ODD/EVERY N */
+ExprNode *make_oddix()
+{
+	AST_PRINT_DEBUG("making odd index");
+	return make_EmptyExprNode(ODD_IX);
+}
+
+ExprNode *make_evenix()
+{
+	AST_PRINT_DEBUG("making even index");
+	return make_EmptyExprNode(EVEN_IX);
+}
+
+ExprNode *make_everynix(int ix)
+{
+	AST_PRINT_DEBUG("making every n index node");
+	ExprNode *new_node = make_EmptyExprNode(EVERY_N_IX);
+	new_node->data.ival = ix;
+	return new_node;
+}
+
+
+
+
+/* Simple arithmetic, comparison and logical operations */
 
 // <, > , <=, >=, ==, !=
 ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
@@ -276,7 +281,8 @@ ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	new_node->data_type = unif_comp(x->data_type, y->data_type);
 	new_node->first_child = x;
 	x->next_sibling = y;
-	new_node->order_dep = SAFE_ORDER_DEP(x) || SAFE_ORDER_DEP(y);
+    spread_order(new_node, x);
+    spread_order(new_node, y);
 	return new_node;	
 }
 
@@ -288,11 +294,12 @@ ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	new_node->data_type = unif_logic(x->data_type, y->data_type);
 	new_node->first_child = x;
 	x->next_sibling = y;
-	new_node->order_dep = SAFE_ORDER_DEP(x) || SAFE_ORDER_DEP(y);
+    spread_order(new_node, x);
+    spread_order(new_node, y);
 	return new_node;
 }
 
-// Arithmetic Operations
+// +-*/^
 ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 {
 	AST_PRINT_DEBUG("making arithmetic node");
@@ -306,51 +313,48 @@ ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	
 	new_node->first_child = x;
 	x->next_sibling = y;
-	new_node->order_dep = SAFE_ORDER_DEP(x) || SAFE_ORDER_DEP(y);
+    spread_order(new_node, x);
+    spread_order(new_node, y);
 	return new_node;
 }
 
+
+//Lists of expressions handled as a linked list
+//This node becomes parent and all expressions in the list are siblings of the first child
 ExprNode *make_exprListNode(ExprNode *data)
 {
 	AST_PRINT_DEBUG("making expression list");
 	ExprNode *list = make_EmptyExprNode(LIST_EXPR);
 	list->first_child = data;
-	list->order_dep = SAFE_ORDER_DEP(data);
+    
+    ExprNode *child;
+    
+    for(child = data; child != NULL; child = child->next_sibling)
+    {
+        spread_order(list, child);
+    }
+    
 	return list;
 }
 
-//Search conditions
-ExprNode *make_predNode(char *nm)
+
+/******* 2.7: user defined functions *******/
+
+//A named expression associates a name with an expression
+//It can be used for local variable definitions, or 'as' statements in query projections
+//A query projection with no alias name, becomes a NamedExpr with a NULL name.
+NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr)
 {
-	AST_PRINT_DEBUG("making search condition predicate node");
-	ExprNode *new_node = make_EmptyExprNode(PRED_EXPR);
-	new_node->data.str = nm;
-	return new_node;
+	NamedExprNode *new_tuple = malloc(sizeof(NamedExprNode));
+	new_tuple->name = name;
+	new_tuple->expr = expr;
+	new_tuple->next_sibling = NULL;
+	new_tuple->order_dep = SAFE_ORDER_DEP(expr);
+    new_tuple->sub_order_dep = SAFE_SUB_ORDER_DEP(expr);
+	return new_tuple;
 }
 
-
-
-
-
-
-///****** Queries and their nodes etc *//////////
-
-OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col)
-{
-	OrderNode *new_order = malloc(sizeof(OrderNode));
-	new_order->node_type = type;
-	new_order->col = col;
-	new_order->next = NULL;
-	return new_order;
-}
-
-
-
-/// User Defined Functions 
-
-
-
-
+//A linked list of identifiers...useful for arguments etc
 IDListNode *make_IDListNode(char *id, IDListNode *next)
 {
 	IDListNode *ids = malloc(sizeof(IDListNode));
@@ -360,8 +364,7 @@ IDListNode *make_IDListNode(char *id, IDListNode *next)
 }
 
 
-
-
+//We create body node which can hold a query, expression or local variable declaration
 UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type)
 {
 	UDFBodyNode *new_node = malloc(sizeof(UDFBodyNode));
@@ -377,6 +380,7 @@ UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type)
 	return new_node;
 }
 
+//UDF Body wrappers for different types of contents
 UDFBodyNode *make_UDFExpr(ExprNode *expr)
 {
 	UDFBodyNode *body_elem = make_UDFEmptyBodyNode(EXPR);
@@ -398,8 +402,7 @@ UDFBodyNode *make_UDFQuery(FullQueryNode *query)
 	return body_elem;
 }
 
-
-
+//A UDF definition node
 UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body)
 {
 	UDFDefNode *new_fun = malloc(sizeof(UDFDefNode));
@@ -410,15 +413,53 @@ UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body)
 }
 
 
-///Logical query plan
-NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr)
+ /******* 2.3.1: search condition *******/
+ /* For the most part we can simply use the expression nodes for search conditions
+    The only search-condition specific node (which is still represented as type ExprNode)
+    is the predicate node, so we include that below 
+ */
+ExprNode *make_predNode(char *nm)
 {
-	NamedExprNode *new_tuple = malloc(sizeof(NamedExprNode));
-	new_tuple->name = name;
-	new_tuple->expr = expr;
-	new_tuple->next_sibling = NULL;
-	new_tuple->order_dep = SAFE_ORDER_DEP(expr);
-	return new_tuple;
+	AST_PRINT_DEBUG("making search condition predicate node");
+	ExprNode *new_node = make_EmptyExprNode(PRED_EXPR);
+	new_node->data.str = nm;
+	return new_node;
+}
+
+
+
+
+ /******* Query related nodes *******/
+  /*
+    This section does not correspond directly to any specific part of the grammar
+    but rather overlaps various sections. We represent queries as a logical query plan.
+    This is our attempt of implementing nodes that are akin to relational algebra operators
+    For example a query like select c1 from t assuming asc c1 where c2=3  becomes
+    projection(c1)-->filter(c2=3)-->sort(asc c1)-->simple_table(t)
+    which we can then "plug" into our traditional AST. 
+
+    In traditional relational algebra, this might be something like
+        project_c1(select_c2=3(sort_asc-c1(t)))
+
+    Each logical query node is structured to be part of a linked list of query nodes, with deeper nodes representing earlier
+    steps. Each node takes a pointer to an arg (the next query node) and has space
+    for additional parameters. Additionally, some nodes (like joins) need more than 1 arg
+    so there is a next_arg pointer which allow us to chain undetermined amounts of arguments.
+ */
+    
+ /******* Mostly 2.3: Base query  and 2.3.2: table expressions *******/    
+    
+//Order nodes represent the order specification required for a sort
+//The only reason col here is an ExprNode is that we allow dot-access for columns
+//in order specifications, which in turn is considered to be an expression.
+//This should not cause any issues.
+OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col)
+{
+	OrderNode *new_order = malloc(sizeof(OrderNode));
+	new_order->node_type = type;
+	new_order->col = col;
+	new_order->next = NULL;
+	return new_order;
 }
 
 LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type)
@@ -479,7 +520,7 @@ LogicalQueryNode *make_filterWhere(LogicalQueryNode *t, ExprNode *conds)
 	LogicalQueryNode *where = make_EmptyLogicalQueryNode(FILTER_WHERE);
 	where->arg = t;
 	where->params.exprs = conds;
-	where->order_dep = SAFE_ORDER_DEP(conds);
+	where->order_dep = SAFE_ORDER_DEP(conds) | SAFE_SUB_ORDER_DEP(conds);
 	return where;
 }
 
@@ -488,7 +529,7 @@ LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds)
 	LogicalQueryNode *having = make_EmptyLogicalQueryNode(FILTER_HAVING);
 	having->arg = t;
 	having->params.exprs = conds;
-	having->order_dep = SAFE_ORDER_DEP(conds);
+	having->order_dep = SAFE_ORDER_DEP(conds) | SAFE_SUB_ORDER_DEP(conds);
 	return having;
 	
 }
@@ -564,6 +605,7 @@ LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs)
 	}
 }
 
+//Assembling a naive query plan directly extracted from the syntax
 LogicalQueryNode *assemble_base(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
 	LogicalQueryNode *plan = from;
@@ -572,8 +614,8 @@ LogicalQueryNode *assemble_base(LogicalQueryNode *proj, LogicalQueryNode *from, 
 	plan = pushdown_logical(grouphaving, plan);
 	return pushdown_logical(proj, plan);
 }
-//Full query node
 
+ /******* 2.2: Local and global queries *******/
 LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames, LogicalQueryNode *plan)
 {
 	LocalQueryNode *local_query = malloc(sizeof(LocalQueryNode));
@@ -593,6 +635,12 @@ FullQueryNode *make_FullQueryNode(LocalQueryNode *local, LogicalQueryNode *plan)
 }
 
 
+/******* Mostly 2.6: update, insert, delete statements and 2.5: table and view creation *******/
+  /* Note that some of the 2.6 operations are already handled within
+    the logical query section. For example, update consists for the most
+    part on similar operations as a select, we simply project in a different fashion
+   */
+
 InsertNode *make_insert(LogicalQueryNode *dest, IDListNode *modifier, FullQueryNode *src)
 {
 	InsertNode *ins= malloc(sizeof(InsertNode));
@@ -602,7 +650,6 @@ InsertNode *make_insert(LogicalQueryNode *dest, IDListNode *modifier, FullQueryN
 	return ins;
 }
 
-//Create statements
 CreateNode *make_createNode(CreateNodeType type, char *name, CreateSourceNode *src)
 {
 	CreateNode *create = malloc(sizeof(CreateNode));
@@ -637,7 +684,9 @@ CreateSourceNode *make_querySource(FullQueryNode *query)
 	src->load.query = query;
 	return src;
 }
-//Top level
+
+
+ /******* 2.1: Top level program definition *******/
 TopLevelNode *make_EmptyTopLevelNode(TopLevelNodeType type)
 {
 	TopLevelNode *node = malloc(sizeof(TopLevelNode));
@@ -704,7 +753,7 @@ int main()
 	IDListNode *arg2 = make_IDListNode("y", NULL);
 	IDListNode *arg1 = make_IDListNode("x", arg2);
 	//body
-	LocalVarDefNode *local_var_def = make_LocalVarDefNode("x", times);
+	NamedExprNode *local_var_def = make_NamedExprNode("x", times);
 	UDFBodyNode *body1 = make_UDFVardef(local_var_def);
 	UDFBodyNode *body2 = make_UDFQuery(NULL);
 	body1->next_sibling = body2;
@@ -722,41 +771,3 @@ int main()
 	return 0;
 }
 #endif
-
-
-
-
-/*
-//This is currently just a general sketch
-Node { type_of_node;
-	   type_of_data; ///unknown etc
-	   union {int, float, string, date, hex, bool, etc} data; //hold values (only leaves)
-	   pointer to first child;
-	   pointer to sibling; 
-	}
-all should return Node
-	
-	
-make_binop('+', Node(int, int, 6), Node(int, int, 5))
-Node(int, int, 11)
-
-
-
-
-
-
-
-	
-make_binop('+', $1, $2)// should set $2 to be sibling for $1 and then set that to child, and return
-make_unop('+', $1)
-make_leaf(int, int, 5) should return Node(exp, val.int = 5)
-make_binop('call', function, list_of_args)
-make_select etc etc etc
-get_val(Node(_,x,_,_)) should return the concrete value
-
-
-
-reduction (ie. make_binop('+', 4, 5) shouldn't create the whole thing, it should just return Node(int, 9))
-
-print_ast
-*/

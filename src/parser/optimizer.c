@@ -144,7 +144,7 @@ int is_sortable(ExprNodeType type)
 ExprNode *make_singleColSort(ExprNode *expr)
 {
 	OPTIM_PRINT_DEBUG("making single column sort");
-	ExprNode *new_node = make_EmptyExprNode(SINGLE_COL_IX_SORT);
+	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
 	new_node->first_child = make_EmptyExprNode(SORT_IX);
 	new_node->first_child->next_sibling = expr;
 	//transfer sibling relationship to indexing node
@@ -156,7 +156,7 @@ ExprNode *make_singleColSort(ExprNode *expr)
 ExprNode *make_singleColDeSort(ExprNode *expr)
 {
 	OPTIM_PRINT_DEBUG("making single column sort");
-	ExprNode *new_node = make_EmptyExprNode(SINGLE_COL_IX_SORT);
+	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
 	new_node->first_child = make_EmptyExprNode(DE_SORT_IX);
 	new_node->first_child->next_sibling = expr;
 	return new_node;
@@ -175,8 +175,9 @@ LogicalQueryNode *make_computeSortIx(LogicalQueryNode *ord)
 
 
 // minimize sorting necessary in where clause
-ExprNode *minsort_ixSortExpr(ExprNode *node, int create_ix)
+ExprNode *minsort_ixSortExpr(ExprNode *node, int apply_ix)
 {
+    int new_apply_ix = 0;
 	if(node != NULL)
 	{
 		OPTIM_PRINT_DEBUG("min sorting expression");
@@ -184,25 +185,29 @@ ExprNode *minsort_ixSortExpr(ExprNode *node, int create_ix)
 		//printf("order dep:%d\n", node->order_dep);
 		
 		if(node->node_type == CALL_EXPR)
-		{ //only operators can change sorting behavior
-			//if we encounter a function that is order independent, we don't sort subtree for now, until we encounter a different operator
-			//until we encounter a function that is order dependent
-			OPTIM_PRINT_DEBUG("min sorting expression: found operator");
-			create_ix = node->first_child->order_dep; 
-			OPTIM_PRINT_DEBUG("explore arguments subtree");
-			node->first_child = minsort_ixSortExpr(node->first_child, create_ix);
-			node->next_sibling = minsort_ixSortExpr(node->next_sibling, create_ix);	
-		}
-		else if(is_sortable(node->node_type) && create_ix)
 		{
+			OPTIM_PRINT_DEBUG("opt1: found operator");
+			new_apply_ix = node->order_dep; //we apply the tag found at this operator (ie does operator affect order dependence)
+            //printf("sub_order_dep:%d\n", node->sub_order_dep);
+            if(node->sub_order_dep)
+            {
+               node->first_child = minsort_ixSortExpr(node->first_child, new_apply_ix); 
+            }
+            
+            node->next_sibling = minsort_ixSortExpr(node->next_sibling, apply_ix);
+            
+		}
+		else if(is_sortable(node->node_type) && apply_ix)
+		{   //if we've arrived at a node that needs application of index 
+            OPTIM_PRINT_DEBUG("opt1: must apply index here");
 			node = make_singleColSort(node);
-			node->next_sibling = minsort_ixSortExpr(node->next_sibling, create_ix | node->order_dep);
+			node->next_sibling = minsort_ixSortExpr(node->next_sibling, apply_ix);
 		}
 		else
 		{
-			OPTIM_PRINT_DEBUG("recursing sortability");
-			node->first_child = minsort_ixSortExpr(node->first_child, create_ix | node->order_dep);
-			node->next_sibling = minsort_ixSortExpr(node->next_sibling, create_ix | node->order_dep);
+            OPTIM_PRINT_DEBUG("opt1: exploring subtrees");
+       		node->first_child = minsort_ixSortExpr(node->first_child, apply_ix | node->order_dep);
+            node->next_sibling = minsort_ixSortExpr(node->next_sibling, apply_ix); 
 		}
 		
 	}
@@ -214,12 +219,12 @@ ExprNode *minsort_ixSortExpr(ExprNode *node, int create_ix)
 
 LogicalQueryNode *minsort_where(LogicalQueryNode *where, LogicalQueryNode *order)
 { //assume there is actually an order
-	
+    
 	if(where != NULL && order != NULL && where->order_dep)
 	{
 		OPTIM_PRINT_DEBUG("min sorting where");
 		LogicalQueryNode *computing_ix = make_computeSortIx(order); //calc and store sorting indices
-		where->params.exprs = minsort_ixSortExpr(where->params.exprs, 1); //sort any columns in expressions
+		where->params.exprs = minsort_ixSortExpr(where->params.exprs, where->params.exprs->order_dep); //sort any columns in expressions
 		where->params.exprs = make_singleColDeSort(where->params.exprs); //desort final result
 		where->arg = computing_ix;
 		return where;
