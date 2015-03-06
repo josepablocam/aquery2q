@@ -2,9 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <unistd.h>
-#include "symtable.h" /* manages the symbol table, to enable meta data lookup */	
-#include "ast.h"    /* builds ast for parser */
+#include "symtable.h"  /* manages the symbol table, to enable meta data lookup */	
+#include "ast.h"       /* builds ast for parser */
 #include "ast_print.h" /* provides dot printing of ast */
 #include "optimizer.h" /* optimizing for query plans */
 	
@@ -22,15 +23,15 @@ extern int line_num;
 extern int col_num;
 
 //Symbol table
-Symtable *env;	
+Symtable *env;	/* global symbol table: stack of hash tables */
 
 //AST
-TopLevelNode* ast;
+TopLevelNode* ast; /* holds any asts created during compilation */
 
 
 void yyerror(const char *);
 
-
+int optim_level; //level of optimization in ast
 
 %}
 
@@ -88,7 +89,8 @@ void yyerror(const char *);
 %token EXP_OP TIMES_OP DIV_OP PLUS_OP MINUS_OP LE_OP GE_OP L_OP G_OP EQ_OP NEQ_OP AND_OP OR_OP
   
  
- /* Abstract Syntax Tree Types */
+/* Additional Abstract Syntax Tree Types */
+
 /* types for expressions */
 %type <exprnode> constant truth_value table_constant 
 %type <exprnode> case_expression case_clause when_clauses when_clause when_clauses_tail else_clause
@@ -101,9 +103,10 @@ void yyerror(const char *);
 
 
 /* search condition */
-%type <exprnode> search_condition boolean_term boolean_factor boolean_primary predicate
+%type <exprnode> search_condition boolean_factor boolean_primary predicate
 %type <exprnode> postfix_predicate overlaps_predicate between_predicate in_predicate null_predicate like_predicate is_predicate
 %type <exprnode> in_pred_spec range_value_expression
+%type <exprnode> and_search_condition and_search_condition_tail
 
 /* UDF related */
 %type <namedexpr> function_local_var_def;
@@ -157,7 +160,6 @@ void yyerror(const char *);
   float floatval;
   char* str;
   struct ExprNode *exprnode;
-  //UDF related
   struct UDFDefNode *udfdef;
   struct IDListNode *idlist;
   struct LocalVarDefNode *localvardef;
@@ -189,213 +191,231 @@ void yyerror(const char *);
  
  /******* 2.1: Top level program definition *******/
 
-program: top_level						{ $$ = $1; ast = $$; }												
+program: top_level						    { $$ = $1; ast = $$; }												
 
-top_level: global_query top_level			{$$ = make_Top_GlobalQuery($1, $2); }
-	|	create_table_or_view top_level		{$$ = make_Top_Create($1, $2); }
-	|	insert_statement top_level			{$$ = make_Top_Insert($1, $2); }
-	|	update_statement top_level			{$$ = make_Top_UpdateDelete($1, $2); }
-	|	delete_statement top_level			{$$ = make_Top_UpdateDelete($1, $2); }
-	|	user_function_definition top_level	{$$ = make_Top_UDF($1, $2); }
-	| /* epsilon */							{$$ = NULL; }
+top_level: global_query top_level           { $$ = make_Top_GlobalQuery($1, $2); }
+	|	create_table_or_view top_level      { $$ = make_Top_Create($1, $2); }
+	|	insert_statement top_level          { $$ = make_Top_Insert($1, $2); }
+	|	update_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
+	|	delete_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
+	|	user_function_definition top_level  { $$ = make_Top_UDF($1, $2); }
+	| /* epsilon */	                        { $$ = NULL; }
 	;
 
  /******* 2.2: Local and global queries *******/
  
-global_query: full_query				{$$ = $1; }
+global_query: full_query                     { $$ = $1; }
 	;
 
-full_query:  					{ /*print_symtable(env);*/  env = push_env(env); /* create a new scope to handle local query names */ }
+full_query:                     { env = push_env(env); } /* create a new scope to handle local query identifiers */
 			local_queries 		
-			base_query 			{ /*print_symtable(env);*/ env = pop_env(env); $$ = make_FullQueryNode($2, $3); }
+			base_query 			{ env = pop_env(env); $$ = make_FullQueryNode($2, $3); } /* pop off to remove local queries and create AST node */
 								
 			;
 
 
-local_queries: WITH local_query local_queries_tail {$2->next_sibling = $3; $$ = $2; }
-	|	/* epsilon */								{$$ = NULL; }
+local_queries: WITH local_query local_queries_tail  { $2->next_sibling = $3; $$ = $2; } /* local queries are chained as siblings */
+	|	/* epsilon */                               { $$ = NULL; }
 	;
 	
-local_queries_tail: local_query local_queries_tail	{$1->next_sibling = $2; $$ = $1; }
-	| /* epsilon */									{$$ = NULL; }
+local_queries_tail: local_query local_queries_tail  { $1->next_sibling = $2; $$ = $1; }
+	| /* epsilon */                                 { $$ = NULL; }
 	;
 
 local_query: ID                        
              col_aliases 				
-			 UC_AS '(' base_query ')'  { put_sym(env, $1, TABLE_TYPE, 0, 0); $$ = make_LocalQueryNode($1, $2, $5); }
+			 UC_AS '(' base_query ')'  { put_sym(env, $1, TABLE_TYPE, 0, 0); $$ = make_LocalQueryNode($1, $2, $5); } /* place local query info in sym table */
 			 ; 
 
-col_aliases: '(' comma_identifier_list ')' 			{$$ = $2; }
-	| /* epsilon */									{$$ = NULL; }
+col_aliases: '(' comma_identifier_list ')' 			{ $$ = $2; }
+	| /* epsilon */									{ $$ = NULL; }
 	;
 
-comma_identifier_list: ID comma_identifier_list_tail    {$$ = make_IDListNode($1, $2); }
+comma_identifier_list: ID comma_identifier_list_tail    { $$ = make_IDListNode($1, $2); } /* id lists are handled as linked lists in the ast, with $1 as head and $2 as tail */
 	; 
 
-comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{$$ = make_IDListNode($2, $3);}
+comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{ $$ = make_IDListNode($2, $3);}
 	|	/* epsilon */											{ $$ = NULL; }
 	;
 
  /******* 2.3: Base query *******/
  //TODO: make this better.....
-base_query: select_clause from_clause order_clause where_clause groupby_clause  {$$ = assemble_plan($1, $2, $3, $4, $5); /*assemble_logical($1, $2, $3, $4, $5);*/ /*print_logical_query($$);*/}
+base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); } /* assemble plan calls a different function depending on optimizer level */
 	; 
  
-select_clause: SELECT select_elem select_clause_tail {$2->next_sibling = $3; $$ = make_project(PROJECT_SELECT, NULL, $2); }
+select_clause: SELECT select_elem select_clause_tail { $2->next_sibling = $3; $$ = make_project(PROJECT_SELECT, NULL, $2); } /* select_elems are linked, and put into projection */
 	;
 
 select_elem: value_expression LC_AS ID  { $$ = make_NamedExprNode($3, $1); }
 	|	value_expression				{ $$ = make_NamedExprNode(NULL, $1); }
 	;
 	
-select_clause_tail: ',' select_elem select_clause_tail		{$2->next_sibling = $3; $$ = $2; }
-	| /* epislon */											{$$ = NULL; }
+select_clause_tail: ',' select_elem select_clause_tail		{ $2->next_sibling = $3; $$ = $2; }
+	| /* epislon */											{ $$ = NULL; }
 	;
 		
-from_clause: FROM table_expressions {$$ = $2; }
+from_clause: FROM table_expressions { $$ = $2; }
 	;
 
 order_clause: ASSUMING order_specs	{ $$ = make_sort(NULL, $2);}
 	| /* epsilon */					{ $$ = NULL; }
 	;
 	
-order_specs: order_spec order_specs_tail  {$1->next = $2; $$ = $1; }
+order_specs: order_spec order_specs_tail  { $1->next = $2; $$ = $1; }
 		;
 	
-order_spec: ASC column_name							{$$ = make_OrderNode(ASC_SORT, $2); }
-	 | DESC column_name								{$$ = make_OrderNode(DESC_SORT, $2); }
+order_spec: ASC column_name							{ $$ = make_OrderNode(ASC_SORT, $2); }
+	 | DESC column_name								{ $$ = make_OrderNode(DESC_SORT, $2); }
 	 ;
 
 column_name: ID 									{ $$ = make_id(env, $1); }
-	| ID '.' ID  									{$$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
+	| ID '.' ID  									{ $$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
 	;	 
 	 
-order_specs_tail: ',' order_spec order_specs_tail 		{$2->next = $3; $$ = $2; }
-	| /* epsilon */										{$$ = NULL; }
+order_specs_tail: ',' order_spec order_specs_tail 		{ $2->next = $3; $$ = $2; }
+	| /* epsilon */										{ $$ = NULL; }
 	;
 
-where_clause: WHERE search_condition 		{$$ = make_filterWhere(NULL, $2); }
-	| /* epsilon */							{$$ = NULL; }
+//where_clause: WHERE search_condition 		{ $$ = make_filterWhere(NULL, $2); }
+//	| /* epsilon */							{ $$ = NULL; }
+//	;
+
+where_clause: WHERE and_search_condition 		{ $$ = make_filterWhere(NULL, $2); }
+	| /* epsilon */							    { $$ = NULL; }	;
+
+	
+groupby_clause: GROUP BY comma_value_expression_list having_clause	{ $$ = pushdown_logical($4, make_groupby(NULL, $3));   }
+	| /* epsilon */													{ $$ = NULL; }
 	;
 	
-groupby_clause: GROUP BY comma_value_expression_list having_clause	{$$ = pushdown_logical($4, make_groupby(NULL, $3));   }
-	| /* epsilon */													{$$ = NULL; }
-	;
-	
-having_clause: HAVING search_condition 								{$$ = make_filterHaving(NULL, $2); }
-	| /* epsilon */													{$$ =  NULL; }
+having_clause: HAVING search_condition 								{ $$ = make_filterHaving(NULL, $2); }
+	| /* epsilon */													{ $$ =  NULL; }
 	;
 
 
  /******* 2.3.1: search condition *******/
-search_condition: boolean_term				{/*printf("---->search\n"); print_expr($1, DUMMY, 0, 0);*/ $$ = $1; } //TODO: delete dummy
-	| search_condition OR boolean_term		{$$ = make_logicOpNode(WHERE_OR_EXPR, $1, $3); }
-	;
+//search_condition: boolean_term				{ $$ = $1; } 
+	//| search_condition OR boolean_term		{ $$ = make_logicOpNode(WHERE_OR_EXPR, $1, $3); }
+//	;
 	
-boolean_term: boolean_factor				{$$ = $1; }
-	| boolean_term AND boolean_factor		{$$ = make_logicOpNode(WHERE_AND_EXPR, $1, $3); }
-	;
+//boolean_term: boolean_factor				{ $$ = $1; }
+	//| boolean_term AND boolean_factor		{ $$ = make_logicOpNode(WHERE_AND_EXPR, $1, $3); }
+//	;
+
+
+and_search_condition: search_condition and_search_condition_tail { $1->next_sibling = $2; $$ = make_exprListNode($1); }
+    ;
+    
+and_search_condition_tail : AND search_condition and_search_condition_tail { $2->next_sibling = $3; $$ = $2; } //don't make another exprListNode here..we want flat structure
+    | /* epsilon */                                                        { $$ = NULL;                      } 
+    ;
 	
-boolean_factor: boolean_primary				{$$ = $1; }
-	| NOT boolean_primary					{$$ = make_callNode(make_predNode($1), $2); }
+search_condition: boolean_factor				    { $$ = $1; } 
+	| search_condition OR boolean_factor		    { $$ = make_logicOpNode(WHERE_OR_EXPR, $1, $3); }
+	;    
+    
+boolean_factor: boolean_primary				{ $$ = $1; }
+	| NOT boolean_primary					{ $$ = make_callNode(make_predNode($1), $2); }
 	;
 		
-boolean_primary: predicate 					{$$ = $1; }
-		| '(' search_condition ')' 			{$$ = $2; }
+boolean_primary: predicate 					{ $$ = $1; }
+		| '(' search_condition ')' 			{ $$ = $2; }
 		;
 
 
-predicate: value_expression 						{$$ = $1; }
-	| postfix_predicate								{$$ = $1; }
-	| overlaps_predicate							{$$ = $1; }
+predicate: value_expression 						{ $$ = $1; }
+	| postfix_predicate								{ $$ = $1; }
+	| overlaps_predicate							{ $$ = $1; }
 	;
 
 
-postfix_predicate:  between_predicate			{$$ = $1; }
-	|  in_predicate								{$$ = $1; }
-	|  null_predicate							{$$ = $1; }
-	|  like_predicate							{$$ = $1; }
-	|  is_predicate								{$$ = $1; }
+postfix_predicate:  between_predicate			{ $$ = $1; }
+	|  in_predicate								{ $$ = $1; }
+	|  null_predicate							{ $$ = $1; }
+	|  like_predicate							{ $$ = $1; }
+	|  is_predicate								{ $$ = $1; }
 	;
 	
 	
-between_predicate: value_expression BETWEEN value_expression AND value_expression {$1->next_sibling = $3; $3->next_sibling = $5; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
-	|  value_expression NOT BETWEEN value_expression AND value_expression		{$1->next_sibling = $4; $4->next_sibling = $6; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
+ /* most postfix predicates are treated simply as a function call, with all arguments as a list of arguments so a between b and c becomes between(a,b,c)  effectively */
+ /* in turn negation of a predicate simply is a call to not(x) where x is a call to another predicate and so forth */   
+between_predicate: value_expression BETWEEN value_expression AND value_expression { $1->next_sibling = $3; $3->next_sibling = $5; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	|  value_expression NOT BETWEEN value_expression AND value_expression		  { $1->next_sibling = $4; $4->next_sibling = $6; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
-in_predicate: value_expression IN in_pred_spec  {$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
-	| value_expression NOT IN in_pred_spec	    {$1->next_sibling = $4; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
+in_predicate: value_expression IN in_pred_spec  { $1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	| value_expression NOT IN in_pred_spec	    { $1->next_sibling = $4; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
-in_pred_spec: '(' comma_value_expression_list ')'  {$$ = $2; }
-	| value_expression {$$ = $1; }
+in_pred_spec: '(' comma_value_expression_list ')'  { $$ = $2; }
+	| value_expression                             { $$ = $1; }
 	;
 	
-like_predicate: value_expression LIKE value_expression  {$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
-	| value_expression NOT LIKE value_expression		{$1->next_sibling = $4; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
+like_predicate: value_expression LIKE value_expression  { $1->next_sibling = $3;  $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	| value_expression NOT LIKE value_expression		{ $1->next_sibling = $4;  $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
-null_predicate: value_expression IS NOT NULL_KEYWORD	{$$ = make_callNode(make_predNode($3), make_exprListNode(make_callNode(make_predNode($4), make_exprListNode($1)))); }
-	| value_expression IS NULL_KEYWORD					{$$ = make_callNode(make_predNode($3), make_exprListNode($1)); }
+null_predicate: value_expression IS NOT NULL_KEYWORD	{ $$ = make_callNode(make_predNode($3), make_exprListNode(make_callNode(make_predNode($4), make_exprListNode($1)))); }
+	| value_expression IS NULL_KEYWORD					{ $$ = make_callNode(make_predNode($3), make_exprListNode($1)); }
 	;
 	
-is_predicate: value_expression IS truth_value			{$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
-	| value_expression IS NOT truth_value				{$1->next_sibling = $4; $$ = make_callNode(make_predNode($3),  make_exprListNode(make_callNode(make_predNode($2), make_exprListNode($1)))); }
+is_predicate: value_expression IS truth_value			{ $1->next_sibling = $3;  $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	| value_expression IS NOT truth_value				{ $1->next_sibling = $4;  $$ = make_callNode(make_predNode($3),  make_exprListNode(make_callNode(make_predNode($2), make_exprListNode($1)))); }
 	;
 
-truth_value: TRUE 				{$$ = make_bool(1); }
-			| FALSE 			{$$ = make_bool(0); }
+truth_value: TRUE 				{ $$ = make_bool(1); }
+			| FALSE 			{ $$ = make_bool(0); }
 			;	
 
-overlaps_predicate: range_value_expression OVERLAPS range_value_expression 	{$1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+overlaps_predicate: range_value_expression OVERLAPS range_value_expression 	{ $1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
 	;
 	
-range_value_expression: '(' value_expression ',' value_expression ')' 		{$2->next_sibling = $4; $$ = $2; }
+range_value_expression: '(' value_expression ',' value_expression ')' 		{ $2->next_sibling = $4; $$ = $2; }
 	;
 	
 
 
 /******* 2.3.2: table expressions *******/
 
-joined_table: table_expression 										{ $$ = $1; }
-	| table_expression INNER JOIN joined_table on_clause			{ $$ = make_joinOn(INNER_JOIN_ON, $1, $4, $5); }	
-	| table_expression INNER JOIN joined_table using_clause			{ $$ = make_joinUsing(INNER_JOIN_USING, $1, $4, $5); } 
-	| table_expression FULL OUTER JOIN joined_table on_clause		{ $$ = make_joinOn(FULL_OUTER_JOIN_ON, $1, $5, $6); }
+joined_table: table_expression 										{ $$ = $1;                                                }
+	| table_expression INNER JOIN joined_table on_clause			{ $$ = make_joinOn(INNER_JOIN_ON, $1, $4, $5);            }	
+	| table_expression INNER JOIN joined_table using_clause			{ $$ = make_joinUsing(INNER_JOIN_USING, $1, $4, $5);      } 
+	| table_expression FULL OUTER JOIN joined_table on_clause		{ $$ = make_joinOn(FULL_OUTER_JOIN_ON, $1, $5, $6);       }
 	| table_expression FULL OUTER JOIN joined_table using_clause	{ $$ = make_joinUsing(FULL_OUTER_JOIN_USING, $1, $5, $6); } 
 	;
 
 
-on_clause: ON search_condition									{$$ = $2; }
+on_clause: ON and_search_condition								{ $$ = $2; } 
 	;
 
 using_clause: USING '(' comma_identifier_list ')' 				{ $$ = $3; }
 	;
 	
-table_expression: table_expression_main							{ $$ = $1; }
+table_expression: table_expression_main							{ $$ = $1;               } 
 	| FLATTEN '(' table_expression_main ')'						{ $$ = make_flatten($3); }
 	;
 		
 table_expression_main: ID ID 									{ $$ = make_alias(make_table($1), $2); }
 	| ID UC_AS ID 												{ $$ = make_alias(make_table($1), $3); }
-	| ID														{ $$ = make_table($1); }
-	| '(' joined_table ')' 										{ $$ = $2; }
+	| ID														{ $$ = make_table($1);                 }
+	| '(' joined_table ')' 										{ $$ = $2;                             }
 	;
 	
-//built_in_table_fun: FLATTEN ;
+//built_in_table_fun: FLATTEN ; //for now we are just gonna merge this with table expressions since we don't have other table functions....
 
-table_expressions: joined_table table_expressions_tail 				{if($2 == NULL){ $$ = $1; }else { $$ = make_cross($1, $2); } /*print_logical_query($$);*/}
+table_expressions: joined_table table_expressions_tail 				{ if($2 == NULL){ $$ = $1; } else { $$ = make_cross($1, $2); } }
 	;
 
-table_expressions_tail: ',' joined_table table_expressions_tail	 	 {if($3 == NULL){ $$ = $2; }else { $$ = make_cross($2, $3); } }
-	| /* epsilon */ 											     { $$ = NULL; }
+table_expressions_tail: ',' joined_table table_expressions_tail	 	 { if($3 == NULL){ $$ = $2; } else { $$ = make_cross($2, $3); } }
+	| /* epsilon */ 											     { $$ = NULL;                                                   }   
 	;
 
 /******* 2.5: table and view creation *******/	 
-create_table_or_view: CREATE TABLE ID create_spec             { put_sym(env, $3, TABLE_TYPE, 0, 0); $$ = make_createNode(CREATE_TABLE, $3, $4); /*print_create($$);*/}
-	| CREATE VIEW ID create_spec                              { put_sym(env, $3, VIEW_TYPE, 0, 0);  $$ = make_createNode(CREATE_VIEW, $3, $4); /*print_create($$);*/ }
+create_table_or_view: CREATE TABLE ID create_spec             { put_sym(env, $3, TABLE_TYPE, 0, 0); $$ = make_createNode(CREATE_TABLE, $3, $4); }
+	| CREATE VIEW ID create_spec                              { put_sym(env, $3, VIEW_TYPE, 0, 0);  $$ = make_createNode(CREATE_VIEW, $3, $4);  }
 	;
 
-create_spec: UC_AS full_query		{ $$ = make_querySource($2); }
+create_spec: UC_AS full_query		{ $$ = make_querySource($2);  }
 	|	'(' schema ')'				{ $$ = make_schemaSource($2); }
  	;
 	
@@ -405,8 +425,8 @@ schema: schema_element schema_tail { $1->next_sibling = $2; $$ = $1; }
 schema_element: ID type_name 	 { $$ = make_schemaNode($1, $2); }
 	; 
 
-schema_tail: ',' schema_element schema_tail      {$2->next_sibling = $3; $$ = $2; }
-	| /* epsilon */								{$$ = NULL; }
+schema_tail: ',' schema_element schema_tail      { $2->next_sibling = $3; $$ = $2; }
+	| /* epsilon */								 { $$ = NULL;                      }
 	;
 	
 type_name: TYPE_INT 	{$$ = $1; }
@@ -419,43 +439,43 @@ type_name: TYPE_INT 	{$$ = $1; }
 
 
 /******* 2.6: update, insert, delete statements *******/
-update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause { $$  = assemble_base(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7); /*print_logical_query($$);*/}
+update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause { $$  = assemble_base(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7); }
 	;
 
-set_clauses: set_clause set_clauses_tail {$1->next_sibling = $2; $$ = $1; }
+set_clauses: set_clause set_clauses_tail { $1->next_sibling = $2; $$ = $1; }
 	;
 
-set_clauses_tail: ',' set_clause set_clauses_tail	{$2->next_sibling = $3; $$ = $2; }
+set_clauses_tail: ',' set_clause set_clauses_tail	{ $2->next_sibling = $3; $$ = $2; }
 	| /* epsilon */									{ $$ = NULL; }
 	;
 
-set_clause: ID EQ_OP value_expression 			{$$ = make_NamedExprNode($1, $3); }
+set_clause: ID EQ_OP value_expression 			{ $$ = make_NamedExprNode($1, $3); }
 	;
 
-insert_statement: INSERT INTO ID order_clause insert_modifier insert_source {$$ = make_insert(assemble_base(NULL, make_table($3), $4, NULL, NULL), $5, $6); }
+insert_statement: INSERT INTO ID order_clause insert_modifier insert_source { $$ = make_insert(assemble_base(NULL, make_table($3), $4, NULL, NULL), $5, $6); }
 	;
 
 insert_modifier: '(' comma_identifier_list ')'					{  $$ = $2; }
 	| /* epsilon */												{  $$ = NULL; }
 	;
 	
-insert_source: full_query								{$$ = $1; }
-	| VALUES '(' comma_value_expression_list ')'		{$$ = make_FullQueryNode(NULL, make_values($3)); }
+insert_source: full_query								{ $$ = $1; }
+	| VALUES '(' comma_value_expression_list ')'		{ $$ = make_FullQueryNode(NULL, make_values($3)); }
 	;
 	
-delete_statement: DELETE FROM ID order_clause where_clause					{$$ = assemble_base(make_delete(NULL, NULL),make_table($3), $4, $5, NULL);  /*print_logical_query($$);*/}
-	| DELETE comma_identifier_list FROM ID 									{$$ = assemble_base(make_delete(NULL, $2), make_table($4), NULL, NULL, NULL); /*print_logical_query($$);*/}
+delete_statement: DELETE FROM ID order_clause where_clause					{ $$ = assemble_base(make_delete(NULL, NULL), make_table($3), $4, $5, NULL);   }
+	| DELETE comma_identifier_list FROM ID 									{ $$ = assemble_base(make_delete(NULL, $2), make_table($4), NULL, NULL, NULL); }
 	;
 
 /******* 2.7: user defined functions *******/
-		//TODO: we need to infer the properties of the function based on the function_body
-user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE, 1, 1); env = push_env(env);  /* define function, create new scope for args*/ }
+//TODO: we need to infer the properties of the function based on the function_body
+user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE, 1, 1); env = push_env(env);  } /* place function in symtable  and create new scope */
                         '(' 
 						    def_arg_list 	  
 					     ')' 
 						'{' 
-						    function_body 	  { /*print_symtable(env);*/ /* this is what is reachable during function body*/ }
-						'}'                   { env = pop_env(env); $$ =  make_UDFDefNode($2, $5, $8); /*print_udf_def($$);*/ } 
+						    function_body 	 
+						'}'                   { env = pop_env(env); $$ =  make_UDFDefNode($2, $5, $8);       } 
 						; 
 
 def_arg_list: ID  def_arg_list_tail		{ put_sym(env, $1, UNKNOWN_TYPE, 1, 0); $$ = make_IDListNode($1, $2); }			 
@@ -464,15 +484,15 @@ def_arg_list: ID  def_arg_list_tail		{ put_sym(env, $1, UNKNOWN_TYPE, 1, 0); $$ 
 	
 def_arg_list_tail: ',' ID def_arg_list_tail { put_sym(env, $2, UNKNOWN_TYPE, 1, 0); $$ = make_IDListNode($2, $3); }
 	| /* epsilon */							 {$$ = NULL; } 
+
 	;
 
-
-function_body: function_body_elem function_body_tail	{$1->next_sibling = $2; $$ = $1;}
-	| /* epsilon */										{$$ = NULL; }
+function_body: function_body_elem function_body_tail	{ $1->next_sibling = $2; $$ = $1;}
+	| /* epsilon */										{ $$ = NULL; }
 	;
 	
-function_body_tail: ';' function_body_elem function_body_tail {$2->next_sibling = $3; $$ = $2; }
-	| /* epsilon */	{ $$= NULL; }
+function_body_tail: ';' function_body_elem function_body_tail { $2->next_sibling = $3; $$ = $2; }
+	| /* epsilon */	                                          { $$= NULL; }
 	;
 	
 function_body_elem: value_expression		{$$ = make_UDFExpr($1);   }
@@ -484,35 +504,35 @@ function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UN
 
 
 /******* 2.8: value expressions *******/
-constant: INT 				{ $$ = make_int($1); }
-		| FLOAT 			{ $$ = make_float($1); }
-		| DATE 				{ $$ = make_date($1); }
+constant: INT 				{ $$ = make_int($1);    }  
+		| FLOAT 			{ $$ = make_float($1);  }
+		| DATE 				{ $$ = make_date($1);   }
 		| STRING 			{ $$ = make_string($1); }
-		| HEX 				{ $$ = make_hex($1); }
-		| truth_value 		{ $$ = $1; }
+		| HEX 				{ $$ = make_hex($1);    }
+		| truth_value 		{ $$ = $1;              }
 		;
 
-table_constant:  ROWID 					{ $$ = make_rowId(); }
-				| ID '.' ID 			{ $$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3));}
-				| TIMES_OP 				{ $$ = make_allColsNode(); }
+table_constant:  ROWID 					{ $$ = make_rowId();                                              }
+				| ID '.' ID 			{ $$ = make_colDotAccessNode(make_id(env, $1), make_id(env, $3)); }
+				| TIMES_OP 				{ $$ = make_allColsNode();                                        }
 				;
 
 
-case_expression: CASE case_clause when_clauses else_clause END 					{$$ = make_caseNode($2, $3, $4); }   
+case_expression: CASE case_clause when_clauses else_clause END 					{ $$ = make_caseNode($2, $3, $4); }   
 				  ;
 
-case_clause: value_expression	 { $$ = make_caseClauseNode($1);  }
+case_clause: value_expression	 { $$ = make_caseClauseNode($1);   }
 	| /* epsilon */				 { $$ = make_caseClauseNode(NULL); }
 	;
 	
-when_clauses: when_clause when_clauses_tail {$$ = make_whenClausesNode($1, $2); }
+when_clauses: when_clause when_clauses_tail { $$ = make_whenClausesNode($1, $2); }
 	;
 
-when_clauses_tail: when_clause when_clauses_tail {$$ = make_whenClausesNode($1, $2); }
-	| /* epsilon */	{$$ = NULL; }
+when_clauses_tail: when_clause when_clauses_tail { $$ = make_whenClausesNode($1, $2); }
+	| /* epsilon */	                             { $$ = NULL; }
 	;
 	
-when_clause: WHEN search_condition THEN value_expression  {$$ = make_caseWhenNode($2, $4); }
+when_clause: WHEN search_condition THEN value_expression  { $$ = make_caseWhenNode($2, $4); }
 	;
 
 else_clause: ELSE value_expression  { $$ = make_elseClauseNode($2); }
@@ -525,89 +545,89 @@ main_expression: constant 					{ $$ = $1; }
 			| case_expression 				{ $$ = $1; }
 			; 
 
-call: main_expression						{ $$ = $1; }
-	| main_expression '[' indexing ']' 		{ $$ = make_indexNode($1, $3); }
-	| built_in_fun '(' comma_value_expression_list ')' {$$ = make_callNode($1, $3); }
-	| built_in_fun '(' ')' 								{$$ = make_callNode($1, NULL); }
-	| ID '(' comma_value_expression_list ')' {$$ = make_callNode(make_udfNode(env, $1), $3); }
-	| ID '(' ')' 							 {$$ = make_callNode(make_udfNode(env, $1), NULL); }
+call: main_expression						              { $$ = $1;                                         }
+	| main_expression '[' indexing ']' 		              { $$ = make_indexNode($1, $3);                     }
+	| built_in_fun '(' comma_value_expression_list ')'    { $$ = make_callNode($1, $3);                      } 
+	| built_in_fun '(' ')' 								  { $$ = make_callNode($1, NULL);                    }
+	| ID '(' comma_value_expression_list ')'              { $$ = make_callNode(make_udfNode(env, $1), $3);   }
+	| ID '(' ')' 							              { $$ = make_callNode(make_udfNode(env, $1), NULL); }
 	;
 
 
-indexing: ODD 				{$$ = make_oddix();     }
-		| EVEN 				{$$ = make_evenix();     }
-		| EVERY INT 		{$$ = make_everynix($2); }
+indexing: ODD 				{ $$ = make_oddix();      }
+		| EVEN 				{ $$ = make_evenix();     }
+		| EVERY INT 		{ $$ = make_everynix($2); }
 		;
 
 built_in_fun: ABS 				{ $$ = make_builtInFunNode(env, $1); }
 	| AVG 						{ $$ = make_builtInFunNode(env, $1); }
 	| AVGS 						{ $$ = make_builtInFunNode(env, $1); }
-	| COUNT 				{ $$ = make_builtInFunNode(env, $1); }
-	| DELTAS 			{ $$ = make_builtInFunNode(env, $1); }
-	| DISTINCT 			{ $$ = make_builtInFunNode(env, $1); }
-	| DROP 	{ $$ = make_builtInFunNode(env, $1); }
-	| FILL 	{ $$ = make_builtInFunNode(env, $1); }
-	| FIRST 	{ $$ = make_builtInFunNode(env, $1); }
-	| LAST 	{ $$ = make_builtInFunNode(env, $1); }
-	| MAX 	{ $$ = make_builtInFunNode(env, $1); }
-	| MAXS 	{ $$ = make_builtInFunNode(env, $1); }
-	| MIN	{ $$ = make_builtInFunNode(env, $1); }
-	| MINS 	{ $$ = make_builtInFunNode(env, $1); }
-	| MOD 	{ $$ = make_builtInFunNode(env, $1); }
-	| NEXT 		{ $$ = make_builtInFunNode(env, $1); }
-	| PREV 	{ $$ = make_builtInFunNode(env, $1); }
-	| PRD 	{ $$ = make_builtInFunNode(env, $1); }
-	| PRDS 	{ $$ = make_builtInFunNode(env, $1); }
-	| REV 	{ $$ = make_builtInFunNode(env, $1); }
-	| SUM 	{ $$ = make_builtInFunNode(env, $1); }
-	| SUMS 		{ $$ = make_builtInFunNode(env, $1); }
-	| STDDEV 	{ $$ = make_builtInFunNode(env, $1); }
-	| MAKENULL	{ $$ = make_builtInFunNode(env, $1); }
+	| COUNT 				    { $$ = make_builtInFunNode(env, $1); }
+	| DELTAS 			        { $$ = make_builtInFunNode(env, $1); }
+	| DISTINCT 			        { $$ = make_builtInFunNode(env, $1); }
+	| DROP 	                    { $$ = make_builtInFunNode(env, $1); }
+	| FILL 	                    { $$ = make_builtInFunNode(env, $1); }
+	| FIRST 	                { $$ = make_builtInFunNode(env, $1); }
+	| LAST 	                    { $$ = make_builtInFunNode(env, $1); }
+	| MAX 	                    { $$ = make_builtInFunNode(env, $1); }
+	| MAXS 	                    { $$ = make_builtInFunNode(env, $1); }
+	| MIN	                    { $$ = make_builtInFunNode(env, $1); }
+	| MINS 	                    { $$ = make_builtInFunNode(env, $1); }
+	| MOD 	                    { $$ = make_builtInFunNode(env, $1); }
+	| NEXT 		                { $$ = make_builtInFunNode(env, $1); }
+	| PREV 	                    { $$ = make_builtInFunNode(env, $1); }
+	| PRD 	                    { $$ = make_builtInFunNode(env, $1); }
+	| PRDS 	                    { $$ = make_builtInFunNode(env, $1); }
+	| REV 	                    { $$ = make_builtInFunNode(env, $1); }
+	| SUM 	                    { $$ = make_builtInFunNode(env, $1); }
+	| SUMS 		                { $$ = make_builtInFunNode(env, $1); }
+	| STDDEV 	                { $$ = make_builtInFunNode(env, $1); }
+	| MAKENULL	                { $$ = make_builtInFunNode(env, $1); }
 	;
 	
-exp_expression: call 				{ $$ = $1; }
+exp_expression: call 				{ $$ = $1;                               }
 	| call EXP_OP exp_expression	{ $$ = make_arithNode(POW_EXPR, $1, $3); }
 	;
 
-mult_expression: exp_expression					{ $$ = $1; }
+mult_expression: exp_expression					    { $$ = $1;                                }
 	| mult_expression TIMES_OP exp_expression		{ $$ = make_arithNode(MULT_EXPR, $1, $3); }
-	| mult_expression DIV_OP exp_expression			{ $$ = make_arithNode(DIV_EXPR, $1, $3); }
+	| mult_expression DIV_OP exp_expression			{ $$ = make_arithNode(DIV_EXPR, $1, $3);  }
 	;
 	
 
-add_expression: mult_expression						{ $$ = $1; }
- 	| add_expression PLUS_OP mult_expression		{ $$ = make_arithNode(PLUS_EXPR, $1, $3); }
+add_expression: mult_expression						{ $$ = $1;                                 }   
+ 	| add_expression PLUS_OP mult_expression		{ $$ = make_arithNode(PLUS_EXPR, $1, $3);  }
 	| add_expression MINUS_OP mult_expression		{ $$ = make_arithNode(MINUS_EXPR, $1, $3); }
 	;
 	
-rel_expression: add_expression						{ $$ = $1; }
+rel_expression: add_expression						{ $$ = $1;                             }
 	| rel_expression L_OP add_expression			{ $$ = make_compNode(LT_EXPR, $1, $3); }
 	| rel_expression G_OP add_expression			{ $$ = make_compNode(GT_EXPR, $1, $3); }
 	| rel_expression LE_OP add_expression			{ $$ = make_compNode(LE_EXPR, $1, $3); }
 	| rel_expression GE_OP add_expression			{ $$ = make_compNode(GE_EXPR, $1, $3); }
 	;
 
-eq_expression: rel_expression						{$$ = $1; }
-	| eq_expression EQ_OP rel_expression			{ $$ = make_compNode(EQ_EXPR, $1, $3); }
+eq_expression: rel_expression						{ $$ = $1;                              } 
+	| eq_expression EQ_OP rel_expression			{ $$ = make_compNode(EQ_EXPR, $1, $3);  }
 	| eq_expression NEQ_OP rel_expression			{ $$ = make_compNode(NEQ_EXPR, $1, $3); }
 	;
 
-and_expression: eq_expression						{ $$ = $1; }
+and_expression: eq_expression						{ $$ = $1;                                  }
 	| and_expression AND_OP eq_expression			{ $$ = make_logicOpNode(LAND_EXPR, $1, $3); }
 	;
 
-or_expression: and_expression						{ $$ = $1; }
+or_expression: and_expression						{ $$ = $1;                                 }
 	| or_expression OR_OP and_expression			{ $$ = make_logicOpNode(LOR_EXPR, $1, $3); }
 	;
 	
-value_expression: or_expression 					{ /*print_expr($1, DUMMY,0, 0);*/ $$ = $1; } //TODO: delete dummy
+value_expression: or_expression 					{ $$ = $1; } 
 	;
 
  
-comma_value_expression_list: value_expression comma_value_expression_list_tail 	{ $1->next_sibling = $2; $1->order_dep |= SAFE_ORDER_DEP($2); $$ = make_exprListNode($1); }
+comma_value_expression_list: value_expression comma_value_expression_list_tail 	        { $1->next_sibling = $2; $$ = make_exprListNode($1); }
 		;
 
-comma_value_expression_list_tail: ',' value_expression comma_value_expression_list_tail { $2->next_sibling = $3; $2->order_dep |= SAFE_ORDER_DEP($3); $$ = $2; }
+comma_value_expression_list_tail: ',' value_expression comma_value_expression_list_tail { $2->next_sibling = $3; $$ = $2; }
 	| /* epsilon */																		{ $$ = NULL; }
 	;
 	
@@ -643,8 +663,9 @@ void yyerror(const char *s)
 
 void help()
 {
-	printf("Usage: ./a2q [-p] aquery_file\n");
+	printf("Usage: ./a2q [-p][-a <#>] aquery_file\n");
 	printf("-p  print dot file AST to stdout\n");
+	printf("-a  optimization level [0-1]\n");
 }
 
 
@@ -653,12 +674,14 @@ int main(int argc, char *argv[]) {
 	
 	/* Aquery compiler flags */
 	int print_ast_flag = 0;
+	optim_level = 0;
+	int max_optim_level = 1;
 	
 	/* getopt values */
 	int op;
 	
 	
-	while((op = getopt(argc, argv, "ph")) != -1)
+	while((op = getopt(argc, argv, "pha:")) != -1)
 	{
 		switch(op)
 		{
@@ -666,15 +689,43 @@ int main(int argc, char *argv[]) {
 				print_ast_flag = 1;
 				break;
 			case 'h':
+				printf("here h\n");
 				help();
+				exit(0);
+				break;
+			case 'a':
+				if(!isdigit(optarg[0]))
+				{
+					printf("-%c requires numeric arg\n", optopt);
+					help();
+					exit(1);
+				}
+				
+				optim_level = atoi(optarg);
+				
+				if(optim_level > max_optim_level)
+				{
+					printf("Defaulting to highest optimizing level:%d\n", max_optim_level);
+					optim_level = max_optim_level;
+				}
+				break;
+			case '?':
+				if(optopt == 'a')
+				{
+					printf("Option -%c requires an option\n", optopt);
+					exit(1);
+				}
 				break;
 			default:
  				exit(1);
 		}
 	}
 	
+	
+	
 	if(1 > argc - optind) 
 	{ //Did we get a file to analyze?
+		printf("missing, argc:%d and optind:%d\n", argc, optind);
 		help();
 		exit(1);
 	}
@@ -684,7 +735,6 @@ int main(int argc, char *argv[]) {
 	if(to_parse == NULL)
 	{
 		printf("Unable to open %s for reading\n", argv[optind]);
-		help();
 		exit(1);
 	}
 	else
