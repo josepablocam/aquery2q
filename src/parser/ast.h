@@ -41,7 +41,7 @@ typedef enum ExprNodeType {
   WHERE_OR_EXPR,
   //sorting optimizations
   SORT_IX,
-  DE_SORT_IX,
+  DE_SORT_IX
 } ExprNodeType;
 
 
@@ -50,6 +50,7 @@ typedef struct ExprNode {
 	DataType data_type;
 	int order_dep; //is this node order dependent
     int sub_order_dep; //does it have an order dependency somewhere in subtree?
+    int can_sort; //we should only index things that are sortable to begin with
 	union {
 		int ival;
 		float fval;
@@ -139,7 +140,9 @@ typedef enum LogicalQueryNodeType {
 	SORT, 
 	FLATTEN_FUN, 
 	EXPLICIT_VALUES,
-	COMPUTE_SORT_IX
+	COL_NAMES,
+    SORT_COLS,
+    SORT_EACH_COLS
 	} LogicalQueryNodeType;
 
 

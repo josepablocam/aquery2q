@@ -2,266 +2,658 @@
 	This file contains functions necessary for aquery optimizations
 */
 
-/*
-	Optim 1: sorting only necessary columns
 
-
-obs: we only sort expressions that are order dependent
-obs: all top level results in a projection are assumed to be order dependent
-	Meaning, we should make sure the resulting expressions are sorted....
-obs: once sorted a column remains sorted....
-obs: we want to delay sorts to after selections, so if we need to sort for filtering
-	we only want to sort those columns that are necessary
-
-
-Possible strategies:
-1 - update all columns that ever require order to their sorted variants
-	--> downside: also need to update any columns that they interact with,
-		which might otherwise not been sorted, if the other columns had not been updated
-	---> upside: avoid reindexing when unnecessary
-2 - apply indices in each location when needed
-	--> downside: reindexing into the same columns over and over 
-
-		consider:
-			prev(c2) = 1, c3 = max(c1 + c2)
-	  			--> the prev(c2) means we have to sort c2
-				--> assume c2:sort(c2)
-				--> now, for c1 + c2 to yield the same result, we need to sort(c1) (c1:sort(c1))
-				--> the comparison with c3 yields a boolean vector, which needs to be
-					aligned with that of prev(c2) = 1, so  we need to sort c3 (c3:sort(c3))
-				--> we performed 3 sorts total
-		vs
-			--> we use indices to index c2 and apply sort and comparison
-			--> we now add c1 and c2 (neither of which is sorted) and apply max
-			--> we apply sorting indices to c3 and perform the comparison
-			--> we performed 2 sorts total (using indices)
-
-However, if column c2 was used heavily in expressions that required order, then
-	we would have repeatedly indexed into the same values over and over....
-
-
-Option 2 also requires only local knowledge...I know what I need to sort based solely on my
-	parent's info and my own...
-Option 1 requires global knowledge (does columnX ever interact with a sorted columnY, if so I need to sort as well...)
-
-
-2 possible ways to sort
-
-
-obs: for where statements, if we sort the results of one column, we need to sort others, or revert to original sorting, because booleans need to line up
-obs: a similar statement is true for grouping as well
-
-There are 2 options in general to handle the above:
-	- desort sorted calculations
-	- sort everything else....
-
-And we still need to desort certain things, for example where expression needs to be de_sorted
-
-
-
-Approach
-	When building from bottom up, every expression is marked as OD, and only becomes OI if there is an OI operator applied to it. At every parent node, we take OD if either child is OD, otherwise it is OI.
-
-
-New strategy:
-	- for filter_where, we solely sort if necessary (and directly indexing), and de sort at end 
-	- if there is a group-by
-			if group-by is OI and projection is OI (ie only aggregates)
-					no sort necessary
-			if group-by is OD or projection is OD
-				- calculate sorting index
-				- sort all columns referenced with an update (we want to align data)
-	-if there is no group-by
-		- each projection expression should be analyzed separately by traversing the tree
-		 and indexing directly. Assume when entering tree that you need to sort
-		any column found. Continue assuming this until you hit an annihilator, in which case	don't sort anything until you hit another OD node.....
-
-	In projection, to figure out if it is order dependent or not,
-	it is not enough to check the tyep of the head node
-	because consider that c1 + c2 is usually marked as order independent
-	except that in a projection c1 + c2 the order matters. So we must
-	count any references to columns that occur in a tree not associated
-	with an order-independent operator....
-
-
-
-
-for projection OI means every expression is OI, so top nodes are things like
-max(c1) *  min(c2), avg(c4)
-
-
-
-Create a new query plan node
-compute_sort_ix takes order and table, and just returns table, and assigns a value to sort_ix as a side effect and a value to desort_ix, after that we can use both freely
-so a query plan could be 
-table -> compute_sort_ix -> filter(expressions) -> group_by(expressions) -> 
-
-
-
----->
-if group-by
-	if group-by order dependent || projection order dependent
-			find all referenced cols (not just those that are order dependent) and sort them
-	else
-			nothing to do :)
-else
-	if projection order-dependent
-		find all order-dependent cols using similar pattern as in where, but instead of indexing, return list, create sort update and then compute
-	else
-		nothing to do :)
-
-
-Argument for why group-by complicates:
-	assume we group. Now assume a projection expression e_1 is OD. for e_1 to align correctly with groups, we need to sort groups. Which in turn means we need to sort non-OD data.
-	---> conclusion: Note that the argument only relies on e_1 or g_1 being order dependent, either one messes things up.....
-
-	
-
-
-
-
-*/
 #include <stdio.h>
 #include "stdlib.h"
 #include "aquery_types.h"
 #include "ast.h"
 #include "ast_print.h"
+#include "optimizer.h"
+#include "string.h"
 
-
-#define OPTIM_DEBUG 0
+#define STAND_ALONE 1
+#define OPTIM_DEBUG 1
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
-#define OPTIM_1 1
 
 extern const char *ExprNodeTypeName[];
+extern int optim_level;
 
-int is_sortable(ExprNodeType type)
-{ //can we sort this
-	OPTIM_PRINT_DEBUG("checking sortability");
-	return type == ID_EXPR || type == ROWID_EXPR || type == COLDOTACCESS_EXPR;
-}
 
-/* only sorting what is necessary: optim 1 */
-ExprNode *make_singleColSort(ExprNode *expr)
+
+NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list)
 {
-	OPTIM_PRINT_DEBUG("making single column sort");
-	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
-	new_node->first_child = make_EmptyExprNode(SORT_IX);
-	new_node->first_child->next_sibling = expr;
-	//transfer sibling relationship to indexing node
-	new_node->next_sibling = expr->next_sibling;
-	expr->next_sibling = NULL; 
-	return new_node;
+    if(list == NULL)
+    {
+        return next_list;
+    }
+    else
+    {
+       NestedIDList *nl = malloc(sizeof(NestedIDList));
+       nl->list = list;
+       nl->next_list = next_list;
+       nl->marked = 0;
+       return nl; 
+    }
 }
 
-ExprNode *make_singleColDeSort(ExprNode *expr)
+
+
+//returns 1 if name is in list, 0 otherwise
+int in_IDList(char *name, IDListNode *list)
 {
-	OPTIM_PRINT_DEBUG("making single column sort");
-	ExprNode *new_node = make_EmptyExprNode(INDEX_EXPR);
-	new_node->first_child = make_EmptyExprNode(DE_SORT_IX);
-	new_node->first_child->next_sibling = expr;
-	return new_node;
-}
+    IDListNode *curr;
 
-//Sorts one column 
-LogicalQueryNode *make_computeSortIx(LogicalQueryNode *ord)
-{
-	OPTIM_PRINT_DEBUG("making computed sorting index");
-	LogicalQueryNode *ix = make_EmptyLogicalQueryNode(COMPUTE_SORT_IX);
-	ix->params.order = ord->params.order;
-	ix->arg = ord->arg;
-	return ix;
-}
-
-
-
-// minimize sorting necessary in where clause
-ExprNode *minsort_ixSortExpr(ExprNode *node, int apply_ix)
-{
-    int new_apply_ix = 0;
-	if(node != NULL)
-	{
-		OPTIM_PRINT_DEBUG("min sorting expression");
-		//printf("node:type:%s\n", ExprNodeTypeName[node->node_type]);
-		//printf("order dep:%d\n", node->order_dep);
-		
-		if(node->node_type == CALL_EXPR)
-		{
-			OPTIM_PRINT_DEBUG("opt1: found operator");
-			new_apply_ix = node->order_dep; //we apply the tag found at this operator (ie does operator affect order dependence)
-            //printf("sub_order_dep:%d\n", node->sub_order_dep);
-            if(node->sub_order_dep)
-            {
-               node->first_child = minsort_ixSortExpr(node->first_child, new_apply_ix); 
-            }
-            
-            node->next_sibling = minsort_ixSortExpr(node->next_sibling, apply_ix);
-            
-		}
-		else if(is_sortable(node->node_type) && apply_ix)
-		{   //if we've arrived at a node that needs application of index 
-            OPTIM_PRINT_DEBUG("opt1: must apply index here");
-			node = make_singleColSort(node);
-			node->next_sibling = minsort_ixSortExpr(node->next_sibling, apply_ix);
-		}
-		else
-		{
-            OPTIM_PRINT_DEBUG("opt1: exploring subtrees");
-       		node->first_child = minsort_ixSortExpr(node->first_child, apply_ix | node->order_dep);
-            node->next_sibling = minsort_ixSortExpr(node->next_sibling, apply_ix); 
-		}
-		
-	}
-	
-	return node;
-}
-
-
-
-LogicalQueryNode *minsort_where(LogicalQueryNode *where, LogicalQueryNode *order)
-{ //assume there is actually an order
+    for(curr = list; curr != NULL; curr = curr->next_sibling)
+    {
+        if(strcmp(name, curr->name) == 0)
+        {
+            return 1;
+        }
+    }
     
-	if(where != NULL && order != NULL && where->order_dep)
-	{
-		OPTIM_PRINT_DEBUG("min sorting where");
-		LogicalQueryNode *computing_ix = make_computeSortIx(order); //calc and store sorting indices
-		where->params.exprs = minsort_ixSortExpr(where->params.exprs, where->params.exprs->order_dep); //sort any columns in expressions
-		where->params.exprs = make_singleColDeSort(where->params.exprs); //desort final result
-		where->arg = computing_ix;
-		return where;
-		
-	}
-	
-	return where;
-	
+    return 0;
 }
 
-LogicalQueryNode *assemble_optim1(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+IDListNode *unionIDList(IDListNode *x, IDListNode *y)
 {
-	LogicalQueryNode *plan = from;
-	//removing unnecessary sorting in where
-	where = minsort_where(where, order);
-	plan = pushdown_logical(where, plan);
-	plan = pushdown_logical(grouphaving, plan);
-	return pushdown_logical(proj, plan);
-	
+    OPTIM_PRINT_DEBUG("---->new union");
+    IDListNode *prev_y, *curr_y, *next_y;
+    
+    if(y == NULL)
+    { //no point searching concatenation locaiton if y is empty
+        return x;
+    }
+    else if(x == NULL)
+    {
+        return y;
+    }
+    else
+    {
+        for(prev_y = NULL, curr_y = y; curr_y != NULL; curr_y = next_y)
+        {
+            if(!in_IDList(curr_y->name, x))
+            { 
+                next_y = curr_y->next_sibling; //save down the sibling for y
+                curr_y->next_sibling = x; //cons element in y to x
+                x = curr_y; //set x to head of cons list
+                
+                if(prev_y != NULL) 
+                { //if we're not at beginning of list, set the sibling pointer of last element to the next y
+                    prev_y->next_sibling = next_y;
+                }
+            }
+            else
+            {
+                next_y = curr_y->next_sibling;
+                prev_y = curr_y;
+            }
+        }
+        
+
+        
+        return x;
+    }
 }
+
+
+//Collect the columns that need to be sorted given dependencies in an expression AST
+IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start)
+{
+    IDListNode **need_sort_ptr = malloc(sizeof(IDListNode *));
+    *need_sort_ptr = NULL; 
+    
+    NestedIDList **potential_ptr = malloc(sizeof(NestedIDList *));
+    *potential_ptr = NULL;
+    
+    
+    IDListNode *top = collect_sortCols0(od_expr, add_from_start, need_sort_ptr, potential_ptr);
+    *potential_ptr = make_NestedIDList(top, *potential_ptr);
+    
+    OPTIM_PRINT_DEBUG("returned from collect_sortCols0");
+    
+    NestedIDList *related = NULL;
+    IDListNode *elem = NULL;
+    IDListNode *need_sort = *need_sort_ptr;
+    
+    int added = 1;
+    while(added != 0)
+    {
+        added = 0;
+        for(related = *potential_ptr; related != NULL; related = related->next_list)
+        {   
+            for(elem = related->list; elem != NULL && !related->marked; elem = elem->next_sibling)
+            {
+                OPTIM_PRINT_DEBUG("Checking related:");
+                //print_id_list(related->list, n, &n);
+                if(in_IDList(elem->name, need_sort))
+                {
+                    OPTIM_PRINT_DEBUG("found contaminated list");
+                    need_sort = unionIDList(need_sort, related->list); //add to sorting list
+                    OPTIM_PRINT_DEBUG("new list for sorting");
+                    //print_id_list(need_sort, n, &n);
+                    related->marked = 1; //mark as visited
+                    added = 1;
+                    break;
+                }
+            }
+        }
+    }
+    
+    //TODO: free up memory for structures used in this search
+    return need_sort;
+}
+
+void print_nested_id_list(NestedIDList *nl)
+{
+    NestedIDList *curr = nl;
+    IDListNode *list;
+    
+    while(curr != NULL)
+    {
+        putchar('(');
+        list = curr->list;
+        while(list != NULL)
+        {
+            printf("%s,", list->name);
+            list = list->next_sibling;
+        }
+        printf(")\n");
+        curr = curr->next_list;     
+    }
+    
+}
+
+//Collect the columns that need to be sorted given dependencies in a named expression AST
+IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
+{
+    IDListNode **need_sort_ptr = malloc(sizeof(IDListNode *));
+    *need_sort_ptr = NULL; 
+    
+    NestedIDList **potential_ptr = malloc(sizeof(NestedIDList *));
+    *potential_ptr = NULL;
+    
+    IDListNode *top = NULL;
+    NamedExprNode *curr_nexpr;
+    
+    curr_nexpr = nexprs;
+    int x = 0;
+    while(curr_nexpr != NULL)
+    { 
+        OPTIM_PRINT_DEBUG("running over named expression");
+        print_expr(curr_nexpr->expr, x, &x);
+        top = collect_sortCols0(curr_nexpr->expr, add_from_start, need_sort_ptr, potential_ptr);
+        *potential_ptr = make_NestedIDList(top, *potential_ptr);
+        
+        curr_nexpr = curr_nexpr->next_sibling;
+        
+       
+        OPTIM_PRINT_DEBUG("current set of need_sort are");
+        print_id_list(*need_sort_ptr, x, &x);
+        
+        OPTIM_PRINT_DEBUG("current potentials are");
+        print_nested_id_list(*potential_ptr);
+    }
+
+    OPTIM_PRINT_DEBUG("returned from collect_sortCols0");
+    
+    NestedIDList *related = NULL;
+    IDListNode *elem = NULL;
+    IDListNode *need_sort = *need_sort_ptr;
+    
+    int added = 1;
+    while(added != 0)
+    {
+        added = 0;
+        for(related = *potential_ptr; related != NULL; related = related->next_list)
+        {   
+            for(elem = related->list; elem != NULL && !related->marked; elem = elem->next_sibling)
+            {
+                OPTIM_PRINT_DEBUG("Checking related:");
+                //print_id_list(related->list, n, &n);
+                if(in_IDList(elem->name, need_sort))
+                {
+                    OPTIM_PRINT_DEBUG("found contaminated list");
+                    need_sort = unionIDList(need_sort, related->list); //add to sorting list
+                    OPTIM_PRINT_DEBUG("new list for sorting");
+                    //print_id_list(need_sort, n, &n);
+                    related->marked = 1; //mark as visited
+                    added = 1;
+                    break;
+                }
+            }
+        }
+    }
+    
+    //TODO: free up memory for structures used in this search
+    return need_sort;
+}
+
+IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort_ptr, NestedIDList **potential_ptr)
+{
+    IDListNode *child = NULL;
+    IDListNode *sibling = NULL;
+    int new_add_flag = 0;
+
+    if(node == NULL)
+    {
+        return NULL;   
+    }
+    else if(node->node_type == ID_EXPR)
+    {
+        OPTIM_PRINT_DEBUG("found id");
+        
+        if(add_flag)
+        {
+            OPTIM_PRINT_DEBUG("adding id to sort list");
+            *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(node->data.str, NULL));//union with list of def sorted
+            collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //explore sibling
+            return NULL; //already appending here, so just return a null
+        }
+        else
+        {
+            OPTIM_PRINT_DEBUG("sending id back up");
+            child = make_IDListNode(node->data.str, NULL); //return id to add to potential
+            sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+            return unionIDList(child, sibling);
+        }       
+    }
+    else if(node->node_type == COLDOTACCESS_EXPR)
+    { //TODO: figure out how to handle dot column accesses
+       OPTIM_PRINT_DEBUG("found col dot access, accessing dest child");
+       return collect_sortCols0(node->first_child->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+    }
+    else if(node->node_type == CALL_EXPR)
+    {
+        new_add_flag = node->order_dep;
+
+        if(!new_add_flag)
+        { //we have reached an order-independent function call, like max/min
+            OPTIM_PRINT_DEBUG("found order annihilating call, exploring child");
+            child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr);
+            OPTIM_PRINT_DEBUG("appending potential list at order annihilating call");
+            *potential_ptr = make_NestedIDList(child, *potential_ptr);    
+            OPTIM_PRINT_DEBUG("exploring call's sibling");
+            sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+            return NULL; //stop sending back names to get collected
+        }
+        else
+        {
+            OPTIM_PRINT_DEBUG("found order dependent call, exploring args");
+            child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr);
+            sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+            OPTIM_PRINT_DEBUG("done exploring order dependent call, returning list of ");
+            return NULL; //no need to send back names
+        }
+    }
+    else
+    {
+        OPTIM_PRINT_DEBUG("found random node, exploring child");
+        child = collect_sortCols0(node->first_child, add_flag | node->order_dep, need_sort_ptr, potential_ptr);
+        OPTIM_PRINT_DEBUG("exploring random node's sibling");
+        sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+        child = unionIDList(child, sibling);
+        return child;
+    }
+    
+}
+
+//Extract all ids referenced in an expression
+IDListNode *collect_AllCols(ExprNode *node)
+{
+    IDListNode *child = NULL;
+    IDListNode *sibling = NULL;
+
+    if(node == NULL)
+    {
+        return NULL;   
+    }
+    else if(node->node_type == ID_EXPR)
+    {
+        child = make_IDListNode(node->data.str, NULL);
+        sibling = collect_AllCols(node->next_sibling);
+        return unionIDList(child, sibling);     
+    }
+    else if(node->node_type == COLDOTACCESS_EXPR)
+    { //TODO: figure out how to handle dot column accesses
+       return collect_AllCols(node->first_child->next_sibling);
+    }
+    else if(node->node_type == BUILT_IN_FUN_CALL || node->node_type == UDF_CALL)
+    {
+        return collect_AllCols(node->next_sibling);
+    }
+    else
+    {
+        child = collect_AllCols(node->first_child);
+        sibling =  collect_AllCols(node->next_sibling);
+        return unionIDList(child, sibling);
+    }
+    
+}
+
+IDListNode *collect_AllColsNamedExpr(NamedExprNode *node)
+{
+    IDListNode *result = NULL;
+    NamedExprNode *curr = node;
+
+    while(curr != NULL)
+    {
+        result = unionIDList(result, collect_AllCols(curr->expr));
+        curr = curr->next_sibling;
+    }
+    
+    return result;
+}
+
+
+
+//Add element add to end of list
+ExprNode *append_toExpr(ExprNode *list, ExprNode *add)
+{
+    ExprNode *prev, *curr;
+    
+    for(prev = curr = list; curr != NULL; prev = curr, curr = curr->next_sibling)
+    {
+        /* searching for first empty spot at end of list */
+    }
+    
+    if(prev == NULL)
+    {
+        return add;
+    }
+    else
+    {
+        prev->next_sibling = add;
+        return list;
+    }    
+}
+
+//Partition a list of expressions into order independent and order dependent lists
+//NOTE: renders original expression useless, since manipulates all the pointers etc
+void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_dep)
+{
+    ExprNode *curr, *next;
+ 
+    for(next = curr = expr->first_child; curr != NULL; curr = next)
+    {
+        next = curr->next_sibling;
+        curr->next_sibling = NULL;
+        
+        if(curr->order_dep || curr->sub_order_dep)
+        {
+            *order_indep = append_toExpr(*order_indep, curr);
+        }
+        else
+        {
+           *order_dep = append_toExpr(*order_dep, curr); 
+        }
+    }    
+}
+
+LogicalQueryNode *make_specCols(IDListNode *cols)
+{
+    LogicalQueryNode *spec_cols = make_EmptyLogicalQueryNode(COL_NAMES);
+    spec_cols->params.cols = cols; 
+    return spec_cols;
+}
+
+LogicalQueryNode *make_sortCols(OrderNode *order, IDListNode *cols)
+{
+    LogicalQueryNode *sort = make_EmptyLogicalQueryNode(SORT_COLS);
+    sort->params.order = order;
+    sort->next_arg = make_specCols(cols);
+    return sort;
+}
+
+LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols)
+{
+    LogicalQueryNode *sort = make_EmptyLogicalQueryNode(SORT_EACH_COLS);
+    sort->params.order = order;
+    sort->next_arg = make_specCols(cols);
+    return sort;
+}
+
+
+LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+{
+    LogicalQueryNode *order_indep_filter = NULL;
+    LogicalQueryNode *order_dep_filter = NULL;
+    LogicalQueryNode *sort = NULL;
+    ExprNode *order_indep_exprs = NULL;
+    ExprNode *order_dep_exprs = NULL;
+    
+    part_ExprOnOrder(where->params.exprs, &order_indep_exprs, &order_dep_exprs);
+    
+    if(order_indep_exprs != NULL)
+    { //perform any order-independent filtering first
+        order_indep_filter = make_filterWhere(NULL, order_indep_exprs);
+        
+    }
+    
+    order_dep_filter = make_filterWhere(NULL, order_dep_exprs);
+    
+    //Find all column references in projection and groupbyclauses
+    IDListNode *all_cols_proj = collect_AllColsNamedExpr(proj->params.namedexprs);
+    IDListNode *all_cols_group = NULL;
+    
+    if(grouphaving->node_type == FILTER_HAVING)
+    { //has having and grouping steps, need to get column references in both
+        all_cols_group = unionIDList(collect_AllCols(grouphaving->params.exprs), collect_AllCols(grouphaving->arg->params.exprs));
+    }
+    else
+    {
+        all_cols_group = collect_AllCols(grouphaving->params.exprs);
+    }
+    
+    IDListNode *all_cols = unionIDList(all_cols_proj, all_cols_group);
+    
+    if(in_IDList("*", all_cols))
+    { //referencing "all columns" results in a full sort
+        sort = order; 
+    }
+    else
+    {
+       sort = make_sortCols(order->params.order, all_cols);
+    }
+   
+    //filter order independent, then sort, then filter order dependent
+    where = pushdown_logical(sort, order_indep_filter); 
+    where = pushdown_logical(order_dep_filter, where);
+    return where;  
+}
+
+LogicalQueryNode *optim_sort_group(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+{    
+    LogicalQueryNode *sort = NULL;
+    
+    if(grouphaving->order_dep)
+    { //need to sort everything used
+        IDListNode *all_cols_proj = collect_AllColsNamedExpr(proj->params.namedexprs);
+        IDListNode *all_cols_group = NULL; 
+         
+        if(grouphaving->node_type == FILTER_HAVING)
+        {
+            all_cols_group = unionIDList(collect_AllCols(grouphaving->params.exprs), collect_AllCols(grouphaving->arg->params.exprs));
+        }
+        else
+        {
+            all_cols_group = collect_AllCols(grouphaving->params.exprs);
+        }
+        
+        IDListNode *all_cols = unionIDList(all_cols_group, all_cols_proj);
+        
+        if(in_IDList("*", all_cols))
+        { //referencing "all columns" results in a full sort
+            sort = order; 
+        }
+        else
+        {
+           sort = make_sortCols(order->params.order, all_cols);
+        }
+        
+        return pushdown_logical(grouphaving, sort);
+    }
+    else
+    { //sort-each only relevant columns 
+        //assume things need to be sorted unless there is order annihilating operators
+        IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
+        
+        if(proj_order_cols == NULL)
+        {
+            return grouphaving;
+        }
+        else if(in_IDList("*", proj_order_cols))
+        { //referencing "all columns" results in a full sort
+            sort = order; 
+            return pushdown_logical(grouphaving, sort);
+        }
+        else 
+        {
+           sort = make_sortEachCols(order->params.order, proj_order_cols);
+           return pushdown_logical(sort, grouphaving);
+        }  
+    }
+    
+    return grouphaving;
+}
+
+LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+{
+     IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
+     LogicalQueryNode *sort = NULL;
+     
+    if(proj_order_cols == NULL)
+    {
+        return proj;
+    }
+    else if(in_IDList("*", proj_order_cols))
+    { //referencing "all columns" results in a full sort
+        sort = order; 
+        return pushdown_logical(proj, sort);     
+    }
+    else
+    {
+        sort = make_sortCols(order->params.order, proj_order_cols);
+        return pushdown_logical(proj, sort);
+    }
+     
+}
+
+
+LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+{
+    if(order != NULL)
+    {
+        if(where != NULL && where->order_dep)
+        {
+            where = optim_sort_where(proj, from, order, where, grouphaving);
+        }
+        else if(grouphaving != NULL)
+        { 
+            grouphaving = optim_sort_group(proj, from, order, where, grouphaving);
+        }
+        else //just check projection clauses
+        {
+            proj = optim_sort_proj(proj, from, order, where, grouphaving);
+        }
+    }
+    
+    //send things along to assemble as usual...
+    return assemble_base(proj, from, NULL, where, grouphaving);
+}
+
+
+
 
 LogicalQueryNode *assemble_plan(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
-	//printf("%d\n", OPTIM_1);
-	if(OPTIM_1)
-	{
-		return assemble_optim1(proj, from, order, where, grouphaving);
-	}
-	else
-	{
-		return assemble_base(proj, from, order, where, grouphaving);
-	}
+    return assemble_base(proj, from, order, where, grouphaving);
 }
 
 
 
 
+#if STAND_ALONE
+int main()
+{
+    ///Testing extracting indirect order dependencies affected by sorting
+    Symtable *env = init_symtable();
+    ExprNode *id1 = make_id(env, "c1");
+    ExprNode *id2 = make_id(env, "c2");
+    ExprNode *id31 = make_id(env, "c3");
+    ExprNode *id32 = make_id(env, "c3");
+    ExprNode *id4 = make_id(env, "c4");
+    
+    ExprNode *op1  = make_arithNode(PLUS_EXPR, id31, id4); //c3 + c4
+    ExprNode *op2  = make_callNode(make_builtInFunNode(env, "min"), op1); //min(c3+c4)
+    ExprNode *op3  = make_arithNode(PLUS_EXPR, id2, op2); //c2 + min(c3+c4)
+    ExprNode *op4  = make_arithNode(MULT_EXPR, id1, op3); //c1 * (c2 + min(c3+c4))
+    ExprNode *op5  = make_callNode(make_builtInFunNode(env, "max"), op4); //max(c1 * (c2 + min(c3 + c4)))
+    ExprNode *op6  = make_callNode(make_builtInFunNode(env, "sums"), id32); //first(c3)
+    ExprNode *comb = make_arithNode(MULT_EXPR, op5, op6); //max(c1 * (c2 + min(c3 + c4))) * first(c3)   
+     
+    int x = 0;
+    printf("digraph {\n");
+    print_expr(comb, x, &x);
+    printf("}\n");
+    
+    IDListNode *deps = collect_sortCols(comb, 0);
+    OPTIM_PRINT_DEBUG("final sorting list");
+    print_id_list(deps, x, &x);
+    
+    //Testing partitioning an expression list based on order dependency information
+    ExprNode *p_id1 = make_id(env, "c1");
+    ExprNode *p_id2 = make_id(env, "c2");
+    p_id1->order_dep = 1;
+    p_id2->order_dep = 1;
+    
+    ExprNode *p_id3 = make_id(env, "c3");
+    p_id3->order_dep = 0;
+    
+    ExprNode *p_id4 = make_id(env, "c4");
+    p_id4->order_dep = 1;
+    
+    p_id1->next_sibling = p_id2;
+    p_id2->next_sibling = p_id3;
+    p_id3->next_sibling = p_id4;
+    
+    
+    ExprNode *exprlist = make_exprListNode(p_id1);
+    ExprNode *order_dep = NULL;
+    ExprNode *order_indep = NULL;
+    
+    part_ExprOnOrder(exprlist,&order_indep, &order_dep);
+    OPTIM_PRINT_DEBUG("order-independent expressions from paritioning");
+    print_expr(order_indep, x, &x);
+    OPTIM_PRINT_DEBUG("order-dependent expressions from paritioning");
+    print_expr(order_dep, x, &x);
+    
+    OPTIM_PRINT_DEBUG("All columns");
+    print_id_list(collect_AllCols(comb), x, &x);
+     OPTIM_PRINT_DEBUG("expression");
+    print_expr(comb, x, &x);
+    
+    //TODO:
+    // 1 - Test collecting order dependencies on named expressions
+    // 2 - Change AST printing to account for new badass nodes
+    // 3 - Give this a whirl!
+    
+    NamedExprNode *n1 = make_NamedExprNode("calc_1", comb);
+    ExprNode *idx = make_id(env,"rand");
+    ExprNode *idx2 = make_id(env, "c4");
+    ExprNode *add_em = make_arithNode(PLUS_EXPR, idx, idx2);
+    NamedExprNode *n2 = make_NamedExprNode("calc_2", add_em);
+    n1->next_sibling = n2;
+    OPTIM_PRINT_DEBUG("******looking for order dependencies in named expressions");
+    IDListNode *found =  collect_sortColsNamedExpr(n1, 0);
+    print_id_list(found, x, &x);
+    
+    ///Assemble a query by hand
+    
+    
+    
+    
+}
+#endif
 
 
 

@@ -4,17 +4,41 @@
 #include "ast.h"
 #include "aquery_types.h"
 
-int is_sortable(ExprNodeType type);
+
+
+typedef struct NestedIDList
+{
+    IDListNode *list;
+    struct NestedIDList *next_list;
+    int marked;
+} NestedIDList;
+
+NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list);
+IDListNode *unionIDList(IDListNode *x, IDListNode *y);
+int in_IDList(char *name, IDListNode *list);
+IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start);
+IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start);
+IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort, NestedIDList **potential);
+
+ExprNode *append_toExpr(ExprNode *list, ExprNode *add);
+void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_dep);
+IDListNode *collect_AllCols(ExprNode *node);
+IDListNode *collect_AllColsNamedExpr(NamedExprNode *node);
 
 //Optimization 1: sorting only necessary columns
-ExprNode *make_singleColSort(ExprNode *expr);
-ExprNode *make_singleColDeSort(ExprNode *expr);
-LogicalQueryNode *make_computeSortIx(LogicalQueryNode *ord);
-ExprNode *minsort_ixSortExpr(ExprNode *node, int create_ix);
-LogicalQueryNode *minsort_where(LogicalQueryNode *where, LogicalQueryNode *order);
-LogicalQueryNode *assemble_optim1(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
+LogicalQueryNode *make_specCols(IDListNode *cols);
+LogicalQueryNode *make_sortCols(OrderNode *order, IDListNode *cols);
+LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols);
+
+LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
+LogicalQueryNode *optim_sort_group(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
+LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
+
+
+LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 LogicalQueryNode *assemble_plan(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 
-
+//Optimization 2: separating order-dependent from order-independent expressions in a list
+void print_nested_id_list(NestedIDList *nl);
 
 #endif

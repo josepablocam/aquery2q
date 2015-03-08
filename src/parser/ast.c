@@ -35,6 +35,7 @@ ExprNode *make_EmptyExprNode(ExprNodeType type)
 	node->data_type = UNKNOWN_TYPE;
 	node->order_dep = 0;
     node->sub_order_dep = 0;
+    node->can_sort = 0;
 	return node;
 }
 
@@ -106,6 +107,7 @@ ExprNode *make_id(Symtable *symtable, char *id)
 	Symentry *info = lookup_sym(symtable, id);
 	node->data_type = UNKNOWN_TYPE; //TODO: fix this: (info != NULL) ? info->type : 
 	node->data.str = id;
+    node->can_sort = 1;
 	return node;
 }
 
@@ -215,6 +217,7 @@ ExprNode *make_callNode(ExprNode *fun, ExprNode *args)
     spread_order(new_node, args);
     new_node->order_dep = fun->order_dep;
     new_node->sub_order_dep |= new_node->order_dep;
+    new_node->can_sort = fun->order_dep; //we can sort stuff
 	return new_node;	
 }
 
@@ -233,16 +236,16 @@ ExprNode *make_udfNode(Symtable *symtable, char *nm)
 {
 	AST_PRINT_DEBUG("making udf node");
 	ExprNode *new_node = make_EmptyExprNode(UDF_CALL);
-	Symentry *entry = lookup_sym(symtable, nm);
+	Symentry *meta_info = lookup_sym(symtable, nm);
 	
-	if(entry != NULL && entry->type != FUNCTION_TYPE)
+	if(meta_info != NULL && meta_info->type != FUNCTION_TYPE)
 	{
 		new_node->data_type = ERROR_TYPE; //TODO: type error reporting add...
 	}
 	
 	//TODO: we should reason about whether a user function is order dependent, not assume
 	new_node->data.str = nm;
-    new_node->order_dep = entry == NULL || SAFE_ORDER_DEP(entry);
+    new_node->order_dep = meta_info == NULL || SAFE_ORDER_DEP(meta_info);
 	return new_node;
 }
 
@@ -283,6 +286,7 @@ ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	x->next_sibling = y;
     spread_order(new_node, x);
     spread_order(new_node, y);
+    new_node->can_sort = x->can_sort || y->can_sort;
 	return new_node;	
 }
 
@@ -296,6 +300,7 @@ ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	x->next_sibling = y;
     spread_order(new_node, x);
     spread_order(new_node, y);
+    new_node->can_sort = x->can_sort || y->can_sort;
 	return new_node;
 }
 
@@ -315,6 +320,7 @@ ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	x->next_sibling = y;
     spread_order(new_node, x);
     spread_order(new_node, y);
+    new_node->can_sort = x->can_sort || y->can_sort;
 	return new_node;
 }
 
@@ -336,6 +342,9 @@ ExprNode *make_exprListNode(ExprNode *data)
     
 	return list;
 }
+
+
+
 
 
 /******* 2.7: user defined functions *******/
@@ -584,6 +593,7 @@ LogicalQueryNode *make_values(ExprNode *exprs)
 
 
 //We need a way to send down an argument into the logical query plan
+//place RHS within lhs
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs)
 {
 	LogicalQueryNode *prev, *curr;
