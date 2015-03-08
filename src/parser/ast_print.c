@@ -4,6 +4,7 @@
 #include "aquery_types.h"
 #include "ast_print.h"
 
+#define AST_PRINT_DEBUG 0
 #define STAND_ALONE 0
 
 const char *ExprNodeTypeName[]= {
@@ -40,9 +41,7 @@ const char *ExprNodeTypeName[]= {
 	"expr_list",
 	"predicate",
 	"AND",
-	"OR",
-	"sort_ix",
-	"de_sort_ix"
+	"OR"
 	};
 
 const char* LogicalQueryNodeTypeName[] = {
@@ -62,7 +61,9 @@ const char* LogicalQueryNodeTypeName[] = {
 	"sort", 
 	"flatten", 
 	"values",
-	"compute_sort_ix"
+	"col_names",
+    "sort",
+    "sort-each"
 };
 
 const char* CreateNodeTypeName[] = {
@@ -249,8 +250,15 @@ void print_logical_query(LogicalQueryNode *step, int parent_id, int *id)
 				break;
 			case EXPLICIT_VALUES:
 				print_values(step, parent_id, id);
-			case COMPUTE_SORT_IX:
-				print_compute_sortix(step, parent_id, id);
+                break;
+            case COL_NAMES:
+                print_col_spec(step, parent_id, id);
+                break;
+            case SORT_COLS:
+            case SORT_EACH_COLS:
+                print_sort_cols(step, parent_id, id);
+                break;
+                
 		}
 		
 	}
@@ -354,6 +362,21 @@ void print_compute_sortix(LogicalQueryNode *comp, int parent_id, int *id)
 	print_logical_query(comp->arg, self_id, id);
 }
 
+void print_col_spec(LogicalQueryNode *cols, int parent_id, int *id)
+{
+	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[cols->node_type]);
+    print_id_list(cols->params.cols, self_id, id);
+}
+
+void print_sort_cols(LogicalQueryNode *sort, int parent_id, int *id)
+{
+	int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[sort->node_type]);
+	print_order(sort->params.order, self_id, id);
+    print_logical_query(sort->next_arg, self_id, id);
+	print_logical_query(sort->arg, self_id, id);
+}
+
+
 //print expr
 void print_expr(ExprNode *expr, int parent_id, int *id)
 {
@@ -385,7 +408,15 @@ void print_expr(ExprNode *expr, int parent_id, int *id)
 		}
 		else
 		{
-			sprintf(label, "%s, od:%d, sod:%d", ExprNodeTypeName[expr->node_type], expr->order_dep, expr->sub_order_dep);
+            if(AST_PRINT_DEBUG)
+            {
+                sprintf(label, "%s, od:%d, sod:%d", ExprNodeTypeName[expr->node_type], expr->order_dep, expr->sub_order_dep); 
+            }
+            else
+            {
+                sprintf(label, "%s", ExprNodeTypeName[expr->node_type]);
+            }
+			
 			int self_id = print_self(parent_id, id, label);
 			print_expr(expr->first_child, self_id, id);
 		}

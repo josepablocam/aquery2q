@@ -11,8 +11,8 @@
 #include "optimizer.h"
 #include "string.h"
 
-#define STAND_ALONE 1
-#define OPTIM_DEBUG 1
+#define STAND_ALONE 0
+#define OPTIM_DEBUG 0
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
 
 extern const char *ExprNodeTypeName[];
@@ -180,7 +180,7 @@ IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
     while(curr_nexpr != NULL)
     { 
         OPTIM_PRINT_DEBUG("running over named expression");
-        print_expr(curr_nexpr->expr, x, &x);
+        //print_expr(curr_nexpr->expr, x, &x);
         top = collect_sortCols0(curr_nexpr->expr, add_from_start, need_sort_ptr, potential_ptr);
         *potential_ptr = make_NestedIDList(top, *potential_ptr);
         
@@ -188,10 +188,10 @@ IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
         
        
         OPTIM_PRINT_DEBUG("current set of need_sort are");
-        print_id_list(*need_sort_ptr, x, &x);
+        //print_id_list(*need_sort_ptr, x, &x);
         
         OPTIM_PRINT_DEBUG("current potentials are");
-        print_nested_id_list(*potential_ptr);
+        //print_nested_id_list(*potential_ptr);
     }
 
     OPTIM_PRINT_DEBUG("returned from collect_sortCols0");
@@ -300,6 +300,7 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
 //Extract all ids referenced in an expression
 IDListNode *collect_AllCols(ExprNode *node)
 {
+    OPTIM_PRINT_DEBUG("collecting all col refs");
     IDListNode *child = NULL;
     IDListNode *sibling = NULL;
 
@@ -332,6 +333,7 @@ IDListNode *collect_AllCols(ExprNode *node)
 
 IDListNode *collect_AllColsNamedExpr(NamedExprNode *node)
 {
+    OPTIM_PRINT_DEBUG("collecting all col refs in named expr");
     IDListNode *result = NULL;
     NamedExprNode *curr = node;
 
@@ -371,6 +373,7 @@ ExprNode *append_toExpr(ExprNode *list, ExprNode *add)
 //NOTE: renders original expression useless, since manipulates all the pointers etc
 void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_dep)
 {
+    OPTIM_PRINT_DEBUG("partitioning expression list on order");
     ExprNode *curr, *next;
  
     for(next = curr = expr->first_child; curr != NULL; curr = next)
@@ -380,11 +383,11 @@ void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_d
         
         if(curr->order_dep || curr->sub_order_dep)
         {
-            *order_indep = append_toExpr(*order_indep, curr);
+            *order_dep = append_toExpr(*order_dep, curr);
         }
         else
         {
-           *order_dep = append_toExpr(*order_dep, curr); 
+           *order_indep = append_toExpr(*order_indep, curr); 
         }
     }    
 }
@@ -415,6 +418,7 @@ LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols)
 
 LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
+    OPTIM_PRINT_DEBUG("optimizing where clause");
     LogicalQueryNode *order_indep_filter = NULL;
     LogicalQueryNode *order_dep_filter = NULL;
     LogicalQueryNode *sort = NULL;
@@ -425,6 +429,8 @@ LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *fro
     
     if(order_indep_exprs != NULL)
     { //perform any order-independent filtering first
+        OPTIM_PRINT_DEBUG("found order independent where predicates");
+        //print_expr(order_indep_exprs, i, &i);
         order_indep_filter = make_filterWhere(NULL, order_indep_exprs);
         
     }
@@ -432,19 +438,27 @@ LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *fro
     order_dep_filter = make_filterWhere(NULL, order_dep_exprs);
     
     //Find all column references in projection and groupbyclauses
+    OPTIM_PRINT_DEBUG("collecting projection col references");
+    IDListNode *order_cols_where = collect_sortCols(order_dep_exprs, 0);
     IDListNode *all_cols_proj = collect_AllColsNamedExpr(proj->params.namedexprs);
     IDListNode *all_cols_group = NULL;
     
-    if(grouphaving->node_type == FILTER_HAVING)
-    { //has having and grouping steps, need to get column references in both
-        all_cols_group = unionIDList(collect_AllCols(grouphaving->params.exprs), collect_AllCols(grouphaving->arg->params.exprs));
-    }
-    else
+    OPTIM_PRINT_DEBUG("collecting group col references");
+    if(grouphaving != NULL)
     {
-        all_cols_group = collect_AllCols(grouphaving->params.exprs);
+       if(grouphaving->node_type == FILTER_HAVING)
+       { //has having and grouping steps, need to get column references in both
+           all_cols_group = unionIDList(collect_AllCols(grouphaving->params.exprs), collect_AllCols(grouphaving->arg->params.exprs));
+       }
+       else
+       {
+           all_cols_group = collect_AllCols(grouphaving->params.exprs);
+       } 
     }
     
+    
     IDListNode *all_cols = unionIDList(all_cols_proj, all_cols_group);
+    all_cols = unionIDList(all_cols, order_cols_where);
     
     if(in_IDList("*", all_cols))
     { //referencing "all columns" results in a full sort
@@ -463,6 +477,7 @@ LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *fro
 
 LogicalQueryNode *optim_sort_group(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {    
+    OPTIM_PRINT_DEBUG("optimizing group");
     LogicalQueryNode *sort = NULL;
     
     if(grouphaving->order_dep)
@@ -518,8 +533,9 @@ LogicalQueryNode *optim_sort_group(LogicalQueryNode *proj, LogicalQueryNode *fro
 
 LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
-     IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
-     LogicalQueryNode *sort = NULL;
+    OPTIM_PRINT_DEBUG("optimizing projection");
+    IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
+    LogicalQueryNode *sort = NULL;
      
     if(proj_order_cols == NULL)
     {
@@ -566,7 +582,9 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, 
 
 LogicalQueryNode *assemble_plan(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
-    return assemble_base(proj, from, order, where, grouphaving);
+    OPTIM_PRINT_DEBUG("building query");
+    //return assemble_base(proj, from, order, where, grouphaving);
+    return assemble_opt1(proj, from, order, where, grouphaving);
 }
 
 
@@ -598,7 +616,7 @@ int main()
     
     IDListNode *deps = collect_sortCols(comb, 0);
     OPTIM_PRINT_DEBUG("final sorting list");
-    print_id_list(deps, x, &x);
+    //print_id_list(deps, x, &x);
     
     //Testing partitioning an expression list based on order dependency information
     ExprNode *p_id1 = make_id(env, "c1");
@@ -628,7 +646,7 @@ int main()
     print_expr(order_dep, x, &x);
     
     OPTIM_PRINT_DEBUG("All columns");
-    print_id_list(collect_AllCols(comb), x, &x);
+    //print_id_list(collect_AllCols(comb), x, &x);
      OPTIM_PRINT_DEBUG("expression");
     print_expr(comb, x, &x);
     
@@ -645,7 +663,7 @@ int main()
     n1->next_sibling = n2;
     OPTIM_PRINT_DEBUG("******looking for order dependencies in named expressions");
     IDListNode *found =  collect_sortColsNamedExpr(n1, 0);
-    print_id_list(found, x, &x);
+    //print_id_list(found, x, &x);
     
     ///Assemble a query by hand
     
