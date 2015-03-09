@@ -22,8 +22,11 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
 
 ExprNode *append_toExpr(ExprNode *list, ExprNode *add);
 void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_dep);
+
 IDListNode *collect_AllCols(ExprNode *node);
-IDListNode *collect_AllColsNamedExpr(NamedExprNode *node);
+IDListNode *collect_AllColsProj(LogicalQueryNode *node);
+IDListNode *collect_AllColsGroupby(LogicalQueryNode *groupby);
+
 
 //Optimization 1: sorting only necessary columns
 LogicalQueryNode *make_specCols(IDListNode *cols);
@@ -31,7 +34,8 @@ LogicalQueryNode *make_sortCols(OrderNode *order, IDListNode *cols);
 LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols);
 
 LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
-LogicalQueryNode *optim_sort_group(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
+LogicalQueryNode *optim_sort_group_od(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
+LogicalQueryNode *optim_sort_group_oi(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 
 

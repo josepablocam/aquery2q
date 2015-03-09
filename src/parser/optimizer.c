@@ -331,11 +331,11 @@ IDListNode *collect_AllCols(ExprNode *node)
     
 }
 
-IDListNode *collect_AllColsNamedExpr(NamedExprNode *node)
+IDListNode *collect_AllColsProj(LogicalQueryNode *node)
 {
     OPTIM_PRINT_DEBUG("collecting all col refs in named expr");
     IDListNode *result = NULL;
-    NamedExprNode *curr = node;
+    NamedExprNode *curr = node->params.namedexprs;
 
     while(curr != NULL)
     {
@@ -346,6 +346,18 @@ IDListNode *collect_AllColsNamedExpr(NamedExprNode *node)
     return result;
 }
 
+//Collects all columns referenced in a group-by/having clause
+IDListNode *collect_AllColsGroupby(LogicalQueryNode *groupby)
+{
+    if(groupby == NULL)
+    {
+        return NULL;
+    }
+    else
+    {
+        return unionIDList(collect_AllCols(groupby->params.exprs), collect_AllColsGroupby(groupby->arg));
+    }
+}
 
 
 //Add element add to end of list
@@ -438,23 +450,15 @@ LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *fro
     order_dep_filter = make_filterWhere(NULL, order_dep_exprs);
     
     //Find all column references in projection and groupbyclauses
-    OPTIM_PRINT_DEBUG("collecting projection col references");
-    IDListNode *order_cols_where = collect_sortCols(order_dep_exprs, 0);
-    IDListNode *all_cols_proj = collect_AllColsNamedExpr(proj->params.namedexprs);
-    IDListNode *all_cols_group = NULL;
     
-    OPTIM_PRINT_DEBUG("collecting group col references");
-    if(grouphaving != NULL)
-    {
-       if(grouphaving->node_type == FILTER_HAVING)
-       { //has having and grouping steps, need to get column references in both
-           all_cols_group = unionIDList(collect_AllCols(grouphaving->params.exprs), collect_AllCols(grouphaving->arg->params.exprs));
-       }
-       else
-       {
-           all_cols_group = collect_AllCols(grouphaving->params.exprs);
-       } 
-    }
+    OPTIM_PRINT_DEBUG("collecting where OD references");
+    IDListNode *order_cols_where = collect_sortCols(order_dep_exprs, 0);
+    
+    OPTIM_PRINT_DEBUG("collecting projection all col references");
+    IDListNode *all_cols_proj = collect_AllColsProj(proj);
+    
+    OPTIM_PRINT_DEBUG("collecting projection all col references");
+    IDListNode *all_cols_group = collect_AllColsGroupby(grouphaving); 
     
     
     IDListNode *all_cols = unionIDList(all_cols_proj, all_cols_group);
@@ -475,57 +479,52 @@ LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *fro
     return where;  
 }
 
-LogicalQueryNode *optim_sort_group(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+
+//Operations associated with a order-dependent group-by/having
+LogicalQueryNode *optim_sort_group_od(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {    
-    OPTIM_PRINT_DEBUG("optimizing group");
+    OPTIM_PRINT_DEBUG("optimizing order-dependent group-by/having");
     LogicalQueryNode *sort = NULL;
     
-    if(grouphaving->order_dep)
-    { //need to sort everything used
-        IDListNode *all_cols_proj = collect_AllColsNamedExpr(proj->params.namedexprs);
-        IDListNode *all_cols_group = NULL; 
-         
-        if(grouphaving->node_type == FILTER_HAVING)
-        {
-            all_cols_group = unionIDList(collect_AllCols(grouphaving->params.exprs), collect_AllCols(grouphaving->arg->params.exprs));
-        }
-        else
-        {
-            all_cols_group = collect_AllCols(grouphaving->params.exprs);
-        }
-        
-        IDListNode *all_cols = unionIDList(all_cols_group, all_cols_proj);
-        
-        if(in_IDList("*", all_cols))
-        { //referencing "all columns" results in a full sort
-            sort = order; 
-        }
-        else
-        {
-           sort = make_sortCols(order->params.order, all_cols);
-        }
-        
-        return pushdown_logical(grouphaving, sort);
+    IDListNode *all_cols_proj = collect_AllColsProj(proj);
+    IDListNode *all_cols_group = collect_AllColsGroupby(grouphaving); 
+    IDListNode *all_cols = unionIDList(all_cols_group, all_cols_proj);
+    
+    if(in_IDList("*", all_cols))
+    { //referencing "all columns" results in a full sort
+        sort = order; 
     }
     else
-    { //sort-each only relevant columns 
-        //assume things need to be sorted unless there is order annihilating operators
-        IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
-        
-        if(proj_order_cols == NULL)
-        {
-            return grouphaving;
-        }
-        else if(in_IDList("*", proj_order_cols))
-        { //referencing "all columns" results in a full sort
-            sort = order; 
-            return pushdown_logical(grouphaving, sort);
-        }
-        else 
-        {
-           sort = make_sortEachCols(order->params.order, proj_order_cols);
-           return pushdown_logical(sort, grouphaving);
-        }  
+    {
+       sort = make_sortCols(order->params.order, all_cols);
+    }
+    
+    return pushdown_logical(grouphaving, sort);
+}
+
+    
+//Operations associated with a order-independenr group-by/having
+LogicalQueryNode *optim_sort_group_oi(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
+{   
+    OPTIM_PRINT_DEBUG("optimizing order-independent group-by/having");
+    LogicalQueryNode *sort = NULL;
+    
+    //assume need sorting in proj clause unless order annihilating operators applied
+    IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
+    
+    if(proj_order_cols == NULL)
+    { //no order dependencies in projection
+        return grouphaving; 
+    }
+    else if(in_IDList("*", proj_order_cols))
+    { //referencing "all columns" results in a full sort
+        sort = order; 
+        return pushdown_logical(grouphaving, sort);
+    }
+    else 
+    { //else sort-each order dependent columns
+       sort = make_sortEachCols(order->params.order, proj_order_cols);
+       return pushdown_logical(sort, grouphaving);
     }
     
     return grouphaving;
@@ -534,12 +533,13 @@ LogicalQueryNode *optim_sort_group(LogicalQueryNode *proj, LogicalQueryNode *fro
 LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
     OPTIM_PRINT_DEBUG("optimizing projection");
+    //assume need sorting in proj clause unless order annihilating operators applied
     IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
     LogicalQueryNode *sort = NULL;
      
     if(proj_order_cols == NULL)
-    {
-        return proj;
+    { //no order dependencies
+        return proj; 
     }
     else if(in_IDList("*", proj_order_cols))
     { //referencing "all columns" results in a full sort
@@ -547,7 +547,7 @@ LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from
         return pushdown_logical(proj, sort);     
     }
     else
-    {
+    { //only sort specific columns necessary
         sort = make_sortCols(order->params.order, proj_order_cols);
         return pushdown_logical(proj, sort);
     }
@@ -563,9 +563,13 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, 
         {
             where = optim_sort_where(proj, from, order, where, grouphaving);
         }
-        else if(grouphaving != NULL)
+        else if(grouphaving != NULL && grouphaving->order_dep)
         { 
-            grouphaving = optim_sort_group(proj, from, order, where, grouphaving);
+            grouphaving = optim_sort_group_od(proj, from, order, where, grouphaving);
+        }
+        else if(grouphaving != NULL && !grouphaving->order_dep)
+        {
+            grouphaving = optim_sort_group_oi(proj, from, order, where, grouphaving);
         }
         else //just check projection clauses
         {
@@ -649,11 +653,7 @@ int main()
     //print_id_list(collect_AllCols(comb), x, &x);
      OPTIM_PRINT_DEBUG("expression");
     print_expr(comb, x, &x);
-    
-    //TODO:
-    // 1 - Test collecting order dependencies on named expressions
-    // 2 - Change AST printing to account for new badass nodes
-    // 3 - Give this a whirl!
+
     
     NamedExprNode *n1 = make_NamedExprNode("calc_1", comb);
     ExprNode *idx = make_id(env,"rand");
@@ -663,9 +663,7 @@ int main()
     n1->next_sibling = n2;
     OPTIM_PRINT_DEBUG("******looking for order dependencies in named expressions");
     IDListNode *found =  collect_sortColsNamedExpr(n1, 0);
-    //print_id_list(found, x, &x);
-    
-    ///Assemble a query by hand
+ 
     
     
     
