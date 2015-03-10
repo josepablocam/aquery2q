@@ -80,7 +80,7 @@ int in_IDList(char *name, IDListNode *list)
 IDListNode *unionIDList(IDListNode *x, IDListNode *y)
 {
     OPTIM_PRINT_DEBUG("---->new union");
-    IDListNode *prev_y, *curr_y, *next_y;
+    IDListNode *curr_y, *next_y, *to_free;
     
     if(y == NULL)
     { //no point searching concatenation location if y is empty
@@ -92,23 +92,19 @@ IDListNode *unionIDList(IDListNode *x, IDListNode *y)
     }
     else
     {
-        for(prev_y = NULL, curr_y = y; curr_y != NULL; curr_y = next_y)
+        for(curr_y = y; curr_y != NULL; curr_y = next_y)
         {
             if(!in_IDList(curr_y->name, x))
             { 
                 next_y = curr_y->next_sibling; //save down the sibling for y
                 curr_y->next_sibling = x; //cons element in y to x
                 x = curr_y; //set x to head of consed list
-                
-                if(prev_y != NULL) 
-                { //if we're not at beginning of list, set the sibling pointer of last element to the next y
-                    prev_y->next_sibling = next_y;
-                }
             }
             else
-            {
-                prev_y = curr_y;
-                next_y = curr_y->next_sibling;   
+            { //if we didn't add it, free-it
+                to_free = curr_y;
+                next_y = curr_y->next_sibling;
+                free_single_IDListNode(to_free);
             }
         }
                
@@ -148,6 +144,24 @@ IDListNode *add_interactionsToSort(NestedIDList *interact, IDListNode *need_sort
             }
         }
     }
+    
+    //Anything that is not-marked in potential was never added and will never be added, so free it
+    NestedIDList *to_free_nested = NULL;
+    IDListNode *to_free_list = NULL; 
+    
+    curr_interact = interact;
+    while(curr_interact != NULL)
+    {
+        to_free_nested = curr_interact; //potentially
+        curr_interact = curr_interact->next_list;
+        
+        if(!to_free_nested->marked)
+        { //only free things not marked, we don't need them again
+            free_IDListNode(to_free_nested->list);
+            free(to_free_nested);
+        }
+    }
+    
     
     return need_sort;
 }

@@ -372,6 +372,26 @@ IDListNode *make_IDListNode(char *id, IDListNode *next)
 	return ids;
 }
 
+//Frees this id list node, note that you must store the next pointer and free yourself
+void free_single_IDListNode(IDListNode *node)
+{
+    free(node->name);
+    free(node);
+}
+
+//Chases and frees entire list
+void free_IDListNode(IDListNode *list)
+{
+    IDListNode *to_free, *curr;
+    
+    curr = list;
+    while(curr != NULL)
+    {
+        to_free = curr;
+        curr = curr->next_sibling;
+        free_single_IDListNode(to_free);
+    }
+}
 
 //We create body node which can hold a query, expression or local variable declaration
 UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type)

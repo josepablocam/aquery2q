@@ -38,10 +38,7 @@ typedef enum ExprNodeType {
   LIST_EXPR,
   PRED_EXPR, //predicate
   WHERE_AND_EXPR,
-  WHERE_OR_EXPR,
-  //sorting optimizations
-  SORT_IX,
-  DE_SORT_IX
+  WHERE_OR_EXPR
 } ExprNodeType;
 
 
@@ -221,6 +218,8 @@ typedef struct UDFDefNode {
 
 //UDFs
 IDListNode *make_IDListNode(char *arg, IDListNode *next);
+void free_single_IDListNode(IDListNode *node);
+void free_IDListNode(IDListNode *list);
 UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type);
 UDFBodyNode *make_UDFExpr(ExprNode *expr);
 UDFBodyNode *make_UDFVardef(NamedExprNode *vardef);
