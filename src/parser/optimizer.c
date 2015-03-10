@@ -19,7 +19,8 @@ extern const char *ExprNodeTypeName[];
 extern int optim_level;
 
 
-
+//Used to keep track of interactions between columns that might lead to sorting otherwise order-independent columns
+//Consider an expression such as (c1 * c3) + max(sums(c3 + c2))  -> c2 and c3 sorted because of sums, but c1 too because of *c3
 NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list)
 {
     if(list == NULL)
@@ -36,113 +37,7 @@ NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list)
     }
 }
 
-
-
-//returns 1 if name is in list, 0 otherwise
-int in_IDList(char *name, IDListNode *list)
-{
-    IDListNode *curr;
-
-    for(curr = list; curr != NULL; curr = curr->next_sibling)
-    {
-        if(strcmp(name, curr->name) == 0)
-        {
-            return 1;
-        }
-    }
-    
-    return 0;
-}
-
-IDListNode *unionIDList(IDListNode *x, IDListNode *y)
-{
-    OPTIM_PRINT_DEBUG("---->new union");
-    IDListNode *prev_y, *curr_y, *next_y;
-    
-    if(y == NULL)
-    { //no point searching concatenation locaiton if y is empty
-        return x;
-    }
-    else if(x == NULL)
-    {
-        return y;
-    }
-    else
-    {
-        for(prev_y = NULL, curr_y = y; curr_y != NULL; curr_y = next_y)
-        {
-            if(!in_IDList(curr_y->name, x))
-            { 
-                next_y = curr_y->next_sibling; //save down the sibling for y
-                curr_y->next_sibling = x; //cons element in y to x
-                x = curr_y; //set x to head of cons list
-                
-                if(prev_y != NULL) 
-                { //if we're not at beginning of list, set the sibling pointer of last element to the next y
-                    prev_y->next_sibling = next_y;
-                }
-            }
-            else
-            {
-                next_y = curr_y->next_sibling;
-                prev_y = curr_y;
-            }
-        }
-        
-
-        
-        return x;
-    }
-}
-
-
-//Collect the columns that need to be sorted given dependencies in an expression AST
-IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start)
-{
-    IDListNode **need_sort_ptr = malloc(sizeof(IDListNode *));
-    *need_sort_ptr = NULL; 
-    
-    NestedIDList **potential_ptr = malloc(sizeof(NestedIDList *));
-    *potential_ptr = NULL;
-    
-    
-    IDListNode *top = collect_sortCols0(od_expr, add_from_start, need_sort_ptr, potential_ptr);
-    *potential_ptr = make_NestedIDList(top, *potential_ptr);
-    
-    OPTIM_PRINT_DEBUG("returned from collect_sortCols0");
-    
-    NestedIDList *related = NULL;
-    IDListNode *elem = NULL;
-    IDListNode *need_sort = *need_sort_ptr;
-    
-    int added = 1;
-    while(added != 0)
-    {
-        added = 0;
-        for(related = *potential_ptr; related != NULL; related = related->next_list)
-        {   
-            for(elem = related->list; elem != NULL && !related->marked; elem = elem->next_sibling)
-            {
-                OPTIM_PRINT_DEBUG("Checking related:");
-                //print_id_list(related->list, n, &n);
-                if(in_IDList(elem->name, need_sort))
-                {
-                    OPTIM_PRINT_DEBUG("found contaminated list");
-                    need_sort = unionIDList(need_sort, related->list); //add to sorting list
-                    OPTIM_PRINT_DEBUG("new list for sorting");
-                    //print_id_list(need_sort, n, &n);
-                    related->marked = 1; //mark as visited
-                    added = 1;
-                    break;
-                }
-            }
-        }
-    }
-    
-    //TODO: free up memory for structures used in this search
-    return need_sort;
-}
-
+//Crude printing of nested list, really just for quick debugging....
 void print_nested_id_list(NestedIDList *nl)
 {
     NestedIDList *curr = nl;
@@ -163,6 +58,116 @@ void print_nested_id_list(NestedIDList *nl)
     
 }
 
+//returns 1 if name is in list, 0 otherwise, uses strcmp
+int in_IDList(char *name, IDListNode *list)
+{
+    IDListNode *curr;
+
+    for(curr = list; curr != NULL; curr = curr->next_sibling)
+    {
+        if(strcmp(name, curr->name) == 0)
+        {
+            return 1;
+        }
+    }
+    
+    return 0;
+}
+
+
+///Unions x and y, so that there are no repetitions. Returns pointer to result
+//Works by modifying pointer x when necessary, so neither x nor y should be relied upon after use
+IDListNode *unionIDList(IDListNode *x, IDListNode *y)
+{
+    OPTIM_PRINT_DEBUG("---->new union");
+    IDListNode *prev_y, *curr_y, *next_y;
+    
+    if(y == NULL)
+    { //no point searching concatenation location if y is empty
+        return x;
+    }
+    else if(x == NULL)
+    {
+        return y;
+    }
+    else
+    {
+        for(prev_y = NULL, curr_y = y; curr_y != NULL; curr_y = next_y)
+        {
+            if(!in_IDList(curr_y->name, x))
+            { 
+                next_y = curr_y->next_sibling; //save down the sibling for y
+                curr_y->next_sibling = x; //cons element in y to x
+                x = curr_y; //set x to head of consed list
+                
+                if(prev_y != NULL) 
+                { //if we're not at beginning of list, set the sibling pointer of last element to the next y
+                    prev_y->next_sibling = next_y;
+                }
+            }
+            else
+            {
+                prev_y = curr_y;
+                next_y = curr_y->next_sibling;   
+            }
+        }
+               
+        return x;
+    }
+}
+
+//Account for interactions between order-dependent and order-independent columns. Adds otherwise order-independent cols to sorting list
+//based on interactions
+IDListNode *add_interactionsToSort(NestedIDList *interact, IDListNode *need_sort)
+{
+    int added = 1;
+    NestedIDList *curr_interact;
+    IDListNode *col;
+    
+    while(added != 0)
+    {
+        added = 0;
+        for(curr_interact = interact ; curr_interact != NULL; curr_interact = curr_interact->next_list)
+        {   
+            for(col = curr_interact->list; col != NULL && !curr_interact->marked; col = col->next_sibling)
+            {
+                OPTIM_PRINT_DEBUG("Checking related:");
+                //print_id_list(related->list, n, &n);
+                if(in_IDList(col->name, need_sort))
+                {
+                    OPTIM_PRINT_DEBUG("found contaminated list");
+                    need_sort = unionIDList(need_sort, interact->list); //add to sorting list
+                    interact->marked = 1; //mark as visited
+                    added = 1;
+                    break;
+                }
+            }
+        }
+    }
+    
+    return need_sort;
+}
+
+
+//Collect the columns that need to be sorted given dependencies in an expression AST
+IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start)
+{
+    IDListNode **need_sort_ptr = malloc(sizeof(IDListNode *));
+    *need_sort_ptr = NULL; 
+    
+    NestedIDList **potential_ptr = malloc(sizeof(NestedIDList *));
+    *potential_ptr = NULL;
+    
+    IDListNode *top = collect_sortCols0(od_expr, add_from_start, need_sort_ptr, potential_ptr);
+    *potential_ptr = make_NestedIDList(top, *potential_ptr);
+    
+    OPTIM_PRINT_DEBUG("returned from collect_sortCols0");
+    //TODO: free up memory for structures used in this search
+    return add_interactionsToSort(*potential_ptr, *need_sort_ptr);
+}
+
+
+
 //Collect the columns that need to be sorted given dependencies in a named expression AST
 IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
 {
@@ -173,10 +178,10 @@ IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
     *potential_ptr = NULL;
     
     IDListNode *top = NULL;
-    NamedExprNode *curr_nexpr;
     
-    curr_nexpr = nexprs;
+    NamedExprNode *curr_nexpr = nexprs;
     int x = 0;
+    
     while(curr_nexpr != NULL)
     { 
         OPTIM_PRINT_DEBUG("running over named expression");
@@ -185,48 +190,13 @@ IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
         *potential_ptr = make_NestedIDList(top, *potential_ptr);
         
         curr_nexpr = curr_nexpr->next_sibling;
-        
-       
-        OPTIM_PRINT_DEBUG("current set of need_sort are");
-        //print_id_list(*need_sort_ptr, x, &x);
-        
-        OPTIM_PRINT_DEBUG("current potentials are");
-        //print_nested_id_list(*potential_ptr);
     }
 
     OPTIM_PRINT_DEBUG("returned from collect_sortCols0");
-    
-    NestedIDList *related = NULL;
-    IDListNode *elem = NULL;
-    IDListNode *need_sort = *need_sort_ptr;
-    
-    int added = 1;
-    while(added != 0)
-    {
-        added = 0;
-        for(related = *potential_ptr; related != NULL; related = related->next_list)
-        {   
-            for(elem = related->list; elem != NULL && !related->marked; elem = elem->next_sibling)
-            {
-                OPTIM_PRINT_DEBUG("Checking related:");
-                //print_id_list(related->list, n, &n);
-                if(in_IDList(elem->name, need_sort))
-                {
-                    OPTIM_PRINT_DEBUG("found contaminated list");
-                    need_sort = unionIDList(need_sort, related->list); //add to sorting list
-                    OPTIM_PRINT_DEBUG("new list for sorting");
-                    //print_id_list(need_sort, n, &n);
-                    related->marked = 1; //mark as visited
-                    added = 1;
-                    break;
-                }
-            }
-        }
-    }
-    
     //TODO: free up memory for structures used in this search
-    return need_sort;
+    return add_interactionsToSort(*potential_ptr, *need_sort_ptr);
 }
+
 
 IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort_ptr, NestedIDList **potential_ptr)
 {
@@ -235,7 +205,7 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
     int new_add_flag = 0;
 
     if(node == NULL)
-    {
+    { //nothing to do if we're at the end
         return NULL;   
     }
     else if(node->node_type == ID_EXPR)
@@ -247,7 +217,7 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
             OPTIM_PRINT_DEBUG("adding id to sort list");
             *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(node->data.str, NULL));//union with list of def sorted
             collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //explore sibling
-            return NULL; //already appending here, so just return a null
+            return NULL; //already appending to need_sort here, don't need to add to potential, so just return a null
         }
         else
         {
@@ -258,31 +228,30 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
         }       
     }
     else if(node->node_type == COLDOTACCESS_EXPR)
-    { //TODO: figure out how to handle dot column accesses
+    { //TODO: figure out how to handle dot column accesses correctly
        OPTIM_PRINT_DEBUG("found col dot access, accessing dest child");
        return collect_sortCols0(node->first_child->next_sibling, add_flag, need_sort_ptr, potential_ptr);
     }
     else if(node->node_type == CALL_EXPR)
     {
-        new_add_flag = node->order_dep;
+        //whether or not we continue to add to sort list can change based on operator properties
+        new_add_flag = node->order_dep; 
 
         if(!new_add_flag)
         { //we have reached an order-independent function call, like max/min
             OPTIM_PRINT_DEBUG("found order annihilating call, exploring child");
             child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr);
             OPTIM_PRINT_DEBUG("appending potential list at order annihilating call");
-            *potential_ptr = make_NestedIDList(child, *potential_ptr);    
+            *potential_ptr = make_NestedIDList(child, *potential_ptr);  //we stop "bubbling up" interactions here
             OPTIM_PRINT_DEBUG("exploring call's sibling");
-            sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
-            return NULL; //stop sending back names to get collected
+            return collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //send back interactions in sibling node, not your own anymore
         }
         else
         {
             OPTIM_PRINT_DEBUG("found order dependent call, exploring args");
-            child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr);
-            sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+            child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr); //no need to add to potential, adding to need_sort
             OPTIM_PRINT_DEBUG("done exploring order dependent call, returning list of ");
-            return NULL; //no need to send back names
+            return collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //return interactions in sibling node
         }
     }
     else
@@ -291,8 +260,7 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
         child = collect_sortCols0(node->first_child, add_flag | node->order_dep, need_sort_ptr, potential_ptr);
         OPTIM_PRINT_DEBUG("exploring random node's sibling");
         sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
-        child = unionIDList(child, sibling);
-        return child;
+        return unionIDList(child, sibling);
     }
     
 }
@@ -360,7 +328,7 @@ IDListNode *collect_AllColsGroupby(LogicalQueryNode *groupby)
 }
 
 
-//Add element add to end of list
+//Add element add to end of list, expression order might matter, so this maintains
 ExprNode *append_toExpr(ExprNode *list, ExprNode *add)
 {
     ExprNode *prev, *curr;
@@ -388,11 +356,12 @@ void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_d
     OPTIM_PRINT_DEBUG("partitioning expression list on order");
     ExprNode *curr, *next;
  
-    for(next = curr = expr->first_child; curr != NULL; curr = next)
+    for(next = NULL, curr = expr->first_child; curr != NULL; curr = next)
     {
-        next = curr->next_sibling;
-        curr->next_sibling = NULL;
+        next = curr->next_sibling; //store next expression
+        curr->next_sibling = NULL; //remove link between current and next expression
         
+        //Put current expresion in right list based on order dependence info
         if(curr->order_dep || curr->sub_order_dep)
         {
             *order_dep = append_toExpr(*order_dep, curr);
@@ -404,6 +373,7 @@ void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_d
     }    
 }
 
+//New type of node needed to plug into query step sorting certain columns
 LogicalQueryNode *make_specCols(IDListNode *cols)
 {
     LogicalQueryNode *spec_cols = make_EmptyLogicalQueryNode(COL_NAMES);
@@ -411,6 +381,7 @@ LogicalQueryNode *make_specCols(IDListNode *cols)
     return spec_cols;
 }
 
+//Sort cols based on order node
 LogicalQueryNode *make_sortCols(OrderNode *order, IDListNode *cols)
 {
     LogicalQueryNode *sort = make_EmptyLogicalQueryNode(SORT_COLS);
@@ -419,6 +390,7 @@ LogicalQueryNode *make_sortCols(OrderNode *order, IDListNode *cols)
     return sort;
 }
 
+//Sort-each cols based on order node
 LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols)
 {
     LogicalQueryNode *sort = make_EmptyLogicalQueryNode(SORT_EACH_COLS);
@@ -426,6 +398,33 @@ LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols)
     sort->next_arg = make_specCols(cols);
     return sort;
 }
+
+//Returns additional sorting missing from have order to get to want order
+OrderNode *get_NeededSort(OrderNode *have, OrderNode *want)
+{
+    OrderNode *want_curr, *have_curr;
+    
+    want_curr = want;
+    have_curr = have;
+    
+    while(want_curr != NULL && have_curr != NULL)
+    {
+        if(want_curr->node_type == have_curr->node_type && strcmp(want_curr->col->data.str, have_curr->col->data.str))
+        { //no need do anythign with a given order spec, if we already have it sorted
+          //along that dimension
+            want_curr = want_curr->next;
+            have_curr = have_curr->next;
+        }
+        else
+        { //none matching
+            break;
+        }   
+    }
+    
+    return want_curr;
+}
+
+
 
 
 LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)

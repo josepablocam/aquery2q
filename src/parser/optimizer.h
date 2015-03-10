@@ -5,7 +5,6 @@
 #include "aquery_types.h"
 
 
-
 typedef struct NestedIDList
 {
     IDListNode *list;
@@ -16,6 +15,7 @@ typedef struct NestedIDList
 NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list);
 IDListNode *unionIDList(IDListNode *x, IDListNode *y);
 int in_IDList(char *name, IDListNode *list);
+IDListNode *add_interactionsToSort(NestedIDList *interact, IDListNode *need_sort);
 IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start);
 IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start);
 IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort, NestedIDList **potential);
@@ -29,6 +29,7 @@ IDListNode *collect_AllColsGroupby(LogicalQueryNode *groupby);
 
 
 //Optimization 1: sorting only necessary columns
+OrderNode *get_NeededSort(OrderNode *have, OrderNode *want);
 LogicalQueryNode *make_specCols(IDListNode *cols);
 LogicalQueryNode *make_sortCols(OrderNode *order, IDListNode *cols);
 LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols);
