@@ -15,9 +15,9 @@
 #define OPTIM_DEBUG 0
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
 
-extern const char *ExprNodeTypeName[];
-extern int optim_level;
-
+extern const char *ExprNodeTypeName[]; //aquery_print.c
+extern int optim_level; //aquery.y
+extern Symtable *env; //aquery.y
 
 //Used to keep track of interactions between columns that might lead to sorting otherwise order-independent columns
 //Consider an expression such as (c1 * c3) + max(sums(c3 + c2))  -> c2 and c3 sorted because of sums, but c1 too because of *c3
@@ -115,6 +115,10 @@ IDListNode *unionIDList(IDListNode *x, IDListNode *y)
         return x;
     }
 }
+
+
+
+
 
 //Account for interactions between order-dependent and order-independent columns. Adds otherwise order-independent cols to sorting list
 //based on interactions
@@ -402,6 +406,7 @@ LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols)
 //Returns additional sorting missing from have order to get to want order
 OrderNode *get_NeededSort(OrderNode *have, OrderNode *want)
 {
+    OPTIM_PRINT_DEBUG("searching for incremental sort needed");
     OrderNode *want_curr, *have_curr;
     
     want_curr = want;
@@ -409,19 +414,34 @@ OrderNode *get_NeededSort(OrderNode *have, OrderNode *want)
     
     while(want_curr != NULL && have_curr != NULL)
     {
-        if(want_curr->node_type == have_curr->node_type && strcmp(want_curr->col->data.str, have_curr->col->data.str))
+        if(want_curr->node_type == have_curr->node_type && strcmp(want_curr->col->data.str, have_curr->col->data.str) == 0)
         { //no need do anythign with a given order spec, if we already have it sorted
           //along that dimension
+            OPTIM_PRINT_DEBUG("found matching sort prefix along 1 dimension");
             want_curr = want_curr->next;
-            have_curr = have_curr->next;
+            have_curr = have_curr->next;     
         }
         else
         { //none matching
+            OPTIM_PRINT_DEBUG("found end of matching sort prefix");
             break;
         }   
     }
     
-    return want_curr;
+    OrderNode *to_free = want;
+    //free up any information no longer needed
+    while(want_curr != want)
+    {
+        to_free = want;
+        want = want->next;
+        
+        OPTIM_PRINT_DEBUG("freeing order information");
+        free(to_free->col->data.str); //free string
+        free(to_free->col); //free expression node
+        free(to_free); //free order node
+    }
+    
+    return want;
 }
 
 
@@ -553,9 +573,45 @@ LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from
      
 }
 
+//TODO: modify to handle more complicated froms....
+char *get_table_name(LogicalQueryNode *from)
+{
+    if(from->node_type == SIMPLE_TABLE)
+    {
+        return from->params.name;
+    }
+    else
+    {
+        return get_table_name(from->arg);
+    }
+}
+
 
 LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
+   
+    //find what subset of sort do we need to execute
+    
+    if(order != NULL)
+    { //try to remove order clause first as a result of existing order
+        Symentry *entry = lookup_sym(env, get_table_name(from));
+        OrderNode *want_order = order->params.order;
+        OrderNode *have_order = (entry == NULL) ? NULL : entry->order_spec;
+        //incremental sorting needed
+        want_order = get_NeededSort(have_order, want_order);
+        
+        if(want_order == NULL)
+        {
+            //printf("******** don't need order anymore\n");
+            free(order);
+            order = NULL;
+        }
+        else
+        {
+            order->params.order = want_order;
+        }
+    }
+    
     if(order != NULL)
     {
         if(where != NULL && where->order_dep)

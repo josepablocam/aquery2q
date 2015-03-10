@@ -30,6 +30,7 @@ IDListNode *collect_AllColsGroupby(LogicalQueryNode *groupby);
 
 //Optimization 1: sorting only necessary columns
 OrderNode *get_NeededSort(OrderNode *have, OrderNode *want);
+char *get_table_name(LogicalQueryNode *from);
 LogicalQueryNode *make_specCols(IDListNode *cols);
 LogicalQueryNode *make_sortCols(OrderNode *order, IDListNode *cols);
 LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols);
