@@ -499,6 +499,21 @@ OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col)
 	return new_order;
 }
 
+void free_OrderNode(OrderNode *order)
+{
+    OrderNode *to_free = NULL;
+    
+    while(order != NULL)
+    {
+        to_free = order;
+        order = order->next;
+        //TODO: replace with free_ExprNode when written
+        free(to_free->col->data.str); //column name
+        free(to_free->col); //free expression node
+        free(to_free);  //free order node
+    }
+}
+
 LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type)
 {	
 	AST_PRINT_DEBUG("making logical query node");
@@ -625,22 +640,26 @@ LogicalQueryNode *make_values(ExprNode *exprs)
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs, LogicalQueryNode *rhs)
 {
 	LogicalQueryNode *prev, *curr;
-
-	for(prev = curr = lhs; curr != NULL; prev = curr, curr = curr->arg)
-	{
-		/* find empty slot for rhs argument */
-	}
-	
-	if(prev == NULL)
-	{ //implies LHS was NULL
-		return rhs;
-	}
-	else
-	{ //place into the empty spot found
+   
+    if(lhs == NULL)
+    {
+        return rhs;
+    }
+    else if(rhs == NULL)
+    {
+        return lhs;
+    }
+    else
+    {
+   	    for(prev = curr = lhs; curr != NULL; prev = curr, curr = curr->arg)
+   	    {
+   		/* find empty slot for rhs argument */
+   	    } 
+        
 		prev->arg = rhs;
 		rhs->after = prev; //next step in logical plan
 		return lhs;
-	}
+    }
 }
 
 //Assembling a naive query plan directly extracted from the syntax
@@ -650,7 +669,8 @@ LogicalQueryNode *assemble_base(LogicalQueryNode *proj, LogicalQueryNode *from, 
 	plan = pushdown_logical(order, plan);
 	plan = pushdown_logical(where, plan);
 	plan = pushdown_logical(grouphaving, plan);
-	return pushdown_logical(proj, plan);
+	plan = pushdown_logical(proj, plan);
+    return plan;
 }
 
  /******* 2.2: Local and global queries *******/

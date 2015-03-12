@@ -16,7 +16,6 @@ typedef struct NestedIDList
 {
     IDListNode *list;
     struct NestedIDList *next_list;
-    int marked;
 } NestedIDList;
 
 NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list);

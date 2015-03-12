@@ -172,6 +172,7 @@ LogicalQueryNode *make_flatten(LogicalQueryNode *t);
 LogicalQueryNode *make_project(LogicalQueryNodeType proj_type, LogicalQueryNode *t, NamedExprNode *namedexprs);
 LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols);
 OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col);
+void free_OrderNode(OrderNode *order);
 LogicalQueryNode *make_sort(LogicalQueryNode *t, OrderNode *order);
 LogicalQueryNode *make_values(ExprNode *exprs);
 

@@ -11,7 +11,7 @@
 #include "ast_print.h"
 #include "optimizer.h"
 
-#define STAND_ALONE 1
+#define STAND_ALONE 0
 #define OPTIM_DEBUG 0
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
 
@@ -33,6 +33,7 @@ Symtable *env;
 //before any optimizations, so we can create multiple options
 LogicalQueryNode *deepcopy_LogicalQueryNode(LogicalQueryNode *node)
 {
+    OPTIM_PRINT_DEBUG("deep copying logical query node");
     LogicalQueryNode *copy = NULL;
     
     if(node != NULL)
@@ -83,11 +84,20 @@ LogicalQueryNode *deepcopy_LogicalQueryNode(LogicalQueryNode *node)
 
 NamedExprNode *deepcopy_NamedExprNode(NamedExprNode *node)
 {
+    OPTIM_PRINT_DEBUG("deep copying named expression node");
     NamedExprNode *copy = NULL;
+    char *name = NULL;
     
     if(node != NULL)
     {
-        copy = make_NamedExprNode(strdup(node->name), deepcopy_ExprNode(node->expr));
+        if(node->name != NULL)
+        {
+            name = strdup(node->name);
+        }
+        
+        copy = make_NamedExprNode(name, deepcopy_ExprNode(node->expr));
+        copy->order_dep = node->order_dep;
+        copy->sub_order_dep = node->sub_order_dep;
         copy->next_sibling = deepcopy_NamedExprNode(node->next_sibling);
     }
     
@@ -96,6 +106,7 @@ NamedExprNode *deepcopy_NamedExprNode(NamedExprNode *node)
 
 IDListNode *deepcopy_IDListNode(IDListNode *node)
 {
+    OPTIM_PRINT_DEBUG("deep copying id list node");
     IDListNode *copy = NULL;
     
     if(node != NULL)
@@ -110,6 +121,7 @@ IDListNode *deepcopy_IDListNode(IDListNode *node)
     
 OrderNode *deepcopy_OrderNode(OrderNode *node)
 {
+    OPTIM_PRINT_DEBUG("deep copying order node");
     OrderNode *copy = NULL;
     
     if(node != NULL)
@@ -127,6 +139,7 @@ OrderNode *deepcopy_OrderNode(OrderNode *node)
 //Create a deepcopy of an expression AST
 ExprNode *deepcopy_ExprNode(ExprNode *node)
 {
+    OPTIM_PRINT_DEBUG("deep copying expression node");
     ExprNode *copy= NULL;
     
     if(node != NULL)
@@ -152,7 +165,7 @@ ExprNode *deepcopy_ExprNode(ExprNode *node)
                     copy->data.ival = node->data.ival;
                 }
                 else
-                {
+                { //strings, hex, dates...
                     copy->data.str = strdup(node->data.str);
                 }
                 break;
@@ -589,7 +602,7 @@ LogicalQueryNode *make_sortEachCols(OrderNode *order, IDListNode *cols)
     return sort;
 }
 
-//Returns additional sorting missing from have order to get to want order
+//if want is a prefix of have, then return null, else return want...
 OrderNode *get_NeededSort(OrderNode *have, OrderNode *want)
 {
     OPTIM_PRINT_DEBUG("searching for incremental sort needed");
@@ -614,19 +627,12 @@ OrderNode *get_NeededSort(OrderNode *have, OrderNode *want)
         }   
     }
     
-    OrderNode *to_free = want;
-    //free up any information no longer needed
-    while(want_curr != want)
-    {
-        to_free = want;
-        want = want->next;
-        
-        OPTIM_PRINT_DEBUG("freeing order information");
-        free(to_free->col->data.str); //free string
-        free(to_free->col); //free expression node
-        free(to_free); //free order node
+    if(want_curr == NULL)
+    { //we don't need any order info anymore, so free
+        free_OrderNode(want);
+        want = NULL;
     }
-    
+
     return want;
 }
 
@@ -775,26 +781,22 @@ char *get_table_name(LogicalQueryNode *from)
 
 LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
-   
-    //find what subset of sort do we need to execute
+    if(order == NULL)
+    {
+        return assemble_base(proj, from, order, where, grouphaving);
+    }
     
     if(order != NULL)
     { //try to remove order clause first as a result of existing order
         Symentry *entry = lookup_sym(env, get_table_name(from));
         OrderNode *want_order = order->params.order;
         OrderNode *have_order = (entry == NULL) ? NULL : entry->order_spec;
-        //incremental sorting needed
-        want_order = get_NeededSort(have_order, want_order);
         
-        if(want_order == NULL)
+        order->params.order = get_NeededSort(have_order, want_order);
+        
+        if(order->params.order == NULL)
         {
-            //printf("******** don't need order anymore\n");
-            free(order);
             order = NULL;
-        }
-        else
-        {
-            order->params.order = want_order;
         }
     }
     
@@ -828,7 +830,6 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, 
 LogicalQueryNode *assemble_plan(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
     OPTIM_PRINT_DEBUG("building query");
-    //return assemble_base(proj, from, order, where, grouphaving);
     return assemble_opt1(proj, from, order, where, grouphaving);
 }
 
@@ -853,7 +854,7 @@ int main()
     ExprNode *op5  = make_callNode(make_builtInFunNode(env, strdup("max")), op4); //max(c1 * (c2 + min(c3 + c4)))
     ExprNode *op6  = make_callNode(make_builtInFunNode(env, strdup("sums")), id32); //sums(c3)
     ExprNode *comb = make_arithNode(MULT_EXPR, op5, op6); //max(c1 * (c2 + min(c3 + c4))) * sums(c3)   
-    ExprNode *copy_of_comb = deepcopy_ExprNode(comb); 
+
      
     int x = 0;
     printf("digraph {\n");
@@ -881,7 +882,6 @@ int main()
     p_id2->next_sibling = p_id3;
     p_id3->next_sibling = p_id4;
     
-    
     ExprNode *exprlist = make_exprListNode(p_id1);
     ExprNode *order_dep = NULL;
     ExprNode *order_indep = NULL;
@@ -892,27 +892,39 @@ int main()
     OPTIM_PRINT_DEBUG("order-dependent expressions from paritioning");
     print_expr(order_dep, x, &x);
     
+    //Testing extracting all column references...
     OPTIM_PRINT_DEBUG("All columns");
     print_id_list(collect_AllCols(comb), x, &x);
     OPTIM_PRINT_DEBUG("expression");
     print_expr(comb, x, &x);
 
-    
+    //Testing order dependencies in named expressions
     NamedExprNode *n1 = make_NamedExprNode(strdup("calc_1"), comb);
     ExprNode *idx = make_id(env,strdup("rand"));
     ExprNode *idx2 = make_id(env, strdup("c4"));
     ExprNode *add_em = make_arithNode(PLUS_EXPR, idx, idx2);
     NamedExprNode *n2 = make_NamedExprNode(strdup("calc_2"), add_em);
     n1->next_sibling = n2;
-    OPTIM_PRINT_DEBUG("******looking for order dependencies in named expressions");
+    OPTIM_PRINT_DEBUG("looking for order dependencies in named expressions");
     IDListNode *found =  collect_sortColsNamedExpr(n1, 0);
     print_id_list(found, x, &x);
     
-    OPTIM_PRINT_DEBUG("******testing deep copies");
+    //Testing deep copy of expressions
+    OPTIM_PRINT_DEBUG("testing deep copies of expressions");
     OPTIM_PRINT_DEBUG("original");
     print_expr(comb, x, &x);
     OPTIM_PRINT_DEBUG("deep copy");
+    ExprNode *copy_of_comb = deepcopy_ExprNode(comb); 
     print_expr(copy_of_comb, x, &x);
+    
+    //Testing deep copy of named expression
+    OPTIM_PRINT_DEBUG("testing deep copies of expressions");
+    OPTIM_PRINT_DEBUG("original");
+    print_named_expr(n1, x, &x);
+    OPTIM_PRINT_DEBUG("deep copy");
+    NamedExprNode *copy_of_n1 = deepcopy_NamedExprNode(n1);
+    print_named_expr(copy_of_n1, x, &x);
+    
     
 }
 #endif
