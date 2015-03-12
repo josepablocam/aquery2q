@@ -4,6 +4,13 @@
 #include "ast.h"
 #include "aquery_types.h"
 
+//Deep-copies of parts of AST 
+LogicalQueryNode *deepcopy_LogicalQueryNode(LogicalQueryNode *node);
+NamedExprNode *deepcopy_NamedExprNode(NamedExprNode *node);
+IDListNode *deepcopy_IDListNode(IDListNode *node);
+OrderNode *deepcopy_OrderNode(OrderNode *node);
+ExprNode *deepcopy_ExprNode(ExprNode *node);
+
 
 typedef struct NestedIDList
 {

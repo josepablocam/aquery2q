@@ -375,8 +375,15 @@ IDListNode *make_IDListNode(char *id, IDListNode *next)
 //Frees this id list node, note that you must store the next pointer and free yourself
 void free_single_IDListNode(IDListNode *node)
 {
-    free(node->name);
-    free(node);
+    if(node != NULL)
+    {
+       AST_PRINT_DEBUG("freeing single_ID");
+       AST_PRINT_DEBUG(node->name);
+       free(node->name);
+       free(node); 
+       node = NULL;
+    }
+    
 }
 
 //Chases and frees entire list
@@ -390,6 +397,7 @@ void free_IDListNode(IDListNode *list)
         to_free = curr;
         curr = curr->next_sibling;
         free_single_IDListNode(to_free);
+        to_free = NULL;
     }
 }
 

@@ -4,20 +4,188 @@
 
 
 #include <stdio.h>
-#include "stdlib.h"
+#include <stdlib.h>
+#include <string.h>
 #include "aquery_types.h"
 #include "ast.h"
 #include "ast_print.h"
 #include "optimizer.h"
-#include "string.h"
 
-#define STAND_ALONE 0
+#define STAND_ALONE 1
 #define OPTIM_DEBUG 0
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
 
+
 extern const char *ExprNodeTypeName[]; //aquery_print.c
+
+#if !STAND_ALONE
 extern int optim_level; //aquery.y
 extern Symtable *env; //aquery.y
+#endif
+
+#if STAND_ALONE
+int optim_level = 1;
+Symtable *env;
+#endif
+
+
+//Creating deep copies of LogicalQueryNodes in order to reproduce the original plan
+//before any optimizations, so we can create multiple options
+LogicalQueryNode *deepcopy_LogicalQueryNode(LogicalQueryNode *node)
+{
+    LogicalQueryNode *copy = NULL;
+    
+    if(node != NULL)
+    {
+        copy = make_EmptyLogicalQueryNode(node->node_type);
+        copy->order_dep = node->order_dep;
+        
+        //copying any information necessary
+        switch(node->node_type)
+        {
+            case SIMPLE_TABLE: //intentional fall through
+            case ALIAS: //intentional fall through
+                copy->params.name = strdup(node->params.name);
+                break;
+            case INNER_JOIN_ON: //intentional fall through
+            case FULL_OUTER_JOIN_ON: //intentional fall through
+            case FILTER_WHERE: //intentional fall through
+            case FILTER_HAVING: //intentional fall through
+            case GROUP_BY: //intentional fall through
+            case EXPLICIT_VALUES: //intentional fall through
+                copy->params.exprs = deepcopy_ExprNode(node->params.exprs);
+                break;
+            case INNER_JOIN_USING: //intentional fall through
+            case FULL_OUTER_JOIN_USING: //intentional fall through
+            case DELETION: //intentional fall through
+            case COL_NAMES: //intentional fall through
+                copy->params.cols = deepcopy_IDListNode(node->params.cols);
+                break;
+            case PROJECT_SELECT: //intentional fall through
+            case PROJECT_UPDATE: //intentional fall through
+                copy->params.namedexprs = deepcopy_NamedExprNode(node->params.namedexprs);
+                break;
+           case SORT: //intentional fall through
+           case SORT_COLS: //intentional fall through
+           case SORT_EACH_COLS: //intentional fall through
+               copy->params.order = deepcopy_OrderNode(node->params.order);
+               break;
+            default:
+                break;
+        }
+        
+        copy->arg = deepcopy_LogicalQueryNode(node->arg);
+        copy->next_arg = deepcopy_LogicalQueryNode(node->next_arg);
+    }
+    
+    return copy;
+}
+
+NamedExprNode *deepcopy_NamedExprNode(NamedExprNode *node)
+{
+    NamedExprNode *copy = NULL;
+    
+    if(node != NULL)
+    {
+        copy = make_NamedExprNode(strdup(node->name), deepcopy_ExprNode(node->expr));
+        copy->next_sibling = deepcopy_NamedExprNode(node->next_sibling);
+    }
+    
+    return copy;
+}
+
+IDListNode *deepcopy_IDListNode(IDListNode *node)
+{
+    IDListNode *copy = NULL;
+    
+    if(node != NULL)
+    {
+        copy = make_IDListNode(strdup(node->name), deepcopy_IDListNode(node->next_sibling));
+    }
+    
+    return copy;
+}
+    
+    
+    
+OrderNode *deepcopy_OrderNode(OrderNode *node)
+{
+    OrderNode *copy = NULL;
+    
+    if(node != NULL)
+    {
+        copy = make_OrderNode(node->node_type, deepcopy_ExprNode(node->col));
+        copy->next = deepcopy_OrderNode(node->next);
+    }
+    
+    return copy;
+}
+
+
+
+
+//Create a deepcopy of an expression AST
+ExprNode *deepcopy_ExprNode(ExprNode *node)
+{
+    ExprNode *copy= NULL;
+    
+    if(node != NULL)
+    {
+        //Create an empty expression node with your general info
+        copy = make_EmptyExprNode(node->node_type);
+        copy->data_type = node->data_type;
+        copy->order_dep = node->order_dep;
+        copy->sub_order_dep = node->sub_order_dep;
+        copy->can_sort = node->can_sort;
+        
+        //Copy any data necessary, note strings need to be copied deeply too
+        //We free some stuff as we manipulate optimizations
+        switch(node->node_type)
+        {
+            case CONSTANT_EXPR:
+                if(node->data_type == FLOAT_TYPE)
+                {
+                    copy->data.fval = node->data.fval;
+                }
+                else if(node->data_type == INT_TYPE || node->data_type == BOOLEAN_TYPE)
+                {
+                    copy->data.ival = node->data.ival;
+                }
+                else
+                {
+                    copy->data.str = strdup(node->data.str);
+                }
+                break;
+            case ID_EXPR: //intentional fall through
+            case BUILT_IN_FUN_CALL: //intentional fall through
+            case UDF_CALL:
+                copy->data.str = strdup(node->data.str);
+                break;
+            case EVERY_N_IX:
+                copy->data.ival = node->data.ival;
+                break;
+            default: //nothing to do for now
+                break;
+        }
+        
+        copy->first_child  = deepcopy_ExprNode(node->first_child);
+        copy->next_sibling = deepcopy_ExprNode(node->next_sibling);
+    }
+    
+    return copy;
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 //Used to keep track of interactions between columns that might lead to sorting otherwise order-independent columns
 //Consider an expression such as (c1 * c3) + max(sums(c3 + c2))  -> c2 and c3 sorted because of sums, but c1 too because of *c3
@@ -32,7 +200,6 @@ NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list)
        NestedIDList *nl = malloc(sizeof(NestedIDList));
        nl->list = list;
        nl->next_list = next_list;
-       nl->marked = 0;
        return nl; 
     }
 }
@@ -105,6 +272,7 @@ IDListNode *unionIDList(IDListNode *x, IDListNode *y)
                 to_free = curr_y;
                 next_y = curr_y->next_sibling;
                 free_single_IDListNode(to_free);
+                to_free = NULL;
             }
         }
                
@@ -121,23 +289,23 @@ IDListNode *unionIDList(IDListNode *x, IDListNode *y)
 IDListNode *add_interactionsToSort(NestedIDList *interact, IDListNode *need_sort)
 {
     int added = 1;
-    NestedIDList *curr_interact;
-    IDListNode *col;
+    NestedIDList *curr_interact = NULL;
+    IDListNode *col = NULL;
     
     while(added != 0)
     {
         added = 0;
         for(curr_interact = interact ; curr_interact != NULL; curr_interact = curr_interact->next_list)
         {   
-            for(col = curr_interact->list; col != NULL && !curr_interact->marked; col = col->next_sibling)
+            OPTIM_PRINT_DEBUG("Checking related:");
+            //print_id_list(curr_interact->list, n, &n);
+            for(col = curr_interact->list; col != NULL; col = col->next_sibling)
             {
-                OPTIM_PRINT_DEBUG("Checking related:");
-                //print_id_list(related->list, n, &n);
                 if(in_IDList(col->name, need_sort))
                 {
                     OPTIM_PRINT_DEBUG("found contaminated list");
-                    need_sort = unionIDList(need_sort, interact->list); //add to sorting list
-                    interact->marked = 1; //mark as visited
+                    need_sort = unionIDList(need_sort, curr_interact->list); //add to sort
+                    curr_interact->list = NULL; //we have added everything we needed, rest has been freed during union
                     added = 1;
                     break;
                 }
@@ -145,22 +313,26 @@ IDListNode *add_interactionsToSort(NestedIDList *interact, IDListNode *need_sort
         }
     }
     
-    //Anything that is not-marked in potential was never added and will never be added, so free it
+    //Anything that is not null in potential was never added to sort list and will never be added, so free it
+    
     NestedIDList *to_free_nested = NULL;
     IDListNode *to_free_list = NULL; 
     
     curr_interact = interact;
     while(curr_interact != NULL)
     {
-        to_free_nested = curr_interact; //potentially
+        to_free_nested = curr_interact; 
         curr_interact = curr_interact->next_list;
         
-        if(!to_free_nested->marked)
-        { //only free things not marked, we don't need them again
+        if(to_free_nested->list != NULL)
+        { //free any contents
+            OPTIM_PRINT_DEBUG("freeing a list of ids");
             free_IDListNode(to_free_nested->list);
-            free(to_free_nested);
         }
+        
+        free(to_free_nested);
     }
+    
     
     
     return need_sort;
@@ -180,7 +352,7 @@ IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start)
     *potential_ptr = make_NestedIDList(top, *potential_ptr);
     
     OPTIM_PRINT_DEBUG("returned from collect_sortCols0");
-    //TODO: free up memory for structures used in this search
+
     return add_interactionsToSort(*potential_ptr, *need_sort_ptr);
 }
 
@@ -233,14 +405,14 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
         if(add_flag)
         {
             OPTIM_PRINT_DEBUG("adding id to sort list");
-            *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(node->data.str, NULL));//union with list of def sorted
+            *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(strdup(node->data.str), NULL));//union with list of def sorted
             collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //explore sibling
             return NULL; //already appending to need_sort here, don't need to add to potential, so just return a null
         }
         else
         {
             OPTIM_PRINT_DEBUG("sending id back up");
-            child = make_IDListNode(node->data.str, NULL); //return id to add to potential
+            child = make_IDListNode(strdup(node->data.str), NULL); //return id to add to potential
             sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
             return unionIDList(child, sibling);
         }       
@@ -296,7 +468,7 @@ IDListNode *collect_AllCols(ExprNode *node)
     }
     else if(node->node_type == ID_EXPR)
     {
-        child = make_IDListNode(node->data.str, NULL);
+        child = make_IDListNode(strdup(node->data.str), NULL);
         sibling = collect_AllCols(node->next_sibling);
         return unionIDList(child, sibling);     
     }
@@ -668,39 +840,41 @@ int main()
 {
     ///Testing extracting indirect order dependencies affected by sorting
     Symtable *env = init_symtable();
-    ExprNode *id1 = make_id(env, "c1");
-    ExprNode *id2 = make_id(env, "c2");
-    ExprNode *id31 = make_id(env, "c3");
-    ExprNode *id32 = make_id(env, "c3");
-    ExprNode *id4 = make_id(env, "c4");
+    ExprNode *id1 = make_id(env, strdup("c1"));
+    ExprNode *id2 = make_id(env, strdup("c2"));
+    ExprNode *id31 = make_id(env, strdup("c3"));
+    ExprNode *id32 = make_id(env, strdup("c3"));
+    ExprNode *id4 = make_id(env, strdup("c4"));
     
     ExprNode *op1  = make_arithNode(PLUS_EXPR, id31, id4); //c3 + c4
-    ExprNode *op2  = make_callNode(make_builtInFunNode(env, "min"), op1); //min(c3+c4)
+    ExprNode *op2  = make_callNode(make_builtInFunNode(env, strdup("min")), op1); //min(c3+c4)
     ExprNode *op3  = make_arithNode(PLUS_EXPR, id2, op2); //c2 + min(c3+c4)
     ExprNode *op4  = make_arithNode(MULT_EXPR, id1, op3); //c1 * (c2 + min(c3+c4))
-    ExprNode *op5  = make_callNode(make_builtInFunNode(env, "max"), op4); //max(c1 * (c2 + min(c3 + c4)))
-    ExprNode *op6  = make_callNode(make_builtInFunNode(env, "sums"), id32); //first(c3)
-    ExprNode *comb = make_arithNode(MULT_EXPR, op5, op6); //max(c1 * (c2 + min(c3 + c4))) * first(c3)   
+    ExprNode *op5  = make_callNode(make_builtInFunNode(env, strdup("max")), op4); //max(c1 * (c2 + min(c3 + c4)))
+    ExprNode *op6  = make_callNode(make_builtInFunNode(env, strdup("sums")), id32); //sums(c3)
+    ExprNode *comb = make_arithNode(MULT_EXPR, op5, op6); //max(c1 * (c2 + min(c3 + c4))) * sums(c3)   
+    ExprNode *copy_of_comb = deepcopy_ExprNode(comb); 
      
     int x = 0;
     printf("digraph {\n");
     print_expr(comb, x, &x);
     printf("}\n");
-    
+     
     IDListNode *deps = collect_sortCols(comb, 0);
     OPTIM_PRINT_DEBUG("final sorting list");
-    //print_id_list(deps, x, &x);
+    print_id_list(deps, x, &x);
     
     //Testing partitioning an expression list based on order dependency information
-    ExprNode *p_id1 = make_id(env, "c1");
-    ExprNode *p_id2 = make_id(env, "c2");
+    //Need to allocate mem for strings to simulate how things wokr when within bison
+    ExprNode *p_id1 = make_id(env, strdup("c1"));
+    ExprNode *p_id2 = make_id(env, strdup("c2"));
     p_id1->order_dep = 1;
     p_id2->order_dep = 1;
     
-    ExprNode *p_id3 = make_id(env, "c3");
+    ExprNode *p_id3 = make_id(env, strdup("c3"));
     p_id3->order_dep = 0;
     
-    ExprNode *p_id4 = make_id(env, "c4");
+    ExprNode *p_id4 = make_id(env, strdup("c4"));
     p_id4->order_dep = 1;
     
     p_id1->next_sibling = p_id2;
@@ -719,23 +893,26 @@ int main()
     print_expr(order_dep, x, &x);
     
     OPTIM_PRINT_DEBUG("All columns");
-    //print_id_list(collect_AllCols(comb), x, &x);
-     OPTIM_PRINT_DEBUG("expression");
+    print_id_list(collect_AllCols(comb), x, &x);
+    OPTIM_PRINT_DEBUG("expression");
     print_expr(comb, x, &x);
 
     
-    NamedExprNode *n1 = make_NamedExprNode("calc_1", comb);
-    ExprNode *idx = make_id(env,"rand");
-    ExprNode *idx2 = make_id(env, "c4");
+    NamedExprNode *n1 = make_NamedExprNode(strdup("calc_1"), comb);
+    ExprNode *idx = make_id(env,strdup("rand"));
+    ExprNode *idx2 = make_id(env, strdup("c4"));
     ExprNode *add_em = make_arithNode(PLUS_EXPR, idx, idx2);
-    NamedExprNode *n2 = make_NamedExprNode("calc_2", add_em);
+    NamedExprNode *n2 = make_NamedExprNode(strdup("calc_2"), add_em);
     n1->next_sibling = n2;
     OPTIM_PRINT_DEBUG("******looking for order dependencies in named expressions");
     IDListNode *found =  collect_sortColsNamedExpr(n1, 0);
- 
+    print_id_list(found, x, &x);
     
-    
-    
+    OPTIM_PRINT_DEBUG("******testing deep copies");
+    OPTIM_PRINT_DEBUG("original");
+    print_expr(comb, x, &x);
+    OPTIM_PRINT_DEBUG("deep copy");
+    print_expr(copy_of_comb, x, &x);
     
 }
 #endif
