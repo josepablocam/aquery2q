@@ -19,8 +19,25 @@ typedef struct NestedIDList
 } NestedIDList;
 
 NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list);
+
+//Mapping Lists of TableNames to expressions
+typedef struct TablesToExprsMap
+{
+    IDListNode *tables;
+    ExprNode *exprs;
+    struct TablesToExprsMap *next_tuple;
+} TablesToExprsMap;
+
+TablesToExprsMap *make_TablesToExprsMap(IDListNode *tables, ExprNode *exprs, TablesToExprsMap *map);
+
+
+
+
 IDListNode *unionIDList(IDListNode *x, IDListNode *y);
 int in_IDList(char *name, IDListNode *list);
+int length_IDList(IDListNode *l);
+int is_setEquivLists(IDListNode *l1, IDListNode *l2);
+
 IDListNode *add_interactionsToSort(NestedIDList *interact, IDListNode *need_sort);
 IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start);
 IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start);
@@ -52,5 +69,14 @@ LogicalQueryNode *assemble_plan(LogicalQueryNode *proj, LogicalQueryNode *from, 
 
 //Optimization 2: separating order-dependent from order-independent expressions in a list
 void print_nested_id_list(NestedIDList *nl);
+
+//Optimizations relating to join-based from clauses
+char *get_table_src(ExprNode *expr);
+IDListNode *collect_TablesExpr(ExprNode *exp);
+int is_JoinClause(ExprNode *expr);
+void part_ExprOnJoin(ExprNode *expr, ExprNode **join_filters, ExprNode **other_filters);
+void check_warn_Join(LogicalQueryNode *from, ExprNode *join_filters);
+void part_ExprOnTableNms(ExprNode *expr, ExprNode **refs, ExprNode **no_refs);
+
 
 #endif
