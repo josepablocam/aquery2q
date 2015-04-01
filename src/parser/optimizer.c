@@ -11,8 +11,8 @@
 #include "ast_print.h"
 #include "optimizer.h"
 
-#define STAND_ALONE 0
-#define OPTIM_DEBUG 0
+#define STAND_ALONE 1
+#define OPTIM_DEBUG 1
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
 
 extern const char *ExprNodeTypeName[]; //aquery_print.c
@@ -35,6 +35,7 @@ Symtable *env;
 GenList *list_alloc(void *data)
 {
     GenList *new =  malloc(sizeof(GenList));
+    new->id = 0;
     new->data = data;
     new->next = NULL;
     return new;
@@ -58,6 +59,7 @@ GenList *list_append(GenList *list, void *data)
     { 
        GenList *new = list_alloc(data);
        prev->next = new;
+       new->id = prev->id + 1;
        return list; 
     }
 }
@@ -74,6 +76,7 @@ GenList *list_prepend(GenList *list, void *data)
     else
     {
         new->next = list;
+        new->id = list->id - 1;
         return new;
     }
 }
@@ -120,6 +123,30 @@ void list_foreach(GenList *list, void (*fun)(GenList *))
     }
 }
 
+void list_foreach_warg(GenList *list, void (*fun)(GenList *, void *), void *arg)
+{
+    while(curr != NULL)
+    {
+        fun(curr, arg);
+        curr = curr->next;
+    }
+}
+
+
+int list_length(GenList *list)
+{
+   int len = 0;
+   GenList *curr = list;
+   
+   while(curr != NULL)
+   {
+       len++;
+       curr = curr->next;
+   }
+   
+   return len; 
+}
+
 
 
 void print_str(GenList *elem)
@@ -141,6 +168,7 @@ LogicalQueryNode *deepcopy_LogicalQueryNode(LogicalQueryNode *node)
     {
         copy = make_EmptyLogicalQueryNode(node->node_type);
         copy->order_dep = node->order_dep;
+        copy->tables_involved = deepcopy_IDListNode(node->tables_involved);
         
         //copying any information necessary
         switch(node->node_type)
@@ -250,7 +278,7 @@ ExprNode *deepcopy_ExprNode(ExprNode *node)
         copy->data_type = node->data_type;
         copy->order_dep = node->order_dep;
         copy->sub_order_dep = node->sub_order_dep;
-        copy->can_sort = node->can_sort;
+        copy->uses_agg = node->uses_agg;
         copy->tables_involved = deepcopy_IDListNode(node->tables_involved);
         
         //Copy any data necessary, note strings need to be copied deeply too
@@ -291,6 +319,26 @@ ExprNode *deepcopy_ExprNode(ExprNode *node)
 }
 
 
+ExprNode *append_Exprs(ExprNode *existing, ExprNode *new)
+{
+    ExprNode *curr = existing, *prev = NULL;
+    
+    while(curr != NULL)
+    {
+        prev = curr;
+        curr = curr->next_sibling;
+    }
+    
+    if(prev == NULL)
+    {
+        return new;
+    }
+    else
+    {
+        prev->next_sibling = new;
+        return existing;
+    }
+}
 
 
 
@@ -310,23 +358,21 @@ int in_IDList(const char *name, IDListNode *list)
     return 0;
 }
 
-//returns 1 if list 1 is  entirely in  list 2
-/*
-int is_subsetOfIDList(IDListNode *l1, IDListNode *l2)
+//returns 1 if any element of l1 is in l2
+int any_in_IDList(IDListNode *l1, IDListNode *l2)
 {
-    int is_subset = 1;
     IDListNode *curr = l1;
     
-    while(is_subset && curr != NULL)
+    while(curr != NULL)
     {
-        is_subset = in_IDList(curr->name, l2);
-        curr = curr->next_sibling;
+        if(in_IDList(curr->name, l2))
+        {
+            return 1;
+        }
     }
     
-    return is_subset;
+    return 0;
 }
-
-*/
 
 //returns length of an IDListNode
 int length_IDList(IDListNode *l)
@@ -343,26 +389,35 @@ int length_IDList(IDListNode *l)
     return len;
 }
 
+//return 1 if first list is a subset of l2 (returns true if l1 and l2 are set equivalent)
+//as well, so is_setEquivIDLists should be used first in any kind of branching
+int is_subsetIDLists(IDListNode *l1, IDListNode *l2)
+{
+    IDListNode *curr = l1;
+    int in_list = 1;
+    
+    while(curr != NULL && in_list)
+    {
+        in_list = in_IDList(curr->name, l2);
+        curr = curr->next_sibling;
+    }
+    
+    return in_list;   
+}
+
 
 //return 1 if they are set equivalent (i.e. order irrelevant)
-int is_setEquivLists(IDListNode *l1, IDListNode *l2)
+int is_setEquivIDLists(IDListNode *l1, IDListNode *l2)
 {
     if(length_IDList(l1) != length_IDList(l2))
-    { //don't even bother checking if lengths don't match
+    { //don't even bother checking if lengths don't match, since these are sets
+      //diff length mean different elements
         return 0;
     }
     else
     {
-        IDListNode *curr = l1;
-        int in_list = 1;
-        
-        while(curr != NULL && in_list)
-        {
-            in_list = in_IDList(curr->name, l2);
-            curr = curr->next_sibling;
-        }
-        
-        return in_list;        
+        //since length matches, a subset check returning true means they are the same set
+        return is_subsetIDLists(l1, l2);   
     }
 }
 
@@ -663,31 +718,114 @@ ExprNode *append_toExpr(ExprNode *list, ExprNode *add)
     }    
 }
 
+
+//An abstraction of a pattern we commonly need to for expression nodes: separating a list of expressions into 2, upon the first true instance of predicate
+//Renders original list useless, since manipulates pointers
+void partExpr_atFirst(ExprNode *orig, ExprNode **before, ExprNode **after, int (*pred)(ExprNode *))
+{
+       OPTIM_PRINT_DEBUG("partitioning expression list based on first instance of predicate");
+       ExprNode *curr, *next;
+       int hit_pred = 0;
+
+       for(next = NULL, curr = orig; curr != NULL; curr = next)
+       {
+           next = curr->next_sibling; //store next expression
+           curr->next_sibling = NULL; //remove link between current and next expression
+           
+           if(!hit_pred)
+           { //only test predicate if we haven't already tripped it
+               hit_pred = pred(curr);
+           }
+        
+           //if predicate hasn't tripped, then add to before list
+           if(!hit_pred)
+           {
+               *before = append_toExpr(*before, curr); 
+           }
+           else
+           {
+              *after = append_toExpr(*after, curr);
+           }
+       }
+}
+
+
+//groups list of expressions into 2 lists, one where the predicate is true, and the other where it is false
+//Renders original list useless, since manipulates pointers
+void groupExpr_onUnaryPred(ExprNode *orig, ExprNode **true, ExprNode **false, int (*pred)(ExprNode *))
+{
+       OPTIM_PRINT_DEBUG("grouping expr list into true and false based on predicate");
+       ExprNode *curr, *next;
+
+       for(next = NULL, curr = orig; curr != NULL; curr = next)
+       {
+           next = curr->next_sibling; //store next expression
+           curr->next_sibling = NULL; //remove link between current and next expression
+           
+           //add to appropriate list based on predicate
+           if(pred(curr))
+           {
+               *true = append_toExpr(*true, curr); 
+           }
+           else
+           {
+              *false = append_toExpr(*false, curr);
+           }
+       }
+}
+
+
+void groupExpr_onBinaryPred(ExprNode *orig, ExprNode **true, ExprNode **false, int (*pred)(ExprNode *, void*), void* data)
+{
+       OPTIM_PRINT_DEBUG("grouping expr list into true and false based on predicate");
+       ExprNode *curr, *next;
+
+       for(next = NULL, curr = orig; curr != NULL; curr = next)
+       {
+           next = curr->next_sibling; //store next expression
+           curr->next_sibling = NULL; //remove link between current and next expression
+           
+           //add to appropriate list based on predicate
+           if(pred(curr, data))
+           {
+               *true = append_toExpr(*true, curr); 
+           }
+           else
+           {
+              *false = append_toExpr(*false, curr);
+           }
+       }
+}
+
+
+
+int is_od(ExprNode *expr)
+{
+    return expr->order_dep || expr->sub_order_dep;
+}
+
+int uses_agg(ExprNode *expr)
+{
+    return expr->uses_agg;
+}
+
+
 //Partition a list of expressions into all expressions up to (but not including) the first order-dependent operation
 //So your lists is (all_order_independent_ops_before_first_OD) (remaining)
-//NOTE: renders original expression useless, since manipulates all the pointers etc
-void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **remaining)
+void partExpr_OnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **remaining)
 {
-    OPTIM_PRINT_DEBUG("partitioning expression list based on firs order dependent expression");
-    ExprNode *curr, *next;
-    int initial_part = 1;
-
-    for(next = NULL, curr = expr->first_child; curr != NULL; curr = next)
-    {
-        next = curr->next_sibling; //store next expression
-        curr->next_sibling = NULL; //remove link between current and next expression
-        
-        //Add thing to order_indep list until we hit the first order-dependent expression
-        if(initial_part && (initial_part = initial_part && !curr->order_dep && !curr->sub_order_dep))
-        {
-            *order_indep = append_toExpr(*order_indep, curr); 
-        }
-        else
-        {
-           *remaining = append_toExpr(*remaining, curr);
-        }
-    }    
+     OPTIM_PRINT_DEBUG("partitioning expression list based on first OD");
+     partExpr_atFirst(expr, order_indep, remaining, is_od);
 }
+
+//Parition a list of expression into all expression up to (but not including) the first use of an agreggate
+void partExpr_OnAgg(ExprNode *expr, ExprNode **no_agg, ExprNode **agg)
+{
+   OPTIM_PRINT_DEBUG("partitioning expression list based on first agg");
+   partExpr_atFirst(expr, no_agg, agg, uses_agg);  
+}
+
+
 
 
 //New type of node needed to plug into query step sorting certain columns
@@ -752,19 +890,6 @@ OrderNode *get_NeededSort(OrderNode *have, OrderNode *want)
 
 
 
-/* Utilities for optimizations for complicated 'from' clauses */
-//Extract table name from dot col access
-/*
-TablesToExprsMap *make_TablesToExprsMap(TablesToExprsMap *map, IDListNode *tables, ExprNode *exprs)
-{
-    TablesToExprsMap *new_map = malloc(sizeof(TablesToExprsMap));
-    new_map->tables = tables;
-    new_map->exprs = exprs;
-    new_map->next_tuple = map;
-    return new_map;
-}
-*/
-
 //Name of table source in a dot expression
 char *get_table_src(ExprNode *expr)
 {
@@ -790,15 +915,14 @@ int is_comparison(ExprNodeType type)
 //Is an expression that should be interpreted as a join clause
 int is_JoinClause(ExprNode *expr)
 {
+    OPTIM_PRINT_DEBUG("testing expression for join clause status");
     if(expr == NULL)
-    {
+    {   
         return 0;
     }
     else
     {
-        int is_comparison_test = is_comparison(expr->node_type);
-        printf("equality test:%d\n", is_comparison_test);
-        if(!is_comparison_test)
+        if(!is_comparison(expr->node_type))
         {
             return 0;
         }
@@ -812,32 +936,30 @@ int is_JoinClause(ExprNode *expr)
     }
 }
 
-//Separate join clauses from normal filters
-void part_ExprOnJoin(ExprNode *expr, ExprNode **join_filters, ExprNode **other_filters)
-{
-    OPTIM_PRINT_DEBUG("partition expression into join-related filters and others");
-    ExprNode *curr, *next;
-    int x = 0;
 
-    for(next = NULL, curr = expr->first_child; curr != NULL; curr = next)
-    {
-        OPTIM_PRINT_DEBUG("testing expression");
-        print_expr(curr, x, &x);
-        next = curr->next_sibling; //store next expression
-        curr->next_sibling = NULL; //remove link between current and next expression
-        
-        if(is_JoinClause(curr))
-        {
-            OPTIM_PRINT_DEBUG("is join filter");
-            *join_filters = append_toExpr(*join_filters, curr); 
-        }
-        else
-        {
-            OPTIM_PRINT_DEBUG("is other filter");
-           *other_filters = append_toExpr(*other_filters, curr);
-        }
-    }        
+//Separate join clauses from normal filters
+void groupExpr_OnJoin(ExprNode *expr, ExprNode **join_filters, ExprNode **other_filters)
+{
+    groupExpr_onUnaryPred(expr, join_filters, other_filters, is_JoinClause);
 }
+
+//Return true if expr involves a subset of names
+int Expr_has_tables(ExprNode *expr, void *names)
+{
+    IDListNode *expr_names = collect_TablesExpr(collect_expr);
+    return is_subsetIDLists(expr_names, names);
+}
+
+
+
+//Separate clauses into those referencing 
+void groupExpr_OnTables(ExprNode *expr, ExprNode **have, ExprNode **dont, IDListNode *names)
+{
+    groupExpr_onBinaryPred(expr, have, dont, Expr_has_tables, names);
+}
+
+
+
 
 
 //What tables are involved in an expression
@@ -888,9 +1010,17 @@ IDListNode *collect_TablesFrom(LogicalQueryNode *ts)
     {
         return NULL;
     }
+    else if(ts->tables_involved != NULL)
+    { //we already have it, just return a copy
+        child = deepcopy_IDListNode(ts->tables_involved);
+        sibling = collect_TablesFrom(ts->next_arg);
+        return unionIDList(child, sibling); 
+        
+    }
     else if(ts->node_type == SIMPLE_TABLE)
     {
         child = make_IDListNode(strdup(ts->params.name), NULL);
+        ts->tables_involved = deepcopy_IDListNode(child); //memoize
         sibling = collect_TablesFrom(ts->next_arg);
         return unionIDList(child, sibling);
     }
@@ -898,176 +1028,223 @@ IDListNode *collect_TablesFrom(LogicalQueryNode *ts)
     {
         //in the case of the alias, the alias name is the table name as far as we are concerned
         child = make_IDListNode(strdup(ts->params.name), NULL);
+        ts->tables_involved = deepcopy_IDListNode(child); //memoize
         sibling = collect_TablesFrom(ts->next_arg);
         return unionIDList(child, sibling);
     }
     else
     {   
         child = collect_TablesFrom(ts->arg);
+        ts->tables_involved = deepcopy_IDListNode(child); //memoize
         sibling = collect_TablesFrom(ts->next_arg);
         return unionIDList(child, sibling);
     }
 }
 
 
+
+//Split from clause into a list of list of units to use for joins, returns a generic list
+GenList *split_from(LogicalQueryNode *node)
+{
+    if(node == NULL)
+    {
+        return NULL;
+    }
+    else if(node->node_type == CARTESIAN_PROD)
+    { //break up crosses
+        return list_prepend(split_from(node->next_arg), (void *) node->arg);
+    }
+    else
+    { //return joins as given and others as well
+        return list_alloc((void *) node);
+    }
+}
+
+
+//Create a filter node with an expression as deeply as you can (i.e. as close to the
+//tables being referenced
+LogicalQueryNode *deposit_filter_deeply(LogicalQueryNode *node, ExprNode *filter)
+{
+    if(node == NULL || filter == NULL)
+    {
+        return node;
+    }
+    else
+    {
+        IDListNode *filter_tables = collect_TablesExpr(filter);
+        IDListNode *node_tables = collect_TablesFrom(node);
+        
+        if(is_setEquivIDLists(filter_tables, node_tables))
+        { //we've arrived to node where we should deposit the filtr
+            return make_filterWhere(node, filter);
+        }
+        else if(is_subsetIDLists(filter_tables, node_tables))
+        { //our target is somewhere in the subtree, search both branches
+            node->arg = deposit_filter_deeply(node->arg, filter);
+            node->next_arg = deposit_filter_deeply(node->next_arg, filter);
+            return node;
+        }
+        else
+        { //our target is not in this part of the tree, return tree intact
+            return node;
+        }
+    }
+}
+
+void deposit_filter_deeply_wrap(GenList *elem, ExprNode *filters)
+{
+    elem->data = (void *) deposit_filter_deeply((LogicalQueryNode *) elem->data;  filters);
+}
+
+
+//Returns a general list of logical query nodes that have added the
+//filters possible from filters argument
+//filters argument is modified to end up only with filters that weren't applied
+//no need to free filters that were applied as they have been reused in the plan's AST
+GenList *add_filters(GenList *ts, ExprNode **filters)
+{
+    ExprNode *all_filters = filters;
+    ExprNode *relevant = NULL;
+    ExprNode *irrelevant = NULL;
+    GenList *curr = ts;
+    
+    while(curr != NULL)
+    {
+        groupExpr_OnTables(filters, &relevant, &irrelevant);
+        
+        if(relevant != NULL)
+        { //there are applicable filters
+            deposit_filter_deeply_wrap(curr, relevant); //deposit relevant filters  
+        }
+        
+        *filters = irrelevant; //remaining filters are only the irrelevant ones...
+        curr = curr->next;
+    }
+       
+    return ts; 
+}
+
+//returns 1 if the join_filter has at least 1 name in common with both arguments to a join
+int join_is_possible(IDListNode *left, IDListNode *right, IDListNode *join_filter)
+{
+    return any_in_IDList(join_filter, left) && any_in_IDList(join_filter, right);
+}
+
+//count the number of equality filters that can be applied given a list of table names
+int Expr_count_eq_filters(ExprNode *filters, IDListNode *table_names)
+{
+    ExprNode *curr = filters;
+    int count = 0;
+    
+    while(curr != NULL)
+    {
+        if(curr->node_type == EQ_EXPR || curr->node_type == NEQ_EXPR)
+        {
+            if(is_subsetIDLists(collect_TablesExpr(curr), table_names))
+            {
+                count++;
+            }
+        }
+        
+        curr = curr->next_sibling;
+    }
+    
+    return count;
+}
+
 //Warn user if a cross is missing a join clause and returns the union
 void check_warn_Join()
 {
     printf("Warning: there is a missing join clause for an implicit join. Please make sure your join clauses use table prefixes in column references\n");    
+    printf("Offeding query at line %d\n", ...);
+    printf("Silence these warnings with -s");
 }
 
-//Split an expression list into 2, those referencing a subset of
-//element in the list, and all others
-//TODO: test this
-/*
-void part_ExprOnTableNms(ExprNode *expr, ExprNode **refs, ExprNode **no_refs)
+//Given a list of tables, picks a join based on heuristic
+//returns new list of tables, and modifies the join_filter list to remove those used
+//uses reg_filters in the heuristic, but doesn't modify them
+GenList *choose_next_join(GenList *tables, ExprNode **join_filter_ptr, ExprNode *reg_filters)
 {
-    OPTIM_PRINT_DEBUG("partition expression into expression referencing tables in first clause, and others");
-    if(expr != NULL)
-    {
-        ExprNode *curr = expr;
-        ExprNode *next = curr->next_sibling;            
-        IDListNode *ref_names = NULL, *poss_names = NULL;
+    int max_ct_eq_filters = -1; //number of equality filters resulting from best join
+    int ct_eq_filters = 0; //count of equality filters resulting from curr join
+    LogicalQueryNode *chosen_left = NULL, *chosen_right = NULL;
+    Exprnode *chosen_join = NULL;
     
-        curr->next_sibling = NULL; //sever relationship with next node, to avoid traversal of entire tree during extraction of table nms
-        
-        //both next and curr are initialized above
-        for(ref_names = collect_TablesExpr(curr) ; curr != NULL; curr = next)
-        {       
-            poss_names = collect_TablesExpr(curr);
-        
-            if(is_setEquivLists(ref_names, poss_names))
+    if(list_length(tables) == 1)
+    { //there is nothing to join
+        return tables; 
+    }
+    
+    if(*join_filter_ptr == NULL)
+    {
+        //we should warn the user, that there are join clauses missing
+        check_warn_Join();
+        //use heuristic of 
+    }
+    
+    //otherwise pick best join based on heuristic
+    GenList *left = tables, *right = tables;
+    ExprNode *join_filters = *join_filters_ptr;
+    ExprNode *curr_join_filter = *join_filters;
+    IDListNode *left_names, *right_names, *join_names;
+    
+    while(curr_join_filter != NULL)
+    {
+        left = tables;
+        join_names = collect_TablesExpr(curr_join_filter);
+        while(left != NULL)
+        {
+            right = tables;
+            left_names = collect_TablesFrom(left->data);
+            
+            while(right != NULL)
             {
-                OPTIM_PRINT_DEBUG("has same table references");
-                *join_filters = append_toExpr(*refs, curr); 
+               if(right->id > left->id)
+               { //we check ids to avoid testing A join B and B join A both
+                   //using GenList->id as a relative position marker solves this issue
+                   right_names = collect_TablesFrom(right->data);
+                
+                   if(join_is_possible(left_names, right_names, join_names))
+                   {
+                    
+                       ct_eq_filters = Expr_count_eq_filters(reg_filters, unionIDList(left_names, right_names));
+                    
+                       if(ct_eq_filters > max_ct_eq_filters)
+                       {
+                           chosen_left = left->data;
+                           chosen_right = right->data;
+                           chosen_join = curr_join_filter;
+                       }
+                   }    
+               }
+                   
+                right = right->next;
             }
-            else
-            {
-                OPTIM_PRINT_DEBUG("has differing table references");
-                *no_refs = append_toExpr(*no_refs, curr);
-            }
-        }  
-    }
-    
-}
-
-
-
-//LogicalQueryNode *create_Join(LogicalQueryNode *from, ExprNode *join_filters)
-//{
- //   ExprNode *refs = NULL, *others = NULL, *exprs;
- //   check_warn_Join(LogicalQueryNode *from, ExprNode *join_filters);
-    
- //   for(exprs = join_filters; exprs != NULL; exprs = others)
-  //  {
-        //TODO: this
-       
-           // General strategy:
-            // while expres are not empty
-            // partition into refs and others
-            // join tables involved in refs using refs as condition
-            // at each join, check to see if there are any filters that can be applied
-            // to subsets ((using similar method of partitioning)
-            // once done
-            // hand off to simple from query with the remainig filters
+            
+            left = left->next;
+        }
         
-        
-//    }
-    
-//}
-*/
-
-
-
-ExprNode *append_Exprs(ExprNode *existing, ExprNode *new)
-{
-    ExprNode *curr = existing, *prev = NULL;
-    
-    while(curr != NULL)
-    {
-        prev = curr;
-        curr = curr->next_sibling;
+        curr_join_filter = curr_join_filter->next_sibling;
     }
     
-    if(prev == NULL)
-    {
-        return new;
-    }
-    else
-    {
-        prev->next_sibling = new;
-        return existing;
-    }
-}
-
-
-/*
-//Append a new set of entry to the map, if already there, simply add expr, otherwise create new entry
-TablesToExprMap *add_TableToExprsMap(TablesToExprMap *map, IDListNode *tables, ExprNode *exprs)
-{
-     TablesToExprMap *curr = map, *prev = NULL;
+    //all join filters relating to the current join
+    ExprNode *relevant_join_filters = NULL;
+    ExprNode *other_join_filters = NULL;
+    IDListNode *combined_tables = unionIDList(collect_TablesFrom(chosen_left->data), collect_TablesFrom(chosen_right->data));
+    groupExpr_OnTables(join_filters, &relevant_join_filters, &other_join_filters, combined_tables);
+    
+    //remove from list nodes that will combined by join 
+    tables = list_remove_first(tables, chosen_left);
+    tables = list_remove_first(tables, chosen_right);
+    
+    //create new node and add to list
+    tables = list_append(list, make_joinOn(EQUIJOIN_ON, chosen_left, chosen_right, relevant_join_filters));
      
-     while(curr != NULL)
-     {
-         if(is_setEquivLists(curr->tables, tables))
-         {
-             //append exprs to the end of the existing entry and return map
-             curr->exprs = append_Exprs(curr->exprs, exprs);
-             return map;
-         }
-     }
-     
-    //it was a new entry, so return a new map with the extended entry
-    return make_TablesToExprsMap(map, tables, exprs);
-}
-*/
-
-
-
-/*
-//retrieve (and remove from map) first expression list associated with the first tuple
-//that has a as key a IDListNode that is a subset of the IDListNode provided
-ExprNode *retrieveAndRemove_withSubsetKey(TablesToExprsMap **map, IDListNode *have)
-{
-    TablesToExprsMap *curr = *map, *prev = NULL;
-    TablesToExprsMap *result_tuple = NULL;
-    ExprNode *result = NULL;
+    //the join filters that remain are those that are irrelevant
+    *join_filters_ptr = other_join_filters;
     
-    while(curr != NULL && result_tuple == NULL)
-    {
-        if(is_subsetOfIDList(curr->tables, have))
-        {
-            result_tuple = curr->exprs;
-        }
-        else
-        {
-            prev = curr;
-            curr = curr->next_tuple;
-        }
-    }
-    
-    if(result_tuple != NULL)
-    { //found something and need to adjust map
-        if(prev == NULL)
-        { //our tuple is the first in the map, next should become the head
-            *map = curr->next_tuple;
-        }
-        else
-        {
-            prev->next_tuple = curr->next_tuple;
-        }
-        
-        result = curr->exprs;
-        free_IDListNode(curr->tables);
-        free(curr);
-    }
-
-    return result;
+    return tables;
 }
-*/
-
-
-
 
 
 
@@ -1080,7 +1257,7 @@ LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *fro
     ExprNode *order_indep_exprs = NULL;
     ExprNode *remaining_exprs = NULL;
     
-    part_ExprOnOrder(where->params.exprs, &order_indep_exprs, &remaining_exprs);
+    partExpr_OnOrder(where->params.exprs->first_child, &order_indep_exprs, &remaining_exprs);
     
     if(order_indep_exprs != NULL)
     { //perform any order-independent filtering up to first order-dependent first
@@ -1268,11 +1445,46 @@ LogicalQueryNode *assemble_plan(LogicalQueryNode *proj, LogicalQueryNode *from, 
 }
 
 
+void print_table_dummy(GenList *t)
+{
+    OPTIM_PRINT_DEBUG("-->ELEM IN LIST");
+    int x = 0; 
+    print_logical_query((LogicalQueryNode *) t->data, x, &x);
+}
+
+void print_join_clause(GenList *e)
+{
+    printf("%d ", is_JoinClause((ExprNode *) e->data));
+}
+
 
 
 #if STAND_ALONE
 int main()
 {
+    int x = 0;
+        
+    //Testing generic lists
+    OPTIM_PRINT_DEBUG("testing generic list");
+    GenList *list = NULL;
+    char *str1 = "this";
+    char *str2 = "is";
+    char *str3 = "fun";
+    list = list_append(list, (void *) str2);
+    list = list_prepend(list, (void *) str1);
+    list = list_append(list, (void *) str3);
+    list_foreach(list, print_str);
+    list = list_remove_first(list, str2);
+    OPTIM_PRINT_DEBUG("removing is");
+    list_foreach(list, print_str);
+    char *other = "bla";
+    
+    OPTIM_PRINT_DEBUG("removing something that is not in list");
+    list = list_remove_first(list, other);
+    list_foreach(list, print_str);
+    
+    
+    
     ///Testing extracting indirect order dependencies affected by sorting
     Symtable *env = init_symtable();
     ExprNode *id1 = make_id(env, strdup("c1"));
@@ -1290,24 +1502,23 @@ int main()
     ExprNode *comb = make_arithNode(MULT_EXPR, op5, op6); //max(c1 * (c2 + min(c3 + c4))) * sums(c3)   
 
      
-    int x = 0;
     printf("digraph {\n");
     print_expr(comb, x, &x);
     printf("}\n");
      
     IDListNode *deps = collect_sortCols(comb, 0);
     OPTIM_PRINT_DEBUG("final sorting list");
-    print_id_list(deps, x, &x);
+    print_id_list(deps, x, &x); //should be c3 and c4
     
     //Testing partitioning an expression list based on order dependency information
     //Need to allocate mem for strings to simulate how things wokr when within bison
     ExprNode *p_id1 = make_id(env, strdup("c1"));
     ExprNode *p_id2 = make_id(env, strdup("c2"));
-    p_id1->order_dep = 1;
-    p_id2->order_dep = 1;
+    p_id1->order_dep = 0;
+    p_id2->order_dep = 0;
     
     ExprNode *p_id3 = make_id(env, strdup("c3"));
-    p_id3->order_dep = 0;
+    p_id3->order_dep = 1;
     
     ExprNode *p_id4 = make_id(env, strdup("c4"));
     p_id4->order_dep = 1;
@@ -1320,7 +1531,7 @@ int main()
     ExprNode *order_dep = NULL;
     ExprNode *order_indep = NULL;
     
-    part_ExprOnOrder(exprlist,&order_indep, &order_dep);
+    partExpr_OnOrder(exprlist->first_child,&order_indep, &order_dep);
     OPTIM_PRINT_DEBUG("order-independent expressions from paritioning");
     print_expr(order_indep, x, &x);
     OPTIM_PRINT_DEBUG("order-dependent expressions from paritioning");
@@ -1336,7 +1547,7 @@ int main()
     NamedExprNode *n1 = make_NamedExprNode(strdup("calc_1"), comb);
     ExprNode *idx = make_id(env,strdup("rand"));
     ExprNode *idx2 = make_id(env, strdup("c4"));
-    ExprNode *add_em = make_arithNode(PLUS_EXPR, idx, idx2);
+    ExprNode *add_em = make_arithNode(PLUS_EXPR, idx, idx2); //contaminate rand with c4, so now need to sort rand, c4, c3
     NamedExprNode *n2 = make_NamedExprNode(strdup("calc_2"), add_em);
     n1->next_sibling = n2;
     OPTIM_PRINT_DEBUG("looking for order dependencies in named expressions");
@@ -1369,9 +1580,10 @@ int main()
     ExprNode *acc1 = make_colDotAccessNode(deepcopy_ExprNode(table_A), deepcopy_ExprNode(col_1));
     ExprNode *acc2 = make_colDotAccessNode(deepcopy_ExprNode(table_B), deepcopy_ExprNode(col_1));
     ExprNode *acc3 = make_colDotAccessNode(deepcopy_ExprNode(table_C), deepcopy_ExprNode(col_2));
-    ExprNode *jc_1 = make_compNode(EQ_EXPR, deepcopy_ExprNode(acc1), deepcopy_ExprNode(acc2));
+    ExprNode *jc_1 = make_compNode(NEQ_EXPR, deepcopy_ExprNode(acc1), deepcopy_ExprNode(acc2));
     ExprNode *jc_2 = make_compNode(EQ_EXPR, deepcopy_ExprNode(acc2), deepcopy_ExprNode(acc3));
-    ExprNode *reg = make_compNode(EQ_EXPR, deepcopy_ExprNode(col_1), make_int(10));
+    ExprNode *reg = make_compNode(LT_EXPR, deepcopy_ExprNode(col_1), make_int(10));
+    
     
     ExprNode *full = deepcopy_ExprNode(jc_1);
     full->next_sibling = deepcopy_ExprNode(reg);
@@ -1379,36 +1591,65 @@ int main()
     ExprNode *full_list = make_exprListNode(full);
     print_expr(full_list, x, &x);
     
-    OPTIM_PRINT_DEBUG("testing generic list");
-    GenList *list = NULL;
-    char *str1 = "this";
-    char *str2 = "is";
-    char *str3 = "fun";
-    list = list_append(list, (void *) str2);
-    list = list_prepend(list, (void *) str1);
-    list = list_append(list, (void *) str3);
-    list_foreach(list, print_str);
-    list = list_remove_first(list, str2);
-    OPTIM_PRINT_DEBUG("removing is");
-    list_foreach(list, print_str);
-    char *other = "bla";
-    
-    OPTIM_PRINT_DEBUG("removing something that is not in list");
-    list = list_remove_first(list, other);
-    list_foreach(list, print_str);
-    
-    
-    
-    
-    /*
-    OPTIM_PRINT_DEBUG("testing parting expressions on join clauses");
+    OPTIM_PRINT_DEBUG("testing grouping join clauses and separating from others");
     ExprNode *join_filters = NULL;
-    ExprNode *other_filters = NULL;
-    part_ExprOnJoin(full_list, &join_filters, &other_filters);
+    ExprNode *other_filters = NULL;    
+    groupExpr_OnJoin(full_list->first_child, &join_filters, &other_filters);
     OPTIM_PRINT_DEBUG("printing join clauses");
     print_expr(join_filters, x, &x);
     OPTIM_PRINT_DEBUG("printing remaining clauses");
     print_expr(other_filters, x, &x);
+    
+    
+    
+    
+
+    //Testing split from clause
+    LogicalQueryNode *table1 = make_table("t1");
+    LogicalQueryNode *table2 = make_table("t2");
+    LogicalQueryNode *table3 = make_table("t3");
+    LogicalQueryNode *table4 = make_table("t4");
+    ExprNode *join_cond = deepcopy_ExprNode(jc_1);
+    LogicalQueryNode *joined_tables = make_joinOn(INNER_JOIN_ON, table3, table4, join_cond);
+    LogicalQueryNode *cross1 = make_cross(table1, table2);
+    LogicalQueryNode *cross2 = make_cross(joined_tables, cross1);
+    GenList *split = split_from(cross2);
+    OPTIM_PRINT_DEBUG("PRINTING SPLIT LIST");
+    list_foreach(split, print_table_dummy);
+    
+    //Splitting an expression based on aggregate use
+    OPTIM_PRINT_DEBUG("testing parting expressions based on first use of aggregate");
+    ExprNode *agg_id1 = make_id(env,"c1");
+    ExprNode *agg_id2 = make_id(env,"c2");
+    ExprNode *agg_id3 = make_id(env,"c3");
+    ExprNode *agg_id4 = make_id(env,"c4");
+    ExprNode *agg_id5 = make_id(env,"c5");
+    ExprNode *agg_id6 = make_id(env,"c1");
+    ExprNode *agg_e1 = make_logicOpNode(EQ_EXPR, deepcopy_ExprNode(agg_id1), deepcopy_ExprNode(agg_id2));
+    ExprNode *agg_e2 = make_logicOpNode(EQ_EXPR, deepcopy_ExprNode(agg_id3), deepcopy_ExprNode(agg_id4));
+    
+    
+    //add a fake UDF that does not use aggregates
+    put_sym(env, "my_fake_fun", FUNCTION_TYPE, 0, 0);
+    
+    ExprNode *agg_e3 = make_callNode(make_udfNode(env, "my_fake_fun"), deepcopy_ExprNode(agg_id5));
+    ExprNode *agg_e4 = make_logicOpNode(EQ_EXPR, deepcopy_ExprNode(agg_id5), deepcopy_ExprNode(agg_id6));
+    agg_e1->next_sibling = agg_e2;
+    agg_e2->next_sibling = agg_e3;
+    agg_e3->next_sibling = agg_e4;
+    ExprNode *no_agg = NULL;
+    ExprNode *agg = NULL;
+    partExpr_OnAgg(agg_e1, &no_agg, &agg);
+    OPTIM_PRINT_DEBUG("pre-aggregate");
+    print_expr(no_agg, x, &x);
+    OPTIM_PRINT_DEBUG("post-aggregate");
+    print_expr(agg, x, &x);
+
+    
+    
+    
+    /*
+
     
     //Testing cross warnings (when tables referenced in  where clause do not match those in  join clauses)
     LogicalQueryNode *cross1 = make_cross(make_table("A"), make_table("B"));
