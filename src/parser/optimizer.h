@@ -4,6 +4,14 @@
 #include "ast.h"
 #include "aquery_types.h"
 
+
+//Implementing a generic single linked list for use in the optimizer
+typedef struct GenList {
+    void *data;
+    struct GenList *next;
+} GenList;
+
+
 //Deep-copies of parts of AST 
 LogicalQueryNode *deepcopy_LogicalQueryNode(LogicalQueryNode *node);
 NamedExprNode *deepcopy_NamedExprNode(NamedExprNode *node);
@@ -12,13 +20,6 @@ OrderNode *deepcopy_OrderNode(OrderNode *node);
 ExprNode *deepcopy_ExprNode(ExprNode *node);
 
 
-typedef struct NestedIDList
-{
-    IDListNode *list;
-    struct NestedIDList *next_list;
-} NestedIDList;
-
-NestedIDList *make_NestedIDList(IDListNode *list, NestedIDList *next_list);
 
 //Mapping Lists of TableNames to expressions
 typedef struct TablesToExprsMap
@@ -34,14 +35,14 @@ TablesToExprsMap *make_TablesToExprsMap(IDListNode *tables, ExprNode *exprs, Tab
 
 
 IDListNode *unionIDList(IDListNode *x, IDListNode *y);
-int in_IDList(char *name, IDListNode *list);
+int in_IDList(const char *name, IDListNode *list);
 int length_IDList(IDListNode *l);
 int is_setEquivLists(IDListNode *l1, IDListNode *l2);
 
-IDListNode *add_interactionsToSort(NestedIDList *interact, IDListNode *need_sort);
+IDListNode *add_interactionsToSort(GenList *interact, IDListNode *need_sort);
 IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start);
 IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start);
-IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort, NestedIDList **potential);
+IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort, GenList **potential);
 
 ExprNode *append_toExpr(ExprNode *list, ExprNode *add);
 void part_ExprOnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_dep);
@@ -68,7 +69,7 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, 
 LogicalQueryNode *assemble_plan(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving);
 
 //Optimization 2: separating order-dependent from order-independent expressions in a list
-void print_nested_id_list(NestedIDList *nl);
+
 
 //Optimizations relating to join-based from clauses
 char *get_table_src(ExprNode *expr);
