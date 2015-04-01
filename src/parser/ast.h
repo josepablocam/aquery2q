@@ -41,13 +41,18 @@ typedef enum ExprNodeType {
   WHERE_OR_EXPR
 } ExprNodeType;
 
+typedef struct IDListNode {
+	char *name;
+	struct IDListNode *next_sibling;
+ } IDListNode;
 
 typedef struct ExprNode {
 	ExprNodeType node_type;
 	DataType data_type;
 	int order_dep; //is this node order dependent
     int sub_order_dep; //does it have an order dependency somewhere in subtree?
-    int can_sort; //we should only index things that are sortable to begin with
+    int uses_agg; //need to know if expression use aggregates for optimizer
+    IDListNode *tables_involved; //names of tables involved in an expression (NULL, and only assigned if needed in optimizer)
 	union {
 		int ival;
 		float fval;
@@ -107,10 +112,7 @@ ExprNode *make_predNode(char *nm);
 
  /******* Query related nodes *******/
 
-typedef struct IDListNode {
-	char *name;
-	struct IDListNode *next_sibling;
- } IDListNode;
+
 
 typedef enum OrderNodeType { ASC_SORT, DESC_SORT } OrderNodeType;
 
@@ -127,7 +129,7 @@ typedef enum LogicalQueryNodeType {
 	FILTER_WHERE, 
 	FILTER_HAVING, 
 	CARTESIAN_PROD, 
-	INNER_JOIN_ON, 
+	INNER_JOIN_ON,
 	FULL_OUTER_JOIN_ON, 
 	INNER_JOIN_USING,
 	FULL_OUTER_JOIN_USING,
@@ -208,12 +210,16 @@ typedef struct UDFBodyNode {
 		FullQueryNode *query;
 	} elem;
 	struct UDFBodyNode *next_sibling;
+    int order_dep;
+    int uses_agg;
 } UDFBodyNode;
 
 typedef struct UDFDefNode {
 	char *name;
 	IDListNode *args;
 	UDFBodyNode *body;
+    int order_dep;
+    int uses_agg;
 } UDFDefNode;
 
 

@@ -11,12 +11,14 @@
 #define STAND_ALONE 0
 #define SAFE_ORDER_DEP(x) ((x) != NULL && (x)->order_dep)
 #define SAFE_SUB_ORDER_DEP(x) ((x) != NULL && (x)->sub_order_dep)
+#define SAFE_USES_AGG(x) ((x) != NULL && (x)->uses_agg)
 
 void spread_order(ExprNode *parent, ExprNode *child)
 {
     parent->order_dep |= SAFE_ORDER_DEP(child);
     parent->sub_order_dep |= SAFE_ORDER_DEP(child) || SAFE_SUB_ORDER_DEP(child);
 }
+
 
 
 /******* 2.8: value expressions *******/
@@ -35,7 +37,8 @@ ExprNode *make_EmptyExprNode(ExprNodeType type)
 	node->data_type = UNKNOWN_TYPE;
 	node->order_dep = 0;
     node->sub_order_dep = 0;
-    node->can_sort = 0;
+    node->uses_agg = 0;
+    node->tables_involved = NULL;
 	return node;
 }
 
@@ -107,7 +110,6 @@ ExprNode *make_id(Symtable *symtable, char *id)
 	Symentry *info = lookup_sym(symtable, id);
 	node->data_type = UNKNOWN_TYPE; //TODO: fix this: (info != NULL) ? info->type : 
 	node->data.str = id;
-    node->can_sort = 1;
 	return node;
 }
 
@@ -149,6 +151,8 @@ ExprNode *make_caseNode(ExprNode *case_clause, ExprNode *when_clauses, ExprNode 
     spread_order(new_node, case_clause);
     spread_order(new_node, when_clauses);
     spread_order(new_node, else_clause);
+    
+    new_node->uses_agg = SAFE_USES_AGG(case_clause) || SAFE_USES_AGG(when_clauses) || SAFE_USES_AGG(else_clause);
 
 	return new_node;
 }
@@ -160,6 +164,7 @@ ExprNode *make_caseClauseNode(ExprNode *exp)
 	ExprNode *new_node = make_EmptyExprNode(CASE_CLAUSE);
 	new_node->first_child = exp;
     spread_order(new_node, exp);
+    new_node->uses_agg = SAFE_USES_AGG(exp);
 	return new_node;
 }
 
@@ -171,6 +176,7 @@ ExprNode *make_caseWhenNode(ExprNode *when, ExprNode *conseq)
 	when->next_sibling = conseq;
     spread_order(new_node, when);
     spread_order(new_node, conseq);
+    new_node->uses_agg = SAFE_USES_AGG(when) || SAFE_USES_AGG(conseq);
     return new_node;
 }
 
@@ -182,6 +188,7 @@ ExprNode *make_whenClausesNode(ExprNode *h, ExprNode *t)
 	h->next_sibling = t;
     spread_order(new_node, h);
     spread_order(new_node, t);
+    new_node->uses_agg = SAFE_USES_AGG(h) || SAFE_USES_AGG(t);
 	return new_node;
 }
 
@@ -191,6 +198,7 @@ ExprNode *make_elseClauseNode(ExprNode *exp)
 	ExprNode *new_node = make_EmptyExprNode(CASE_ELSE_CLAUSE);
 	new_node->first_child = exp;
 	spread_order(new_node, exp);
+    new_node->uses_agg = SAFE_USES_AGG(exp);
 	return new_node;
 }
 
@@ -204,6 +212,7 @@ ExprNode *make_indexNode(ExprNode *src, ExprNode *ix)
 	new_node->first_child = src;
 	src->next_sibling = ix;
     spread_order(new_node, src);
+    new_node->uses_agg = SAFE_USES_AGG(src);
 	return new_node;
 }
 
@@ -217,7 +226,7 @@ ExprNode *make_callNode(ExprNode *fun, ExprNode *args)
     spread_order(new_node, args);
     new_node->order_dep = fun->order_dep;
     new_node->sub_order_dep |= new_node->order_dep;
-    new_node->can_sort = fun->order_dep; //we can sort stuff
+    new_node->uses_agg = SAFE_USES_AGG(fun) || SAFE_USES_AGG(args); 
 	return new_node;	
 }
 
@@ -229,6 +238,7 @@ ExprNode *make_builtInFunNode(Symtable *symtable, char *nm)
 	Symentry *meta_info = lookup_sym(symtable, nm);
 	new_node->data.str = nm;
 	new_node->order_dep = meta_info->order_dep;
+    new_node->uses_agg = 1; //all built-ins are aggregates
 	return new_node;
 }
 
@@ -242,10 +252,12 @@ ExprNode *make_udfNode(Symtable *symtable, char *nm)
 	{
 		new_node->data_type = ERROR_TYPE; //TODO: type error reporting add...
 	}
-	
-	//TODO: we should reason about whether a user function is order dependent, not assume
+
 	new_node->data.str = nm;
+    //Unknown UDFS (i.e defined outside aquery env) are assumed to be OD and using aggs
+    //for safety, to make sure optimizer doesn't change query semantics
     new_node->order_dep = meta_info == NULL || SAFE_ORDER_DEP(meta_info);
+    new_node->uses_agg = meta_info == NULL || SAFE_USES_AGG(meta_info);
 	return new_node;
 }
 
@@ -286,7 +298,7 @@ ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	x->next_sibling = y;
     spread_order(new_node, x);
     spread_order(new_node, y);
-    new_node->can_sort = x->can_sort || y->can_sort;
+    new_node->uses_agg = x->uses_agg || y->uses_agg;
 	return new_node;	
 }
 
@@ -300,7 +312,7 @@ ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	x->next_sibling = y;
     spread_order(new_node, x);
     spread_order(new_node, y);
-    new_node->can_sort = x->can_sort || y->can_sort;
+    new_node->uses_agg = x->uses_agg || y->uses_agg;
 	return new_node;
 }
 
@@ -320,7 +332,7 @@ ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y)
 	x->next_sibling = y;
     spread_order(new_node, x);
     spread_order(new_node, y);
-    new_node->can_sort = x->can_sort || y->can_sort;
+    new_node->uses_agg = x->uses_agg || y->uses_agg;
 	return new_node;
 }
 
@@ -413,6 +425,8 @@ UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type)
 	
 	new_node->node_type = type;
 	new_node->next_sibling = NULL;
+    new_node->order_dep = 0;
+    new_node->uses_agg = 0;
 
 	return new_node;
 }
@@ -422,6 +436,8 @@ UDFBodyNode *make_UDFExpr(ExprNode *expr)
 {
 	UDFBodyNode *body_elem = make_UDFEmptyBodyNode(EXPR);
 	body_elem->elem.expr = expr;
+    body_elem->order_dep = SAFE_ORDER_DEP(expr) || SAFE_SUB_ORDER_DEP(expr);
+    body_elem->uses_agg = SAFE_USES_AGG(expr);
 	return body_elem;
 }
 
@@ -429,13 +445,17 @@ UDFBodyNode *make_UDFVardef(NamedExprNode *vardef)
 {
 	UDFBodyNode *body_elem = make_UDFEmptyBodyNode(VARDEF);
 	body_elem->elem.vardef = vardef;
-	return body_elem;
+    body_elem->order_dep = SAFE_ORDER_DEP(vardef->expr)|| SAFE_SUB_ORDER_DEP(vardef->expr);
+	body_elem->uses_agg = SAFE_USES_AGG(vardef->expr);
+    return body_elem;
 }
 
 UDFBodyNode *make_UDFQuery(FullQueryNode *query)
 {
 	UDFBodyNode *body_elem = make_UDFEmptyBodyNode(QUERY);
 	body_elem->elem.query = query;
+    body_elem->order_dep = 1; //TODO: decide if we want to even keep queries around here
+    body_elem->uses_agg = 1;
 	return body_elem;
 }
 
@@ -446,6 +466,17 @@ UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body)
 	new_fun->name = name;
 	new_fun->args = args;
 	new_fun->body = body;
+    new_fun->order_dep = 0; //set below based on body
+    new_fun->uses_agg = 0; //set below based on body
+    
+    //Need to traverse entire function definition to glean this information
+    UDFBodyNode *statement;
+    for(statement = body; statement != NULL; statement = statement->next_sibling)
+    {
+        new_fun->order_dep |= SAFE_ORDER_DEP(statement);
+        new_fun->uses_agg |= SAFE_USES_AGG(body); 
+    }
+    
 	return new_fun;
 }
 
