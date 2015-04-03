@@ -17,6 +17,7 @@ extern int yyleng;
 extern FILE *yyin;
 extern int yylex();
 extern int yyparse();
+void warning_Cross();
 
 //for debugging purposes, defined in flex
 extern int line_num; 
@@ -24,14 +25,17 @@ extern int col_num;
 
 //Symbol table
 Symtable *env;	/* global symbol table: stack of hash tables */
+Symentry *entry; /* place holder for entry pointers to perform modifications ad-hoc */
 
 //AST
 TopLevelNode* ast; /* holds any asts created during compilation */
-
+LogicalQueryNode *curr_order;
 
 void yyerror(const char *);
 
+//Command line options
 int optim_level; //level of optimization in ast
+int silence_warnings;
 
 %}
 
@@ -224,7 +228,7 @@ local_queries_tail: local_query local_queries_tail  { $1->next_sibling = $2; $$ 
 
 local_query: ID                        
              col_aliases 				
-			 UC_AS '(' base_query ')'  { put_sym(env, $1, TABLE_TYPE, 0, 0); $$ = make_LocalQueryNode($1, $2, $5); } /* place local query info in sym table */
+			 UC_AS '(' base_query ')'  { put_sym(env, $1, TABLE_TYPE, 0, 0); $$ = make_LocalQueryNode($1, $2, $5); add_order(env, $1, curr_order); } /* place local query info in sym table */
 			 ; 
 
 col_aliases: '(' comma_identifier_list ')' 			{ $$ = $2; }
@@ -240,7 +244,8 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{ $$ = make_IDList
 
  /******* 2.3: Base query *******/
  //TODO: make this better.....
-base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); } /* assemble plan calls a different function depending on optimizer level */
+  /* assemble plan calls a different function depending on optimizer level, store order info for current query to use in symtable */
+base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); curr_order = $3; }
 	; 
  
 select_clause: SELECT select_elem select_clause_tail { $2->next_sibling = $3; $$ = make_project(PROJECT_SELECT, NULL, $2); } /* select_elems are linked, and put into projection */
@@ -406,7 +411,7 @@ table_expression_main: ID ID 									{ $$ = make_alias(make_table($1), $2); }
 table_expressions: joined_table table_expressions_tail 				{ if($2 == NULL){ $$ = $1; } else { $$ = make_cross($1, $2); } }
 	;
 
-table_expressions_tail: ',' joined_table table_expressions_tail	 	 { if($3 == NULL){ $$ = $2; } else { $$ = make_cross($2, $3); } }
+table_expressions_tail: ',' joined_table table_expressions_tail	 	 { if($3 == NULL){ $$ = $2; } else { warning_Cross(); $$ = make_cross($2, $3); } }
 	| /* epsilon */ 											     { $$ = NULL;                                                   }   
 	;
 
@@ -469,20 +474,20 @@ delete_statement: DELETE FROM ID order_clause where_clause					{ $$ = assemble_b
 
 /******* 2.7: user defined functions *******/
 //TODO: we need to infer the properties of the function based on the function_body
-user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE, 1, 1); env = push_env(env);  } /* place function in symtable  and create new scope */
+user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE, 0, 0); env = push_env(env);  } /* place function in symtable, assuming order-independent  and create new scope */
                         '(' 
 						    def_arg_list 	  
 					     ')' 
 						'{' 
 						    function_body 	 
-						'}'                   { env = pop_env(env); $$ =  make_UDFDefNode($2, $5, $8);       } 
+						'}'                   { env = pop_env(env); $$ =  make_UDFDefNode($2, $5, $8); entry = lookup_sym(env, $2); entry->order_dep = $$->order_dep; entry->uses_agg = $$->uses_agg; } /* update order dependence infor for function */ 
 						; 
 
-def_arg_list: ID  def_arg_list_tail		{ put_sym(env, $1, UNKNOWN_TYPE, 1, 0); $$ = make_IDListNode($1, $2); }			 
+def_arg_list: ID  def_arg_list_tail		{ put_sym(env, $1, UNKNOWN_TYPE, 0, 0); $$ = make_IDListNode($1, $2); }			 
 	| /* epsilon */						{ $$ = NULL; }	
 	;
 	
-def_arg_list_tail: ',' ID def_arg_list_tail { put_sym(env, $2, UNKNOWN_TYPE, 1, 0); $$ = make_IDListNode($2, $3); }
+def_arg_list_tail: ',' ID def_arg_list_tail { put_sym(env, $2, UNKNOWN_TYPE, 0, 0); $$ = make_IDListNode($2, $3); }
 	| /* epsilon */							 {$$ = NULL; } 
 
 	;
@@ -500,7 +505,7 @@ function_body_elem: value_expression		{$$ = make_UDFExpr($1);   }
 	| full_query							{$$ = make_UDFQuery($1);  }
 	;
 	
-function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE, 1, 0);    $$ = make_NamedExprNode($1, $3); } ;
+function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE, 0, 0);    $$ = make_NamedExprNode($1, $3); } ;
 
 
 /******* 2.8: value expressions *******/
@@ -666,6 +671,16 @@ void help()
 	printf("Usage: ./a2q [-p][-a <#>] aquery_file\n");
 	printf("-p  print dot file AST to stdout\n");
 	printf("-a  optimization level [0-1]\n");
+    printf("-s  silence warnings\n");
+}
+
+void warning_Cross()
+{
+    if(!silence_warnings)
+    {
+         printf("The use of , at line:%d can result in reduced performance if no join-key is provided\n", line_num);
+         printf("Run compiler with -s option to silence these warnings\n");
+    }
 }
 
 
@@ -681,15 +696,17 @@ int main(int argc, char *argv[]) {
 	int op;
 	
 	
-	while((op = getopt(argc, argv, "pha:")) != -1)
+	while((op = getopt(argc, argv, "spha:")) != -1)
 	{
 		switch(op)
 		{
+            case 's':
+                silence_warnings = 1;
+                break;
 			case 'p':
 				print_ast_flag = 1;
 				break;
 			case 'h':
-				printf("here h\n");
 				help();
 				exit(0);
 				break;
@@ -725,7 +742,6 @@ int main(int argc, char *argv[]) {
 	
 	if(1 > argc - optind) 
 	{ //Did we get a file to analyze?
-		printf("missing, argc:%d and optind:%d\n", argc, optind);
 		help();
 		exit(1);
 	}

@@ -11,7 +11,7 @@
 #include "ast_print.h"
 #include "optimizer.h"
 
-#define STAND_ALONE 1
+#define STAND_ALONE 0
 #define OPTIM_DEBUG 0
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
 
@@ -944,6 +944,7 @@ int is_JoinClause(ExprNode *expr)
 //Separate join clauses from normal filters
 void groupExpr_OnJoin(ExprNode *expr, ExprNode **join_filters, ExprNode **other_filters)
 {
+    OPTIM_PRINT_DEBUG("grouping join expressions");
     groupExpr_onUnaryPred(expr, join_filters, other_filters, is_JoinClause);
 }
 
@@ -961,6 +962,11 @@ int Expr_has_exact_tables(ExprNode *expr, void *names)
     return is_setEqual_IDLists(expr_names, names);
 }
 
+//Return true if expr has UNKNOWN names
+int Expr_has_unknown_table(ExprNode *expr)
+{
+    return in_IDList(UNKNOWN_TABLE_NM, collect_TablesExpr(expr));
+}
 
 //Separate clauses into those referencing a subset of names
 void groupExpr_OnSubsetTables(ExprNode *expr, ExprNode **have, ExprNode **dont, IDListNode *names)
@@ -973,6 +979,11 @@ void groupExpr_OnEqualTables(ExprNode *expr, ExprNode **match, ExprNode **dont, 
 {
     OPTIM_PRINT_DEBUG("grouping expressions on equal table refs");
     groupExpr_onBinaryPred(expr, match, dont, Expr_has_exact_tables, names);
+}
+
+void groupExpr_OnUnknownTables(ExprNode *expr, ExprNode **have, ExprNode **dont)
+{
+    groupExpr_onUnaryPred(expr, have, dont, Expr_has_unknown_table);
 }
 
 
@@ -1095,7 +1106,7 @@ LogicalQueryNode *deposit_one_filter_deeply(LogicalQueryNode *node, ExprNode *fi
         if(is_setEqual_IDLists(filter_tables, node_tables))
         { //we've arrived to the simplest case
             if(node->node_type == FILTER_WHERE)
-            { //we already have a filter there, so just append
+            { //we already have a filter there, so just append to expressions in filter
                 node->params.exprs->next_sibling = filter;  
                 return node;  
             }
@@ -1173,11 +1184,11 @@ GenList *add_filters(GenList *ts, ExprNode **filters)
 {
     OPTIM_PRINT_DEBUG("add possible filters to list of nodes");
     IDListNode *names = NULL;
-    ExprNode *relevant_filters = NULL;
-    ExprNode *irrelevant_filters = NULL;
+    ExprNode *applicable_filters = NULL;
+    ExprNode *inapplicable_filters = NULL;
     GenList *curr_table = ts;
     
-    if(*filters == NULL)
+    if((*filters) == NULL)
     { //nothing left to apply
         return ts;
     }
@@ -1185,17 +1196,16 @@ GenList *add_filters(GenList *ts, ExprNode **filters)
     while(curr_table != NULL)
     {
         names = collect_TablesFrom(curr_table->data); //extract tables referenced in the current clause
-        groupExpr_OnSubsetTables(*filters, &relevant_filters, &irrelevant_filters, names);
+        groupExpr_OnSubsetTables(*filters, &applicable_filters, &inapplicable_filters, names);
         
-        if(relevant_filters != NULL)
-        { //there are applicable filters
-            //We should deposit all those associated with 1 name together and so on.....
-            curr_table->data = (void *) deposit_filters_deeply((LogicalQueryNode *) curr_table->data, relevant_filters); //deposit relevant filters  
+        if(applicable_filters != NULL)
+        {  //We should deposit these into the appropriate node
+            curr_table->data = (void *) deposit_filters_deeply((LogicalQueryNode *) curr_table->data, applicable_filters); //deposit relevant filters  
         }
         
-        *filters = irrelevant_filters; //remaining filters are only the irrelevant ones...
-        relevant_filters = NULL; //reset for next iteration
-        irrelevant_filters = NULL; //reset for next iteration
+        *filters = inapplicable_filters; //we'll see if some of these apply to a different node
+        applicable_filters = NULL; //reset for next iteration
+        inapplicable_filters = NULL; //reset for next iteration
         curr_table = curr_table->next;
     }
        
@@ -1211,17 +1221,20 @@ int join_is_possible(IDListNode *left, IDListNode *right, IDListNode *join_filte
 //count the number of equality filters that can be applied given a list of table names
 int Expr_count_eq_filters(ExprNode *filters, IDListNode *table_names)
 {
+    OPTIM_PRINT_DEBUG("counting relevant equality filters");
+    char *extra_name = strdup(UNKNOWN_TABLE_NM);
+    IDListNode *extended_names = make_IDListNode(extra_name, table_names); //add the unknown table name, otherwise something like A.c1 = x will fail, as we'll get UNKNOWN_TABLE_NM for x
     ExprNode *curr = filters, *next = NULL;
     int count = 0;
     
     while(curr != NULL)
     {
+        next = curr->next_sibling;
+        curr->next_sibling = NULL; //break link,make sure get correct table names below
+        
         if(curr->node_type == EQ_EXPR || curr->node_type == NEQ_EXPR)
         {
-            next = curr->next_sibling;
-            curr->next_sibling = NULL; //break link
-            
-            if(is_subset_IDLists(collect_TablesExpr(curr), table_names))
+            if(is_subset_IDLists(collect_TablesExpr(curr), extended_names))
             {
                 count++;
             }
@@ -1231,6 +1244,8 @@ int Expr_count_eq_filters(ExprNode *filters, IDListNode *table_names)
         curr = next;
     }
     
+    free(extra_name);
+    free(extended_names);
     return count;
 }
 
@@ -1247,6 +1262,7 @@ void check_warn_Join()
 //returns 1 if we are performing a join, vs 0 if we are going to have to cross
 void join_heuristic(GenList *tables, ExprNode *join_filters, ExprNode *reg_filters, LogicalQueryNode **left, LogicalQueryNode **right)
 {
+    OPTIM_PRINT_DEBUG("running join heuristic");
     int filter_iters = 0; //used to count how many times we've iterated through the fitler loop, in case we have no joins filters
     int max_ct_eq_filters = -1, ct_eq_filters; //initialize max to -1 so we always pick at least 1 join per call of function
     GenList *try_left, *try_right;
@@ -1310,6 +1326,7 @@ void join_heuristic(GenList *tables, ExprNode *join_filters, ExprNode *reg_filte
 //uses reg_filters in the heuristic, but doesn't modify them
 GenList *choose_next_join(GenList *tables, ExprNode **join_filters_ptr, ExprNode *reg_filters)
 {
+    OPTIM_PRINT_DEBUG("choosing next join");
     int max_ct_eq_filters = -1; //number of equality filters resulting from best join
     int ct_eq_filters = 0; //count of equality filters resulting from curr join
     LogicalQueryNode *chosen_left = NULL, *chosen_right = NULL;
@@ -1356,13 +1373,18 @@ int is_simple_from(LogicalQueryNode *node)
     return node->node_type == SIMPLE_TABLE || node->node_type == ALIAS;
 }
 
-/*
-void *optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
+
+void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
 {
+    if(*where == NULL)
+    {
+        return; //nothing to do
+    }
+    
+    OPTIM_PRINT_DEBUG("optimizing from clause");
     ExprNode *join_filters = NULL;
     ExprNode *other_filters =  NULL;
-    ExprNode *all_filters = where->params.exprs;
-    
+    ExprNode *all_filters = (*where)->params.exprs->first_child;
     groupExpr_OnJoin(all_filters, &join_filters, &other_filters); //separate into join and others
     
     ExprNode *oi_filters = NULL;
@@ -1371,35 +1393,50 @@ void *optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
     
     ExprNode *no_agg_filters = NULL;
     ExprNode *agg_filters = NULL;
-    partExpr_onAgg(oi_filters, &no_agg_filters, &agg_filters); //separate into no-agg and agg using
+    partExpr_OnAgg(oi_filters, &no_agg_filters, &agg_filters); //separate into no-agg and agg using
     
-    IDListNode *unknown_name = make_IDListNode(strdup(UNKNOWN_TABLE_NM), NULL);
     ExprNode *known_filters = NULL;
     ExprNode *unknown_filters = NULL; 
-    //separate into known and unknownd
-    groupExpr_onSubsetTables(no_agg_filters, &unknown_filters, &known_filters, unknown_name);
+    //separate into known and unknown references
+    groupExpr_OnUnknownTables(no_agg_filters, &unknown_filters, &known_filters);
     
-    GenList *sep_ts = split_from(from); //split from into a list of tables
+    GenList *sep_ts = split_from(*from); //split from into a list of tables
     
     while(list_length(sep_ts) != 1)
     {
         add_filters(sep_ts, &known_filters);
-        choose_next_join(sep_ts, &join_filters, known_filters)
+        sep_ts = choose_next_join(sep_ts, &join_filters, known_filters);
+    }
+
+    LogicalQueryNode *table = sep_ts->data;
+    
+    free(sep_ts);
+   
+    //unknown no aggs, then agg_filters
+    ExprNode *remaining_oi_filters = NULL;
+    remaining_oi_filters = append_toExpr(remaining_oi_filters, unknown_filters);
+    remaining_oi_filters = append_toExpr(remaining_oi_filters, agg_filters);
+    
+    if(remaining_oi_filters != NULL)
+    { //if we still have things to filter and we can apply, apply them
+        table = make_filterWhere(table, remaining_oi_filters);
     }
     
-    //Now add in the unknown OD, no agg, since those can be commuted
-    LogicalQueryNode *table = sep_ts->data;
-    free(sep_ts);
-    //Now add in the OI that had aggregatess to end of unknown filters
-    unknown_filters->next_sibling = agg_filters;
-    //make a new selection with these filters
-    table = make_filterWhere(table, unknown_filters);
-    //set from clause to new table
+    //set from clause to new reduced tables
     *from = table;
-    //Now create a dummy where with OD filters and send to usual optimizer
-    *where = make_filterWhere(NULL, od_filters); 
+    
+    //if we still have OD filters, make them a new where clause, otherwise set to null
+    if(od_filters != NULL)
+    {
+       *where = make_filterWhere(NULL, od_filters);  
+    }
+    else
+    {
+        *where = NULL;
+    }
+    
 }
-*/
+
 
 
 LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
@@ -1546,15 +1583,19 @@ char *get_table_name(LogicalQueryNode *from)
 
 LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
-    //TODO: Assemble from clause 
-    
-    
+
+    if(!is_simple_from(from))
+    { //we have to push selections and choose joins
+        optim_from(&from, &where);
+    }
+        
     if(order == NULL)
     {
         return assemble_base(proj, from, order, where, grouphaving);
     }
     
     //TODO: look up order in a way that accounts for complicated from 
+     /*
     if(order != NULL)
     { //try to remove order clause first as a result of existing order
         Symentry *entry = lookup_sym(env, get_table_name(from));
@@ -1568,6 +1609,8 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, 
             order = NULL;
         }
     }
+    */
+    
     
     if(order != NULL)
     {
@@ -1599,7 +1642,14 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, 
 LogicalQueryNode *assemble_plan(LogicalQueryNode *proj, LogicalQueryNode *from, LogicalQueryNode *order, LogicalQueryNode *where, LogicalQueryNode *grouphaving)
 {
     OPTIM_PRINT_DEBUG("building query");
-    return assemble_opt1(proj, from, order, where, grouphaving);
+    if(optim_level == 1)
+    {
+       return assemble_opt1(proj, from, order, where, grouphaving); 
+    }
+    else
+    {
+        return assemble_base(proj, from, order, where, grouphaving);
+    }
 }
 
 
@@ -1926,19 +1976,76 @@ int main()
     print_logical_query(with_diff_filters, x, &x);
     
     
+    //Testing depositing filters, some of which are relevant to only part of the list of tables
+    printf("testing add filters\n");
+    LogicalQueryNode *rel_table1 = make_table("A");
+    LogicalQueryNode *rel_table2 = make_cross(make_table("B"), make_table("C"));
+    GenList *rel_table_list = list_prepend(NULL, rel_table1);
+    rel_table_list = list_prepend(rel_table_list, rel_table2);
+    ExprNode *rel_filter1 = deepcopy_ExprNode(filter_A);
+    ExprNode *rel_filter2 = make_colDotAccessNode(make_id(env, "B"), make_id(env, "c2"));
+    ExprNode *rel_filter3 = make_colDotAccessNode(make_id(env, "C"), make_id(env, "c3"));
+    ExprNode *rel_filter4 = make_compNode(EQ_EXPR, deepcopy_ExprNode(rel_filter2), deepcopy_ExprNode(rel_filter3));
+    rel_filter1->next_sibling = rel_filter2;
+    rel_filter2->next_sibling = rel_filter3;
+    rel_filter3->next_sibling = rel_filter4;
+    printf("printing original list of trees:\n");
+    list_foreach(rel_table_list, print_table_dummy);
+    printf("applying filters\n");
+    rel_table_list = add_filters(rel_table_list, &rel_filter1);
+    printf("filters are null after all applied:%d\n", rel_filter1 == NULL);
+    printf("printing modified list of trees:\n");
+    list_foreach(rel_table_list, print_table_dummy);
+    
+    printf("testing if a join is possible\n");
+    IDListNode *left_names = make_IDListNode("A", make_IDListNode("B", NULL));
+    IDListNode *right_names = make_IDListNode("C", NULL);
+    IDListNode *join_poss_names = make_IDListNode("C", make_IDListNode("B", NULL));
+    IDListNode *join_notposs_names = make_IDListNode("C", NULL);
+    printf("possible join is possible:%d\n", join_is_possible(left_names, right_names, join_poss_names));
+    printf("not possible join is possible:%d\n", join_is_possible(left_names, right_names, join_notposs_names));
+    
+    
+    printf("testing counting equality filters\n");
+    ExprNode *rel_eq = make_compNode(EQ_EXPR, make_colDotAccessNode(make_id(env, "B"), make_id(env, "c2")), make_id(env, "some_id"));
+    ExprNode *irrel_eq = make_compNode(EQ_EXPR, make_colDotAccessNode(make_id(env, "C"), make_id(env, "c3")), make_id(env, "other_id"));
+    ExprNode *rel_neq = make_colDotAccessNode(make_id(env, "B"), make_id(env, "c4"));
+    rel_eq->next_sibling = irrel_eq;
+    irrel_eq->next_sibling = rel_neq;
+    IDListNode *rel_names = make_IDListNode("B", NULL);
+    printf("number of relevant:%d\n",  Expr_count_eq_filters(rel_eq, rel_names));
+    
+    //Testing Join heuristic
+    printf("testing join heuristic\n");
+    GenList *join_tables = list_append(NULL, make_table("A"));
+    join_tables = list_append(join_tables, make_table("B"));
+    join_tables = list_append(join_tables, make_table("C"));
+    ExprNode *jf1 = make_compNode(EQ_EXPR, make_colDotAccessNode(make_id(env, "A"), make_id(env, "c1")), make_colDotAccessNode(make_id(env, "B"), make_id(env, "c1")));
+    ExprNode *jf2 = make_compNode(EQ_EXPR, make_colDotAccessNode(make_id(env, "B"), make_id(env, "c2")), make_colDotAccessNode(make_id(env, "C"), make_id(env, "c2")));
+    jf1->next_sibling = jf2;
+    ExprNode *regf = deepcopy_ExprNode(jf1); //we'll pretend this is a regular filter
+    LogicalQueryNode *chosen_left = NULL, *chosen_right = NULL;
+    join_heuristic(join_tables, jf1, regf, &chosen_left, &chosen_right);
+    printf("chosen left:\n");
+    print_logical_query(chosen_left, x, &x);
+    printf("chosen right:\n");
+    print_logical_query(chosen_right, x, &x);    
+    
+    printf("testing choose_next_join\n");
+    printf("original list of trees:\n");
+    list_foreach(join_tables, print_table_dummy);
+    printf("picking next join and applying\n");
+    join_tables = choose_next_join(join_tables, &jf1, regf);
+    printf("remaining join filter:\n");
+    print_expr(jf1, x, &x);
+    printf("new list of tress:\n");
+    list_foreach(join_tables, print_table_dummy);
+    
     
     
     /*
     Add to header file
-    Functions to test:   
-    GenList *add_filters(GenList *ts, ExprNode **filters)
-    
-    int join_is_possible(IDListNode *left, IDListNode *right, IDListNode *join_filter)
-    int Expr_count_eq_filters(ExprNode *filters, IDListNode *table_names)
-   
-    void *join_heuristic(GenList *tables, ExprNode *join_filters, ExprNode *reg_filters, LogicalQueryNode **left, LogicalQueryNode **right, ExprNode **join_clause)
-    GenList *choose_next_join(GenList *tables, ExprNode **join_filter_ptr, ExprNode *reg_filters);
-    
+    Functions to test:       
     void *optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
    
     */

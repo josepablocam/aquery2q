@@ -246,25 +246,29 @@
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 136 "aquery.y"
+#line 162 "aquery.y"
 {
   int   intval;
   float floatval;
   char* str;
   struct ExprNode *exprnode;
-  //UDF related
   struct UDFDefNode *udfdef;
   struct IDListNode *idlist;
   struct LocalVarDefNode *localvardef;
   struct UDFBodyNode *udfbody;
   struct FullQueryNode *fullquery; 
+  struct LocalQueryNode *localquery;
   struct LogicalQueryNode *plan;
   struct OrderNode *order;
   struct NamedExprNode *namedexpr;
   struct InsertNode *insert;
+  struct CreateNode *create;
+  struct CreateSourceNode *createsrc;
+  struct SchemaNode *schema;
+  struct TopLevelNode *top;
 }
 /* Line 1529 of yacc.c.  */
-#line 268 "aquery.tab.h"
+#line 272 "aquery.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

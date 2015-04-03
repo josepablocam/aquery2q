@@ -106,8 +106,12 @@ char *get_table_src(ExprNode *expr);
 IDListNode *collect_TablesExpr(ExprNode *exp);
 int is_JoinClause(ExprNode *expr);
 void groupExpr_OnJoin(ExprNode *expr, ExprNode **join_filters, ExprNode **other_filters);
+int Expr_has_subset_tables(ExprNode *expr, void *names);
 void groupExpr_OnSubsetTables(ExprNode *expr, ExprNode **have, ExprNode **dont, IDListNode *names);
+int Expr_has_exact_tables(ExprNode *expr, void *names);
 void groupExpr_OnEqualTables(ExprNode *expr, ExprNode **match, ExprNode **dont, IDListNode *names);
+int Expr_has_unknown_table(ExprNode *expr);
+void groupExpr_OnUnknownTables(ExprNode *expr, ExprNode **have, ExprNode **dont);
 void check_warn_Join();
 LogicalQueryNode *deposit_one_filter_deeply(LogicalQueryNode *node, ExprNode *filter);
 LogicalQueryNode *deposit_filters_deeply(LogicalQueryNode *table, ExprNode *filters);
@@ -117,8 +121,8 @@ int Expr_count_eq_filters(ExprNode *filters, IDListNode *table_names);
 void join_heuristic(GenList *tables, ExprNode *join_filters, ExprNode *reg_filters, LogicalQueryNode **left, LogicalQueryNode **right);
 GenList *choose_next_join(GenList *tables, ExprNode **join_filter_ptr, ExprNode *reg_filters);
 int is_simple_from(LogicalQueryNode *node);
-
-
+void optim_from(LogicalQueryNode **from, LogicalQueryNode **where);
+void print_table_dummy(GenList *t);
 
 
 

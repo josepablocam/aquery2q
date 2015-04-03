@@ -23,18 +23,19 @@ void consume_single_line_comment();
 "//"			{ count(); consume_single_line_comment(); }
 
  /* SQL: select query key words */
-"WITH"			{ count(); return WITH;      }
-"ASC"			{ count(); return ASC;       }
-"DESC"			{ count(); return DESC;      }
-"AS"			{ count(); return UC_AS;     }
-"SELECT"		{ count(); return SELECT;    }
-"FROM"			{ count(); return FROM;      }
-"ASSUMING"		{ count(); return ASSUMING;  }
-"WHERE"			{ count(); return WHERE;     }
-"GROUP"			{ count(); return GROUP;     }
-"BY"			{ count(); return BY;        }
-"HAVING"		{ count(); return HAVING;    }
-"as"			{ count(); return LC_AS;     }
+("WITH")|("with")           { count(); return WITH;      }
+("ASC")|("asc")             { count(); return ASC;       }
+("DESC")|("desc")			{ count(); return DESC;      }
+"AS"			            { count(); return UC_AS;     } 
+"as"			            { count(); return LC_AS;     }
+("SELECT")|("select")		{ count(); return SELECT;    }
+("FROM")|("from")	    	{ count(); return FROM;      }
+("ASSUMING")|("assuming")   { count(); return ASSUMING;  }
+("WHERE")|("where")			{ count(); return WHERE;     }
+("GROUP")|("group")			{ count(); return GROUP;     }
+("BY")|("by")   			{ count(); return BY;        }
+("HAVING")|("having")		{ count(); return HAVING;    }
+
 
  /* SQL: indexing */
 "ROWID"			{ count(); return ROWID;     }
