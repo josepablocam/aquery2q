@@ -41,7 +41,8 @@ const char *ExprNodeTypeName[]= {
 	"expr_list",
 	"predicate",
 	"AND",
-	"OR"
+	"OR",
+    "neg"
 	};
 
 const char* LogicalQueryNodeTypeName[] = {
@@ -63,7 +64,9 @@ const char* LogicalQueryNodeTypeName[] = {
 	"values",
 	"col_names",
     "sort",
-    "sort-each"
+    "sort-each",
+    "equi_join_on",
+    "possible_push_filters"
 };
 
 const char* CreateNodeTypeName[] = {
@@ -220,6 +223,7 @@ void print_logical_query(LogicalQueryNode *step, int parent_id, int *id)
 				break;
 			case FILTER_WHERE:
 			case FILTER_HAVING:
+            case POSS_PUSH_FILTER:
 				print_filter(step, parent_id, id);
 				break;
 			case CARTESIAN_PROD:
@@ -227,6 +231,7 @@ void print_logical_query(LogicalQueryNode *step, int parent_id, int *id)
 				break;
 			case INNER_JOIN_ON:
 			case FULL_OUTER_JOIN_ON:
+            case EQUI_JOIN_ON:
 				print_joinOn(step, parent_id, id);
 				break;
 			case INNER_JOIN_USING:
@@ -389,25 +394,27 @@ void print_expr(ExprNode *expr, int parent_id, int *id)
 			if(expr->data_type == INT_TYPE || expr->data_type == BOOLEAN_TYPE)
 			{
 				sprintf(label,"%d", expr->data.ival);
-				int self_id = print_self(parent_id, id, label);
 			}
 			else if(expr->data_type == FLOAT_TYPE)
 			{
 				sprintf(label,"%f", expr->data.fval);
-				int self_id = print_self(parent_id, id, label);
 			}
 			else if(expr->data_type == STRING_TYPE || expr->data_type == DATE_TYPE)
 			{
-				int self_id = print_self(parent_id, id, expr->data.str);
+                sprintf(label, "%s", expr->data.str);
 			}
 			else
 			{
-				int self_id = print_self(parent_id, id, expr->data.str);
+                sprintf(label, "%s", expr->data.str);
 			}
 			
 		}
+		else if(expr->node_type == BUILT_IN_FUN_CALL || expr->node_type == UDF_CALL)
+        {
+            sprintf(label, "%s", expr->data.str);
+        }
 		else
-		{
+        {
             if(AST_PRINT_DEBUG)
             {
                 sprintf(label, "%s, od:%d, sod:%d", ExprNodeTypeName[expr->node_type], expr->order_dep, expr->sub_order_dep); 
@@ -416,11 +423,10 @@ void print_expr(ExprNode *expr, int parent_id, int *id)
             {
                 sprintf(label, "%s", ExprNodeTypeName[expr->node_type]);
             }
-			
-			int self_id = print_self(parent_id, id, label);
-			print_expr(expr->first_child, self_id, id);
 		}
-		
+        
+		int self_id = print_self(parent_id, id, label);
+        print_expr(expr->first_child, self_id, id);
 		print_expr(expr->next_sibling, parent_id, id);
 	}
 }

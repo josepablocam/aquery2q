@@ -16,6 +16,8 @@
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
 
 extern const char *ExprNodeTypeName[]; //aquery_print.c
+extern int query_line_num, query_col_num; //aquery.y
+extern int silence_warnings; //aquery.y options
 
 const char *UNKNOWN_TABLE_NM = "UNKNOWN";
 
@@ -566,6 +568,16 @@ IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
 }
 
 
+//returns a string with dot access: table_name.col_name from an colDotAccess node.
+char *qualify_name(char *table_name, char *col_name)
+{
+    char *qualified_name = malloc(sizeof(char) * (strlen(table_name) + strlen(col_name) + 2)); //1 for "." and another for null termination
+    strcpy(qualified_name, table_name);
+    strcat(qualified_name, ".");
+    strcat(qualified_name, col_name);
+    return qualified_name;
+}
+
 IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort_ptr, GenList **potential_ptr)
 {
     IDListNode *child = NULL;
@@ -598,9 +610,22 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
     else if(node->node_type == COLDOTACCESS_EXPR)
     { //TODO: figure out how to handle dot column accesses correctly
        OPTIM_PRINT_DEBUG("found col dot access, accessing dest child");
-       child =  collect_sortCols0(node->first_child->next_sibling, add_flag, need_sort_ptr, potential_ptr);
-       sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
-       return unionIDList(child, sibling);
+       char *qualified_name = qualify_name(node->first_child->data.str, node->first_child->next_sibling->data.str);
+       
+       if(add_flag)
+       {
+           OPTIM_PRINT_DEBUG("adding id to sort list");
+           *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(qualified_name, NULL));//union with list of def sorted
+           collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //explore sibling
+           return NULL; //already appending to need_sort here, don't need to add to potential, so just return a null
+       }
+       else
+       {
+           OPTIM_PRINT_DEBUG("sending id back up");
+           child = make_IDListNode(qualified_name, NULL); //return id to add to potential
+           sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+           return unionIDList(child, sibling);
+       }
     }
     else if(node->node_type == CALL_EXPR)
     {
@@ -655,7 +680,8 @@ IDListNode *collect_AllCols(ExprNode *node)
     }
     else if(node->node_type == COLDOTACCESS_EXPR)
     { //TODO: figure out how to handle dot column accesses
-       child = collect_AllCols(node->first_child->next_sibling);
+       char *qualified_name = qualify_name(node->first_child->data.str, node->first_child->next_sibling->data.str);
+       child = make_IDListNode(qualified_name, NULL);
        sibling = collect_AllCols(node->next_sibling);
        return unionIDList(child, sibling);
     }
@@ -926,16 +952,19 @@ int is_JoinClause(ExprNode *expr)
     }
     else
     {
-        if(!is_comparison(expr->node_type))
+        if(expr->node_type != EQ_EXPR)
         {
             return 0;
         }
         else 
         {
-            IDListNode *left_names = collect_TablesExpr(expr->first_child);
-            IDListNode *right_names =collect_TablesExpr(expr->first_child->next_sibling);
+            ExprNode *left = expr->first_child;
+            ExprNode *right = expr->first_child->next_sibling;
+            int involves_dot_accesses = left->node_type == COLDOTACCESS_EXPR && right->node_type == COLDOTACCESS_EXPR;
+            IDListNode *left_names = collect_TablesExpr(left);
+            IDListNode *right_names = collect_TablesExpr(right);
             IDListNode *names = unionIDList(left_names, right_names);
-            return !in_IDList(UNKNOWN_TABLE_NM, names) && length_IDList(names) > 1; //we need to know the tables being used, and there must be more than 1 table referenced  
+            return involves_dot_accesses && !in_IDList(UNKNOWN_TABLE_NM, names) && length_IDList(names) > 1; //we need to know the tables being used, and there must be more than 1 table referenced  
         }
     }
 }
@@ -947,6 +976,22 @@ void groupExpr_OnJoin(ExprNode *expr, ExprNode **join_filters, ExprNode **other_
     OPTIM_PRINT_DEBUG("grouping join expressions");
     groupExpr_onUnaryPred(expr, join_filters, other_filters, is_JoinClause);
 }
+
+
+//returns 1 if filter is equality filter
+int is_eq_filter(ExprNode *expr)
+{
+    return expr->node_type == EQ_EXPR;
+}
+
+
+//Separate equality filters and others
+void groupExpr_OnEqFilter(ExprNode *expr, ExprNode **eq_filters, ExprNode **other_filters)
+{
+    OPTIM_PRINT_DEBUG("grouping equality expressions");
+    groupExpr_onUnaryPred(expr, eq_filters, other_filters, is_eq_filter);
+}
+
 
 //Return true if expr involves a subset of names (i.e. all tables referenced in expr are already in names)
 int Expr_has_subset_tables(ExprNode *expr, void *names)
@@ -1069,7 +1114,6 @@ IDListNode *collect_TablesFrom(LogicalQueryNode *ts)
 }
 
 
-
 //Split from clause into a list of list of units to use for joins, returns a generic list
 GenList *split_from(LogicalQueryNode *node)
 {
@@ -1088,8 +1132,11 @@ GenList *split_from(LogicalQueryNode *node)
 }
 
 
-//Create a filter node with an expression as deeply as you can (i.e. as close to the
-//tables being referenced as possible)
+//Places equality-based filters as deeply as possible (even if that means before  join)
+//Meanwhile, non-equality based filters (ie. all others) are placed on top of the join
+//Operation closest to the necessary tables
+//If it is not a join, but rather a cartesian product, we allow the filter to
+//move deeper
 LogicalQueryNode *deposit_one_filter_deeply(LogicalQueryNode *node, ExprNode *filter)
 {
     OPTIM_PRINT_DEBUG("depositing one filter");
@@ -1104,24 +1151,71 @@ LogicalQueryNode *deposit_one_filter_deeply(LogicalQueryNode *node, ExprNode *fi
         IDListNode *node_tables = collect_TablesFrom(node);
         
         if(is_setEqual_IDLists(filter_tables, node_tables))
-        { //we've arrived to the simplest case
+        { //we've arrived to the simplest case, and is solely  possible for equality filters, given the way we use this function
             if(node->node_type == FILTER_WHERE)
-            { //we already have a filter there, so just append to expressions in filter
+            { //we already have an a filter there, so just append to exprs
                 node->params.exprs->next_sibling = filter;  
                 return node;  
             }
             else
             { //otherwise create filter
                 return make_filterWhere(node, filter);
-            }     
+            }
         }    
         else if(is_subset_IDLists(filter_tables, node_tables))
         { 
             IDListNode *left_names = collect_TablesFrom(node->arg);
             IDListNode *right_names = collect_TablesFrom(node->next_arg);
+            /*
+            if(!is_eq_filter(filter) )
+            { //this might be a candidate for a possible push filter
+                if(node->node_type == POSS_PUSH_FILTER)
+                { //we already created the possible push filter, so just append
+                    node->params.exprs->next_sibling = filter;
+                    return node;
+                }
+                else if(is_join_node(node->node_type))
+                { //we just reached a join node, so create the possible push here
+                    printf("creating a new possible push filter\n");
+                    return make_PossPushFilter(node, filter);
+                }
+                else if(node->node_type == FILTER_WHERE)
+                { //we need to place it underneath this, between it and the join
+                    node->arg = deposit_one_filter_deeply(node->arg, filter);
+                    return node;
+                }
+                else
+                {
+                    //do nothing, this means we had a cross product, so we let
+                    //these filters float down
+                }
+            }
+            */
+            if(!is_eq_filter(filter))
+            {
+                if(node->node_type == POSS_PUSH_FILTER)
+                { //we already have a possible push filter to which we could add
+                    LogicalQueryNode *join = node->arg; //take out the join underneath it and inspect
+                    IDListNode *join_left = collect_TablesFrom(join->arg);
+                    IDListNode *join_right = collect_TablesFrom(join->next_arg);
+                    
+                    if(is_setEqual_IDLists(filter_tables, join_left) || is_setEqual_IDLists(filter_tables, join_right))
+                    { //the tables we might push this to are just underneath this join, so just add to this push filter
+                        node->params.exprs->next_sibling = filter;
+                        return node;
+                    }
+                }
+                
+                if(is_join_node(node->node_type) && (is_setEqual_IDLists(filter_tables, left_names) || is_setEqual_IDLists(filter_tables, right_names)))
+                { //we should create a possible push filter here
+                    return make_PossPushFilter(node, filter);
+                }
+            }
             
+            //other cases fall through here
             if(is_subset_IDLists(filter_tables, left_names))
             {
+     
                 node->arg = deposit_one_filter_deeply(node->arg, filter);
                 return node;
             }
@@ -1138,7 +1232,7 @@ LogicalQueryNode *deposit_one_filter_deeply(LogicalQueryNode *node, ExprNode *fi
                     return node;
                 }
                 else
-                { //otherwise create filter
+                {   //otherwise create filter
                     return make_filterWhere(node, filter);
                 }
             }
@@ -1174,6 +1268,18 @@ LogicalQueryNode *deposit_filters_deeply(LogicalQueryNode *table, ExprNode *filt
     return table;
     
 }
+
+
+
+
+//returns 1 if a node is a join of any kind
+int is_join_node(LogicalQueryNodeType type)
+{
+    return type == INNER_JOIN_ON || type == FULL_OUTER_JOIN_ON ||
+        type == INNER_JOIN_USING || type == FULL_OUTER_JOIN_USING ||
+        type == EQUI_JOIN_ON;
+}
+
 
 
 //Returns a general list of logical query nodes that have added the
@@ -1218,6 +1324,7 @@ int join_is_possible(IDListNode *left, IDListNode *right, IDListNode *join_filte
     return any_in_IDList(join_filter, left) && any_in_IDList(join_filter, right); //a link in common
 }
 
+
 //count the number of equality filters that can be applied given a list of table names
 int Expr_count_eq_filters(ExprNode *filters, IDListNode *table_names)
 {
@@ -1232,7 +1339,7 @@ int Expr_count_eq_filters(ExprNode *filters, IDListNode *table_names)
         next = curr->next_sibling;
         curr->next_sibling = NULL; //break link,make sure get correct table names below
         
-        if(curr->node_type == EQ_EXPR || curr->node_type == NEQ_EXPR)
+        if(is_eq_filter(curr))
         {
             if(is_subset_IDLists(collect_TablesExpr(curr), extended_names))
             {
@@ -1252,9 +1359,14 @@ int Expr_count_eq_filters(ExprNode *filters, IDListNode *table_names)
 //Warn user if a cross is missing a join clause and returns the union
 void check_warn_Join()
 {
-    printf("Warning: there is a missing join clause for an implicit join. Please make sure your join clauses use table prefixes for all references\n");    
-    printf("Offending query at line DUMMY\n"); //TODO: add info here....
-    printf("Silence these warnings with option -s");
+    if(!silence_warnings)
+    {    
+        printf("Warning: there is a missing join clause for an implicit join");
+        printf("Please make sure your join clauses use table prefixes for all references\n"); 
+        printf("and your implicit join clauses are equality selections\n");   
+        printf("Offending from clause starts at line:%d, col:%d\n", query_line_num, query_col_num); 
+        printf("Silence these warnings with option -s\n");
+    }
 }
 
 
@@ -1275,11 +1387,15 @@ void join_heuristic(GenList *tables, ExprNode *join_filters, ExprNode *reg_filte
     {
         filter_iters++;
         try_left = tables;
-        next_join_filter = try_join_filter->next_sibling; //break link before searching names
-        try_join_filter->next_sibling = NULL;
-        try_join_names = collect_TablesExpr(try_join_filter); //search names
-        try_join_filter->next_sibling = next_join_filter; //restore link
         
+        if(try_join_filter != NULL)
+        {
+           next_join_filter = try_join_filter->next_sibling; //break link before searching names
+           try_join_filter->next_sibling = NULL;
+           try_join_names = collect_TablesExpr(try_join_filter); //search names
+           try_join_filter->next_sibling = next_join_filter; //restore link 
+        }
+       
         while(try_left != NULL)
         {
             try_right = tables;
@@ -1312,7 +1428,10 @@ void join_heuristic(GenList *tables, ExprNode *join_filters, ExprNode *reg_filte
             try_left = try_left->next;
         }
         
-        try_join_filter = try_join_filter->next_sibling;
+        if(try_join_filter != NULL)
+        {
+            try_join_filter = try_join_filter->next_sibling; 
+        } 
     }
 }
 
@@ -1368,6 +1487,7 @@ GenList *choose_next_join(GenList *tables, ExprNode **join_filters_ptr, ExprNode
 }
 
 
+
 int is_simple_from(LogicalQueryNode *node)
 {
     return node->node_type == SIMPLE_TABLE || node->node_type == ALIAS;
@@ -1378,6 +1498,7 @@ void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
 {
     if(*where == NULL)
     {
+        check_warn_Join();
         return; //nothing to do
     }
     
@@ -1400,13 +1521,22 @@ void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
     //separate into known and unknown references
     groupExpr_OnUnknownTables(no_agg_filters, &unknown_filters, &known_filters);
     
+    //Separate known filters into equality based and other filters
+    ExprNode *eq_filters = NULL;
+    ExprNode *non_eq_filters = NULL;
+    groupExpr_OnEqFilter(known_filters, &eq_filters, &non_eq_filters);
+    
     GenList *sep_ts = split_from(*from); //split from into a list of tables
     
     while(list_length(sep_ts) != 1)
     {
-        add_filters(sep_ts, &known_filters);
-        sep_ts = choose_next_join(sep_ts, &join_filters, known_filters);
+        sep_ts = choose_next_join(sep_ts, &join_filters, eq_filters); //choose join based on equality filters
+        add_filters(sep_ts, &eq_filters); //apply equality filters prior to join
     }
+    
+    //add non-equality filters on top of joins as possible filters to push
+    //so apply after all joins have been performed
+    add_filters(sep_ts, &non_eq_filters); 
 
     LogicalQueryNode *table = sep_ts->data;
     

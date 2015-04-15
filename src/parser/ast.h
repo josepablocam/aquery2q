@@ -38,7 +38,8 @@ typedef enum ExprNodeType {
   LIST_EXPR,
   PRED_EXPR, //predicate
   WHERE_AND_EXPR,
-  WHERE_OR_EXPR
+  WHERE_OR_EXPR,
+  NEG_EXPR //negation
 } ExprNodeType;
 
 typedef struct IDListNode {
@@ -101,6 +102,8 @@ ExprNode *make_udfNode(Symtable *symtable, char *nm);
 ExprNode *make_oddix();
 ExprNode *make_evenix();
 ExprNode *make_everynix(int ix);
+/* negation of an expression */
+ExprNode *make_neg(ExprNode *expr);
 /* Simple arithmetic, comparison and logical operations */
 ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y);
 ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y);
@@ -141,7 +144,9 @@ typedef enum LogicalQueryNodeType {
 	EXPLICIT_VALUES,
 	COL_NAMES,
     SORT_COLS,
-    SORT_EACH_COLS
+    SORT_EACH_COLS,
+    EQUI_JOIN_ON,
+    POSS_PUSH_FILTER
 	} LogicalQueryNodeType;
 
 
@@ -151,6 +156,7 @@ typedef struct LogicalQueryNode {
 	struct LogicalQueryNode *arg; //argument to operation
 	struct LogicalQueryNode *next_arg; //potential additional arguments
 	int order_dep;
+    IDListNode *tables_involved; //used in optimizer
 	union {
 		char *name		 		; //table name or alias
 		NamedExprNode 	*namedexprs; //c1 * 2 as c2, c1 * 2 (nil)
@@ -168,6 +174,7 @@ LogicalQueryNode *make_joinOn(LogicalQueryNodeType jointype, LogicalQueryNode *t
 LogicalQueryNode *make_joinUsing(LogicalQueryNodeType jointype, LogicalQueryNode *t1, LogicalQueryNode *t2, IDListNode *cols);
 LogicalQueryNode *make_cross(LogicalQueryNode *t1, LogicalQueryNode *t2);
 LogicalQueryNode *make_filterWhere(LogicalQueryNode *t, ExprNode *conds);
+LogicalQueryNode *make_PossPushFilter(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_groupby(LogicalQueryNode *t, ExprNode *exprs);
 LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_flatten(LogicalQueryNode *t);

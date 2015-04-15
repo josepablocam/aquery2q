@@ -42,9 +42,15 @@ typedef struct TablesToExprsMap
 TablesToExprsMap *make_TablesToExprsMap(IDListNode *tables, ExprNode *exprs, TablesToExprsMap *map);
 
 
+int is_eq_filter(ExprNode *expr);
+int is_join_node(LogicalQueryNodeType type);
+
 //Manipulating exprnodes as lists and splitting
 void partExpr_atFirst(ExprNode *orig, ExprNode **before, ExprNode **after, int (*pred)(ExprNode *));
 void partExpr_OnOrder(ExprNode *expr, ExprNode **order_indep, ExprNode **order_dep);
+void groupExpr_OnEqFilter(ExprNode *expr, ExprNode **eq_filters, ExprNode **other_filters);
+
+
 
 void groupExpr_onUnaryPred(ExprNode *orig, ExprNode **true, ExprNode **false, int (*pred)(ExprNode *));
 void groupExpr_onBinaryPred(ExprNode *orig, ExprNode **true, ExprNode **false, int (*pred)(ExprNode *, void*), void* data);

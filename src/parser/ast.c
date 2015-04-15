@@ -284,6 +284,16 @@ ExprNode *make_everynix(int ix)
 }
 
 
+ExprNode *make_neg(ExprNode *expr)
+{
+	AST_PRINT_DEBUG("negating node");
+	ExprNode *new_node = make_EmptyExprNode(NEG_EXPR);
+	new_node->first_child = expr;
+    spread_order(new_node, expr);
+    new_node->uses_agg = SAFE_USES_AGG(expr);
+	return new_node;
+}
+
 
 
 /* Simple arithmetic, comparison and logical operations */
@@ -552,6 +562,7 @@ LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type)
 	logical_unit->node_type = type;
 	logical_unit->after = logical_unit->arg = logical_unit->next_arg = NULL;
 	logical_unit->order_dep = 0;
+    logical_unit->tables_involved = NULL;
 	return logical_unit;
 } 
 
@@ -605,6 +616,17 @@ LogicalQueryNode *make_filterWhere(LogicalQueryNode *t, ExprNode *conds)
 	where->params.exprs = conds;
 	where->order_dep = SAFE_ORDER_DEP(conds) | SAFE_SUB_ORDER_DEP(conds);
 	return where;
+}
+
+//These kind of nodes present selections that might get pushed down below
+//a join depending on whether or not they affect indices
+LogicalQueryNode *make_PossPushFilter(LogicalQueryNode *t, ExprNode *conds)
+{
+    LogicalQueryNode *poss_push = make_EmptyLogicalQueryNode(POSS_PUSH_FILTER);
+    poss_push->arg = t;
+    poss_push->params.exprs = conds;
+    poss_push->order_dep = SAFE_ORDER_DEP(conds) | SAFE_SUB_ORDER_DEP(conds);
+    return poss_push; 
 }
 
 LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds)
