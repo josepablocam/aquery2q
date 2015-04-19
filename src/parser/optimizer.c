@@ -14,6 +14,8 @@
 #define STAND_ALONE 0
 #define OPTIM_DEBUG 0
 #define OPTIM_PRINT_DEBUG(str) if(OPTIM_DEBUG) printf("---->OPTIM DEBUGGING: %s\n", str)
+#define NAMESIZE 100
+
 
 extern const char *ExprNodeTypeName[]; //aquery_print.c
 extern int query_line_num, query_col_num; //aquery.y
@@ -350,8 +352,9 @@ ExprNode *append_Exprs(ExprNode *existing, ExprNode *new)
 }
 
 
-
+/*
 //returns 1 if name is in list, 0 otherwise, uses strcmp
+
 int in_IDList(const char *name, IDListNode *list)
 {
     IDListNode *curr;
@@ -366,6 +369,51 @@ int in_IDList(const char *name, IDListNode *list)
     
     return 0;
 }
+*/
+
+int same_name(const char *name1, const char *name2)
+{   
+    const char *dot1 = strchr(name1, '.');
+    const char *dot2 = strchr(name2, '.');
+    
+    if((dot1 == NULL && dot2 == NULL) || (dot1 != NULL && dot2 != NULL))
+    { //if neither use correlation names, or both do, then compare directly
+        return strcmp(name1, name2);
+    }
+    else
+    { //compare only column name, ignore correlation name    
+        if(dot1 != NULL)
+        {
+            return strcmp(dot1 + 1, name2);   
+        }
+        else
+        {
+            return strcmp(name1, dot2 + 1);
+        }    
+    }
+}
+
+
+//returns true if the name is already in the list
+//handles column references that use a correlation name
+int in_IDList(const char *name, IDListNode *list)
+{
+    IDListNode *curr;
+
+    for(curr = list; curr != NULL; curr = curr->next_sibling)
+    {
+        if(same_name(name, curr->name) == 0)
+        {
+            return 1;
+        }
+    }
+    
+    return 0;    
+}
+
+
+
+
 
 //returns 1 if any element of l1 is in l2
 int any_in_IDList(IDListNode *l1, IDListNode *l2)
@@ -1506,6 +1554,8 @@ void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
     ExprNode *join_filters = NULL;
     ExprNode *other_filters =  NULL;
     ExprNode *all_filters = (*where)->params.exprs->first_child;
+    //free the params.expr
+    free((*where)->params.exprs);
     groupExpr_OnJoin(all_filters, &join_filters, &other_filters); //separate into join and others
     
     ExprNode *oi_filters = NULL;
@@ -1533,6 +1583,11 @@ void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
         sep_ts = choose_next_join(sep_ts, &join_filters, eq_filters); //choose join based on equality filters
         add_filters(sep_ts, &eq_filters); //apply equality filters prior to join
     }
+
+    //add any equality filters that might remain (consider that the table list
+    //might have already been of len = 1 if only 1 explicit join, since we don't
+    //cut up user joins)
+    add_filters(sep_ts, &eq_filters);
     
     //add non-equality filters on top of joins as possible filters to push
     //so apply after all joins have been performed
@@ -1558,7 +1613,7 @@ void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
     //if we still have OD filters, make them a new where clause, otherwise set to null
     if(od_filters != NULL)
     {
-       *where = make_filterWhere(NULL, od_filters);  
+       *where = make_filterWhere(NULL, make_exprListNode(od_filters));  
     }
     else
     {
