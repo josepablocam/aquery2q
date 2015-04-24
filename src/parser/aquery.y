@@ -8,6 +8,7 @@
 #include "ast.h"       /* builds ast for parser */
 #include "ast_print.h" /* provides dot printing of ast */
 #include "optimizer.h" /* optimizing for query plans */
+#include "codegen.h" /* generates q code */
 	
 #define YYDEBUG 1
 #define ERRORCOLOR  "\x1B[32m"
@@ -17,11 +18,15 @@ extern int yyleng;
 extern FILE *yyin;
 extern int yylex();
 extern int yyparse();
-void warning_Cross();
+
 
 //for debugging purposes, defined in flex
 extern int line_num; 
 extern int col_num;
+
+//For reporting query issues
+int query_line_num;
+int query_col_num;
 
 //Symbol table
 Symtable *env;	/* global symbol table: stack of hash tables */
@@ -31,11 +36,15 @@ Symentry *entry; /* place holder for entry pointers to perform modifications ad-
 TopLevelNode* ast; /* holds any asts created during compilation */
 LogicalQueryNode *curr_order;
 
+//Code generation
+FILE *DEST_FILE;
+
+
 void yyerror(const char *);
 
 //Command line options
-int optim_level; //level of optimization in ast
-int silence_warnings;
+int optim_level = 0; //level of optimization in ast
+int silence_warnings = 0;
 
 %}
 
@@ -79,7 +88,7 @@ int silence_warnings;
   
  /* built-in functions */
  /* non-moving variants */
-%token <str> ABS AVG COUNT DISTINCT DROP FILL FIRST LAST MAX MIN MOD NEXT PREV PRD REV SUM STDDEV
+%token <str> ABS AVG COUNT DISTINCT DROP FILL FIRST LAST MAX MIN MOD NEXT PREV PRD REV SUM SQRT STDDEV 
  /* moving variants */
 %token <str> AVGS DELTAS MAXS MINS PRDS SUMS
 %token <str> MAKENULL
@@ -99,6 +108,7 @@ int silence_warnings;
 %type <exprnode> constant truth_value table_constant 
 %type <exprnode> case_expression case_clause when_clauses when_clause when_clauses_tail else_clause
 %type <exprnode> call built_in_fun 
+%type <exprnode> unary_neg
 %type <exprnode> main_expression
 %type <exprnode> indexing
 %type <exprnode> exp_expression mult_expression add_expression rel_expression eq_expression 
@@ -202,9 +212,10 @@ top_level: global_query top_level           { $$ = make_Top_GlobalQuery($1, $2);
 	|	insert_statement top_level          { $$ = make_Top_Insert($1, $2); }
 	|	update_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
 	|	delete_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
-	|	user_function_definition top_level  { $$ = make_Top_UDF($1, $2); }
+	|	user_function_definition top_level  { $$ = make_Top_UDF($1, $2); cg_UDFDefNode($1); putchar('\n');}             
 	| /* epsilon */	                        { $$ = NULL; }
 	;
+
 
  /******* 2.2: Local and global queries *******/
  
@@ -259,7 +270,7 @@ select_clause_tail: ',' select_elem select_clause_tail		{ $2->next_sibling = $3;
 	| /* epislon */											{ $$ = NULL; }
 	;
 		
-from_clause: FROM table_expressions { $$ = $2; }
+from_clause: FROM {query_line_num = line_num; query_col_num = col_num; } table_expressions { $$ = $3; }
 	;
 
 order_clause: ASSUMING order_specs	{ $$ = make_sort(NULL, $2);}
@@ -411,7 +422,7 @@ table_expression_main: ID ID 									{ $$ = make_alias(make_table($1), $2); }
 table_expressions: joined_table table_expressions_tail 				{ if($2 == NULL){ $$ = $1; } else { $$ = make_cross($1, $2); } }
 	;
 
-table_expressions_tail: ',' joined_table table_expressions_tail	 	 { if($3 == NULL){ $$ = $2; } else { warning_Cross(); $$ = make_cross($2, $3); } }
+table_expressions_tail: ',' joined_table table_expressions_tail	 	 { if($3 == NULL){ $$ = $2; } else { $$ = make_cross($2, $3); } }
 	| /* epsilon */ 											     { $$ = NULL;                                                   }   
 	;
 
@@ -586,12 +597,17 @@ built_in_fun: ABS 				{ $$ = make_builtInFunNode(env, $1); }
 	| REV 	                    { $$ = make_builtInFunNode(env, $1); }
 	| SUM 	                    { $$ = make_builtInFunNode(env, $1); }
 	| SUMS 		                { $$ = make_builtInFunNode(env, $1); }
+    | SQRT 		                { $$ = make_builtInFunNode(env, $1); }
 	| STDDEV 	                { $$ = make_builtInFunNode(env, $1); }
 	| MAKENULL	                { $$ = make_builtInFunNode(env, $1); }
 	;
+
+unary_neg: call { $$ = $1; }
+    |     MINUS_OP call { $$ = make_neg($2); }
+    ;
 	
-exp_expression: call 				{ $$ = $1;                               }
-	| call EXP_OP exp_expression	{ $$ = make_arithNode(POW_EXPR, $1, $3); }
+exp_expression: unary_neg 				{ $$ = $1;                               }
+	| unary_neg EXP_OP exp_expression	{ $$ = make_arithNode(POW_EXPR, $1, $3); }
 	;
 
 mult_expression: exp_expression					    { $$ = $1;                                }
@@ -674,14 +690,6 @@ void help()
     printf("-s  silence warnings\n");
 }
 
-void warning_Cross()
-{
-    if(!silence_warnings)
-    {
-         printf("The use of , at line:%d can result in reduced performance if no join-key is provided\n", line_num);
-         printf("Run compiler with -s option to silence these warnings\n");
-    }
-}
 
 
 int main(int argc, char *argv[]) {
@@ -695,6 +703,9 @@ int main(int argc, char *argv[]) {
 	/* getopt values */
 	int op;
 	
+    /* where to save the code generated */
+    DEST_FILE = stdout;
+    
 	
 	while((op = getopt(argc, argv, "spha:")) != -1)
 	{
@@ -739,14 +750,18 @@ int main(int argc, char *argv[]) {
 	}
 	
 	
-	
+	FILE *to_parse;
+    
 	if(1 > argc - optind) 
 	{ //Did we get a file to analyze?
-		help();
-		exit(1);
+		//help();
+		//exit(1);
+        to_parse = stdin;
 	}
-	
-	FILE *to_parse = fopen(argv[optind], "r");
+    else
+    {
+        to_parse = fopen(argv[optind], "r");
+    }
 	
 	if(to_parse == NULL)
 	{

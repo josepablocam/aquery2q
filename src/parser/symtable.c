@@ -7,27 +7,32 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include "ast.h"
 #include "symtable.h"
+#include "aquery_types.h"
 #define SYM_TABLE_DEBUG 0
-#define PRINT_DEBUG(str) if(SYM_TABLE_DEBUG) printf("---->DEBUGGING: %s\n", str)
+#define SYM_PRINT_DEBUG(str) if(SYM_TABLE_DEBUG) printf("---->SYM TABLE DEBUGGING: %s\n", str)
 #define STAND_ALONE 0
 
 //Allocate memory for a symbol table entry, copy variable name, initialize and return
 //Exits with error if memory is not succesfully allocated with malloc
-Symentry *make_symentry(char *name, Type type)
+Symentry *make_symentry(char *name, DataType type, int order_d, int agg)
 {
-	PRINT_DEBUG("MEMALLOC: symbol entry");
+	SYM_PRINT_DEBUG("MEMALLOC: symbol entry");
 	Symentry *newentry = malloc(sizeof(Symentry));
 	
 	if(newentry == NULL)
 	{
-		printf("Unable to allocate Symentry\n");
+		printf("Symtable: Unable to allocate Symentry\n");
 		exit(1);
 	}
 	
 	newentry->name = strdup(name); //copy the string name
 	newentry->type = type;
+	newentry->order_dep = order_d;
+	newentry->uses_agg = agg; //uses an aggregate
 	newentry->next = NULL;
+    newentry->order_spec = NULL;
 	
 	return newentry;
 }
@@ -35,7 +40,7 @@ Symentry *make_symentry(char *name, Type type)
 //Allocate memory for symbol table and initializes struct. Exits with error if memory allocation fails
 Symtable *make_symtable()
 {
-	PRINT_DEBUG("MEMALLOC: symbol table");
+	SYM_PRINT_DEBUG("MEMALLOC: symbol table");
 	Symtable *symtable = malloc(sizeof(Symtable));
 	
 	if(symtable == NULL)
@@ -58,7 +63,7 @@ Symtable *make_symtable()
 //a pointer to the top of the stack
 Symtable *push_env(Symtable *curr_env)
 {
-	PRINT_DEBUG("pushing context (new symbol table added to stack)");
+	SYM_PRINT_DEBUG("pushing context (new symbol table added to stack)");
 	Symtable *new_env = make_symtable();
 	new_env->next = curr_env;
 	return new_env;
@@ -68,7 +73,7 @@ Symtable *push_env(Symtable *curr_env)
 //and returns a pointer to the new top of the stack
 Symtable *pop_env(Symtable *curr_env)
 {
-	PRINT_DEBUG("popping current context (top of stack symbol table removed)");
+	SYM_PRINT_DEBUG("popping current context (top of stack symbol table removed)");
 	Symtable* next_env = curr_env->next;
 	free_symtable(curr_env);
 	return next_env;
@@ -78,7 +83,7 @@ Symtable *pop_env(Symtable *curr_env)
 //(this needs to be called on every table in a symbol table stack to correctly free the whole symbol table)
 void free_symtable(Symtable *symtable)
 {
-	PRINT_DEBUG("freeing symbol table");
+	SYM_PRINT_DEBUG("freeing symbol table");
 	free_names(symtable->table);
 	free(symtable);
 }
@@ -86,7 +91,7 @@ void free_symtable(Symtable *symtable)
 //Frees the array of symbol table entries held in a symbol table structure.
 void free_names(Symentry *names[])
 {
-	PRINT_DEBUG("MEMDEALLOC: freeing names");
+	SYM_PRINT_DEBUG("MEMDEALLOC: freeing names");
 	int i;
 	Symentry *this;
 	
@@ -102,7 +107,7 @@ void free_names(Symentry *names[])
 //Follows a chain of symbol table entries and frees each of them
 void free_symchain(Symentry *this)
 {
-	PRINT_DEBUG("MEMDEALLOC: freeing chain of symbols");
+	SYM_PRINT_DEBUG("MEMDEALLOC: freeing chain of symbols");
 	Symentry *delete;
 	
 	for(delete = NULL; this != NULL; )
@@ -133,12 +138,17 @@ int symhash(char *name)
 //If no match is found, NULL is returned
 Symentry *lookup_sym(Symtable *symtable, char *name)
 {
-	PRINT_DEBUG("looking up a symbol in symbol table");
+	SYM_PRINT_DEBUG("looking up a symbol in symbol table");
 	Symtable *curr_env = symtable;
 	Symentry *result = NULL;
 	Symentry *entry = NULL;
 	int hash_index = symhash(name);
 	
+    if(symtable == NULL)
+    {
+        return result; //no point in looking for anything if we don't have an env
+    }
+    
 	for(result = NULL; result == NULL && curr_env != NULL; curr_env = curr_env->next)
 	{	
 		for(entry = curr_env->table[hash_index]; entry != NULL; entry = entry->next)
@@ -156,17 +166,34 @@ Symentry *lookup_sym(Symtable *symtable, char *name)
 
 //Places a given symbol into our symbol table (creating any necessary structure along the way)
 //Symbols are placed in stack order, with the latest put shadowing repetitions placed prior
-void put_sym(Symtable *curr_env, char *name, Type type)
+void put_sym(Symtable *curr_env, char *name, DataType type, int ord_d, int uses_agg)
 {
-	PRINT_DEBUG("putting symbol into symbol table");
-	Symentry *new_entry = make_symentry(name, type);
+	SYM_PRINT_DEBUG("putting symbol into symbol table");
+	Symentry *new_entry = make_symentry(name, type, ord_d, uses_agg);
 	int hash_index = symhash(name);
 	new_entry->next = curr_env->table[hash_index];
 	curr_env->table[hash_index] = new_entry; //we place new symbol at start of list, this achieves shadowing semantics in same scope
 }
 
+//Add order information to a given identifier
+void add_order(Symtable *curr_env, char *name, LogicalQueryNode *sort)
+{
+    SYM_PRINT_DEBUG("adding order information to identifier in symtable");
+    Symentry *entry = lookup_sym(curr_env, name);
+    
+    if(entry == NULL)
+    {
+        printf("Symtable: Attempted to add order to non-existing identifier\n");
+        exit(1);
+    }
+    else
+    {
+        entry->order_spec = (sort == NULL) ? NULL : sort->params.order;
+    }    
+}
+
 //Yes...breaks are redundant here, but leaving in case we change this later
-const char* print_type_name(Type type)
+const char* print_type_name(DataType type)
 {
 	switch(type)
 	{
@@ -231,23 +258,54 @@ void print_symtable(Symtable *symtable)
 }
 
 
+
+Symtable *init_symtable()
+{
+	const char *built_in_names[] = {
+		"abs", "avg", "avgs", "count", "deltas", "distinct", "drop",
+		"fill", "first", "last", "max", "maxs", "min", "mins", "mod",
+		"next", "prev", "prd", "prds", "reverse", "sum", "sums", "stddev",
+		"make_null", "sqrt"
+		};
+	
+	const int built_in_order_dep[] = {
+		1, 0, 1, 0, 1, 1, 1,
+		1, 1, 1, 0, 1, 0, 1, 1,
+		1, 1, 0, 1, 1, 0, 1, 0,
+		0, 0
+		};	
+	
+	Symtable *env = make_symtable();
+	int i, len = sizeof(built_in_names) /  sizeof(char *);
+	
+	//populate with information about built-ins properties, note that we duplicate the string, as we need these to be persistent
+	for(i = 0 ; i < len; i++)
+	{
+		put_sym(env, strdup(built_in_names[i]), FUNCTION_TYPE, built_in_order_dep[i], 1);
+	}
+	
+	return env;
+}
+
+
+
 //A simple set of tests for our symbol table implementation
 void ignore_symtable_test()
 { 
-	PRINT_DEBUG("running symbol table tests");
+	SYM_PRINT_DEBUG("running symbol table tests");
 	//scope 1
 	char *names[][4]= { 
 			{ "var_1","var_2","var_3", "var_4" }, //scope 0
 			{ "var_1", "var_5", "var_6", "var_5" }, //scope 1
 			};
 			
-	Type types[][4] = { 
+	DataType types[][4] = { 
 			{ INT_TYPE, FLOAT_TYPE, FUNCTION_TYPE, TABLE_TYPE }, //scope 0
 			{ FUNCTION_TYPE, INT_TYPE, TABLE_TYPE, FUNCTION_TYPE }, //scope 1
 			};
 	
 	int depth = 2, len = 4, i, j;
-	Symtable *symtable = make_symtable();
+	Symtable *symtable = init_symtable();
 	Symentry *entry = NULL;
 	
 	//inserting symbols for scope 0
@@ -255,7 +313,7 @@ void ignore_symtable_test()
 	for(j = 0; j < len; j++)
 	{	
 		printf("Putting:%s with type %s\n", names[i][j], print_type_name(types[i][j]));
-		put_sym(symtable, names[i][j], types[i][j]);
+		put_sym(symtable, names[i][j], types[i][j], 0, 0);
 	}
 	
 	//retrieveing symbols for scope 0
@@ -282,7 +340,7 @@ void ignore_symtable_test()
 	for(j = 0; j < len; j++)
 	{	
 		printf("Putting:%s with type %s\n", names[i][j], print_type_name(types[i][j]));
-		put_sym(symtable, names[i][j], types[i][j]);
+		put_sym(symtable, names[i][j], types[i][j], 0, 0);
 	}
 	
 	//Looking up all symbols
@@ -307,7 +365,6 @@ void ignore_symtable_test()
 	symtable = pop_env(symtable); //remove scope 1
 	symtable = pop_env(symtable); //remove scope 0
 }
-
 
 
 #if STAND_ALONE

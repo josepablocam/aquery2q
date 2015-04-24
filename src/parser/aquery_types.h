@@ -18,6 +18,7 @@ typedef enum DataTypes {
      } DataType;
 
 
+
 	
 //Type checking operations
 int is_int(DataType x);

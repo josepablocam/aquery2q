@@ -1,14 +1,17 @@
 #ifndef AQUERY_SYM_TABLE_H
-
 #define AQUERY_SYM_TABLE_H
 #define SYM_TABLE_SIZE 32
+#include "aquery_types.h"
 
-typedef enum types { INT_TYPE, FLOAT_TYPE, DATE_TYPE, BOOLEAN_TYPE, HEX_TYPE, TABLE_TYPE, VIEW_TYPE, FUNCTION_TYPE, CALL_TYPE, UNKNOWN_TYPE } Type;//UNKNOWN_TYPE represents dynamic type info unavailable to us at compile time
 
+struct OrderNode;
 typedef struct symentry {
 	char *name;
-	Type type;
+	DataType type;
 	struct symentry* next; //linking
+	int order_dep; //order dependent
+	int uses_agg; //uses an aggregate
+    struct OrderNode *order_spec; //any order information
 } Symentry;
 
 typedef struct symtable {
@@ -18,8 +21,11 @@ typedef struct symtable {
 
 
 //Memory allocation and construction functions
-Symentry *make_symentry(char *name, Type type);
+Symentry *make_symentry(char *name, DataType type, int ord_d, int sz_p);
 Symtable *make_symtable();
+
+//Create table and put in built in functions
+Symtable *init_symtable();
 
 //Manipulating the symtable stack
 Symtable *push_env(Symtable *curr_env);
@@ -30,10 +36,16 @@ void free_symtable(Symtable *symtable);
 void free_names(Symentry *names[]);
 void free_symchain(Symentry *this);
 
+
 //Operations for symbol tables
 int symhash(char *name);
 Symentry *lookup_sym(Symtable *symtable, char *name);
-void put_sym(Symtable *curr_env, char *name, Type type);
+void put_sym(Symtable *curr_env, char *name, DataType type, int order_d, int size_p);
+struct LogicalQueryNode;
+void add_order(Symtable *curr_env, char *name, struct LogicalQueryNode *sort);
 void print_symtable(Symtable *env);
+
+
+
 
 #endif

@@ -68,8 +68,8 @@ void consume_single_line_comment();
 "DELETE"	{ count(); return DELETE;   }
 
  /* SQL: search conditions */
-"AND"		{ count(); return AND;          }
-"OR"		{ count(); return OR;           }
+("AND")|("and")		{ count(); return AND;          }
+("OR")|("or")		{ count(); return OR;           }
 "IS"		{ count(); yylval.str = strdup(yytext); return IS;           }
 "NOT"		{ count(); yylval.str = strdup(yytext); return NOT;          }
 "BETWEEN"	{ count(); yylval.str = strdup(yytext); return BETWEEN;      }
@@ -94,8 +94,8 @@ void consume_single_line_comment();
 "HEX"		{ count(); yylval.str = strdup(yytext); return TYPE_HEX;     }
 
  /* SQL: user defined functions */
-"FUNCTION"	{ count(); return FUNCTION;     }
-":="		{ count(); return LOCAL_ASSIGN; } 
+("FUNCTION"|"function")	{ count(); return FUNCTION;     }
+":="		            { count(); return LOCAL_ASSIGN; } 
  
  /* Built-in functions from q and k */
 "abs"			{ count(); yylval.str = strdup(yytext); return ABS;      }
@@ -120,6 +120,7 @@ void consume_single_line_comment();
 "reverse"		{ count(); yylval.str = strdup(yytext); return REV;      }
 "sum"			{ count(); yylval.str = strdup(yytext); return SUM;      }
 "sums"			{ count(); yylval.str = strdup(yytext); return SUMS;     }
+"sqrt"			{ count(); yylval.str = strdup(yytext); return SQRT;     }
 "stddev"		{ count(); yylval.str = strdup(yytext); return STDDEV;   }
 "make_null"		{ count(); yylval.str = strdup(yytext); return MAKENULL; }
 		
@@ -130,12 +131,12 @@ void consume_single_line_comment();
 
 
  /* Literals */
--?[0-9]+                        { count(); yylval.intval = atoi(yytext); return INT;       }	
--?[0-9]+\.[0-9]+                { count(); yylval.floatval = atof(yytext); return FLOAT;   } 
+[0-9]+                        { count(); yylval.intval = atoi(yytext); return INT;       }	
+[0-9]+\.[0-9]+                { count(); yylval.floatval = atof(yytext); return FLOAT;   } 
 \"(\\.|[^"])*\"                 { count(); yylval.str = strdup(yytext); return STRING;     } 
 \'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'   { count(); yylval.str = strdup(yytext); return DATE; } 
-"TRUE"                          { count(); yylval.intval = 1; return TRUE;	   }
-"FALSE"                         { count(); yylval.intval = 0; return FALSE;   }
+("TRUE")|("true")               { count(); yylval.intval = 1; return TRUE;	   }
+("FALSE")|("false")              { count(); yylval.intval = 0; return FALSE;   }
 "0x"[0-9a-fA-F]+                { count(); yylval.str = strdup(yytext); return HEX;	   }
 
  /* Variables */
@@ -165,7 +166,8 @@ void consume_single_line_comment();
  ";"		{ count(); return ';'; }
  "{"		{ count(); return '{'; } 
  "}"		{ count(); return '}'; }
-
+ "["		{ count(); return '['; }
+ "]"		{ count(); return ']'; }
 
 
 
