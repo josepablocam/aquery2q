@@ -355,8 +355,8 @@ postfix_predicate:  between_predicate			{ $$ = $1; }
 	
  /* most postfix predicates are treated simply as a function call, with all arguments as a list of arguments so a between b and c becomes between(a,b,c)  effectively */
  /* in turn negation of a predicate simply is a call to not(x) where x is a call to another predicate and so forth */   
-between_predicate: value_expression BETWEEN value_expression AND value_expression { $1->next_sibling = $3; $3->next_sibling = $5; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
-	|  value_expression NOT BETWEEN value_expression AND value_expression		  { $1->next_sibling = $4; $4->next_sibling = $6; $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
+between_predicate: value_expression BETWEEN value_expression AND value_expression { $3->next_sibling = $5; $1->next_sibling = make_exprListNode($3); $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
+	|  value_expression NOT BETWEEN value_expression AND value_expression		  { $4->next_sibling = $6; $1->next_sibling = make_exprListNode($4); $$ = make_callNode(make_predNode($2), make_exprListNode(make_callNode(make_predNode($3), make_exprListNode($1)))); }
 	;
 	
 in_predicate: value_expression IN in_pred_spec  { $1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
@@ -386,7 +386,7 @@ truth_value: TRUE 				{ $$ = make_bool(1); }
 overlaps_predicate: range_value_expression OVERLAPS range_value_expression 	{ $1->next_sibling = $3; $$ = make_callNode(make_predNode($2), make_exprListNode($1)); }
 	;
 	
-range_value_expression: '(' value_expression ',' value_expression ')' 		{ $2->next_sibling = $4; $$ = $2; }
+range_value_expression: '(' value_expression ',' value_expression ')' 		{ $2->next_sibling = $4; $$ = make_exprListNode($2); }
 	;
 	
 
@@ -544,7 +544,7 @@ case_clause: value_expression	 { $$ = make_caseClauseNode($1);   }
 when_clauses: when_clause when_clauses_tail { $$ = make_whenClausesNode($1, $2); }
 	;
 
-when_clauses_tail: when_clause when_clauses_tail { $$ = make_whenClausesNode($1, $2); }
+when_clauses_tail: when_clause when_clauses_tail { $1->next_sibling = $2; $$ = $1; }
 	| /* epsilon */	                             { $$ = NULL; }
 	;
 	

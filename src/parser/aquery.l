@@ -68,22 +68,22 @@ void consume_single_line_comment();
 "DELETE"	{ count(); return DELETE;   }
 
  /* SQL: search conditions */
-("AND")|("and")		{ count(); return AND;          }
-("OR")|("or")		{ count(); return OR;           }
-"IS"		{ count(); yylval.str = strdup(yytext); return IS;           }
-"NOT"		{ count(); yylval.str = strdup(yytext); return NOT;          }
-"BETWEEN"	{ count(); yylval.str = strdup(yytext); return BETWEEN;      }
-"IN"		{ count(); yylval.str = strdup(yytext); return IN;           }
-"LIKE"		{ count(); yylval.str = strdup(yytext); return LIKE;         }
-"NULL"		{ count(); yylval.str = strdup(yytext); return NULL_KEYWORD; }
-"OVERLAPS"	{ count(); yylval.str = strdup(yytext); return OVERLAPS;     }
+("AND")|("and")		      { count(); return AND;          }
+("OR")|("or")		      { count(); return OR;           }
+("IS")|("is")		      { count(); yylval.str = strdup("is"); return IS;             }
+("NOT")|("not")		      { count(); yylval.str = strdup("not"); return NOT;           }
+("BETWEEN")|("between")	  { count(); yylval.str = strdup("between"); return BETWEEN;   }
+("IN")|("in")		      { count(); yylval.str = strdup("in"); return IN;             }
+("LIKE")|("like")		  { count(); yylval.str = strdup("like"); return LIKE;         }
+("NULL")|("null")		  { count(); yylval.str = strdup("null"); return NULL_KEYWORD; }
+("OVERLAPS")|("overlaps") { count(); yylval.str = strdup("overlaps"); return OVERLAPS; }
 
  /* SQL: case statements */
-"CASE"	{ count(); return CASE; }
-"END"	{ count(); return END;  }
-"WHEN"	{ count(); return WHEN; }
-"THEN"	{ count(); return THEN; }
-"ELSE"	{ count(); return ELSE; }
+("CASE")|("case")	{ count(); return CASE; }
+("END")|("end")	    { count(); return END;  }
+("WHEN")|("when")	{ count(); return WHEN; }
+("THEN")|("then")	{ count(); return THEN; }
+("ELSE")|("else")	{ count(); return ELSE; }
  
  /* SQL: type names */
 "INT"		{ count(); yylval.str = strdup(yytext); return TYPE_INT;     }

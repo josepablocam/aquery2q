@@ -4,11 +4,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include "ast.h"
+#include "ast_print.h"
 #include "symtable.h"
 #include "codegen.h"
 
 
-#define print_code(...) fprintf(DEST_FILE, __VA_ARGS__)
+#define print_code(...) if(GEN_CODE) fprintf(DEST_FILE, __VA_ARGS__)
+#define GEN_CODE 1
 #define CG_DEBUG 0
 #define CG_PRINT_DEBUG(...) if(CG_DEBUG) printf("---->CG DEBUGGING\n"); if(CG_DEBUG) printf(__VA_ARGS__)
 
@@ -21,12 +23,48 @@ extern FILE *DEST_FILE; //file to write out code to
 extern Symtable *env; //we use the environment ocassionally
 int IN_QUERY = 0; //are we generating code within a query?
 
-//Mapping q and aquery builtins
-char *aquery_builtins[] = { "abs", "avg", "avgs", "count", "deltas", "distinct", "drop", "fill", "first", "last", "max", "maxs", 
-                            "min", "mins", "mod", "next", "prev", "prd", "prds", "reverse", "sum", "sums", "sqrt", "stddev", "make_null" };
+//Mapping q and aquery builtins and predicates
+char *aquery_builtins[] = { "abs", "avg", "avgs", "avgs", "count", "deltas", "distinct", "drop", "fill", "first", "last", "max", "maxs", "maxs", 
+                            "min", "mins", "mins", "mod", "next", "prev", "prd", "prds", "reverse", "sum", "sums", "sums", "sqrt", "stddev", "make_null",
+                            "not", "is", "between", "in", "like", "null", "overlaps", "enlist"};
                             
-char *q_builtins[] = { "abs", "avg", "avgs", "count", "deltas", "distinct", "_", "^", "first", "last", "max", "maxs", 
-                        "min", "mins", "mod", "next", "prev", "prd", "prds", "reverse", "sum", "sums", "sqrt", "dev", "first 0#" };
+char *q_builtins[] = { "abs", "avg", "avgs", "mavg", "count", "deltas", "distinct", "_", "^", "first", "last", "max", "maxs", "mmax", 
+                        "min", "mins", "mmin", "mod", "next", "prev", "prd", "prds", "reverse", "sum", "sums", "msum", "sqrt", "dev", "first 0#",
+                        "not", "::", "within", "in", "{[x;y] x like string y}", "null", "{[x;y] not (x[1]<y[0])|y[1]<x[0]}", "enlist"};
+                        
+                        
+char *aquery_overloads[] = { "avgs", "maxs", "mins", "sums" };
+int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
+
+int is_overloaded(char *name)
+{
+    int i;
+        
+    for(i = 0; i < LEN_OVERLOADS; i++)
+    {
+        if(strcmp(name, aquery_overloads[i]) == 0)
+        {
+            return 1;
+        }
+    }
+    
+    return 0;
+}
+
+
+int get_nargs(ExprNode *expr)
+{
+    int num = 0;
+    ExprNode *curr = expr;
+    
+    while(curr != NULL)
+    {
+        num++;
+        curr = curr->next_sibling;
+    }
+    
+    return num;
+}
 
 
 
@@ -72,7 +110,7 @@ void cg_Constant(ExprNode *c)
             break;
         case STRING_TYPE: //become symbols, TODO: char lists?
             remove_quotes(&c->data.str);
-            print_code("`$\"%s\"", c->data.str);
+            print_code("enlist `$\"%s\"", c->data.str);
             break;
         case HEX_TYPE:
             print_code("%s", c->data.str); //already in right format
@@ -110,8 +148,74 @@ void cg_allColsNode(char *table_name)
 }
 
 
-//TODO: case expressions
-char  *aquery_to_q_builtin(char *fun)
+void cg_caseExpr(ExprNode *expr)
+{
+    CG_PRINT_DEBUG("generating code for case expression\n");
+    ExprNode *case_clause = expr->first_child;
+    ExprNode *when_clauses = case_clause->next_sibling;
+    ExprNode *else_clause = when_clauses->next_sibling;
+    
+    ExprNode *tuple = when_clauses->first_child;
+    
+    //we've reached our base case, once we've processed all when clauses
+    if(tuple == NULL)
+    {
+        CG_PRINT_DEBUG("generating code for else statement\n");
+        cg_ExprNode(else_clause->first_child);
+    }
+    else
+    {
+        ExprNode *when_clause = tuple->first_child;
+        ExprNode *then_clause = when_clause->next_sibling;
+        when_clause->next_sibling = NULL; //break link for code generation
+        
+        //is this a simple case expr (case x when 2 then ble when 3 then meh..)
+        //or is it a searched case expression(case when x>2 then bleh)
+        int is_simple_case = case_clause->first_child != NULL;
+        print_code("?;");
+        
+        if(is_simple_case)
+        { //generate code for implicit equality comparison
+          //TODO: think about how to memoize this!
+           //int x = 0;
+           CG_PRINT_DEBUG("case clause:\n");
+           //print_expr(case_clause->first_child, x, &x);
+           
+           CG_PRINT_DEBUG("when clause:\n");
+           //print_expr(when_clause, x, &x);
+           
+           
+           CG_PRINT_DEBUG("generating code for simple case expression\n");
+           print_code("(=;"); 
+           cg_ExprNode(case_clause->first_child);  //this implies we reevaluate every time, so be careful 
+           print_code(";"); 
+           cg_ExprNode(when_clause); //simply an expression
+           print_code(")");
+        }
+        else
+        {
+            CG_PRINT_DEBUG("generating code for searched case expression\n");
+            cg_ExprNode(when_clause);
+        }
+        
+        print_code(";"); 
+        //generate code for consequence
+        cg_ExprNode(then_clause);
+        print_code(";");
+        
+        //adjust cases to remove the case-consequence pair handled
+        ExprNode *next_tuple= tuple->next_sibling;
+        //free_ExprNode(tuple); TODO: free this node
+        when_clauses->first_child = next_tuple;
+        
+        cg_ExprNode(expr); //call recursively, so that multiple cases become nested vector conditionals
+    }
+}
+
+
+
+
+int aquery_to_q_builtin_ix(char *fun)
 {
     int i = 0;
    
@@ -120,7 +224,7 @@ char  *aquery_to_q_builtin(char *fun)
         i++; //continue searching
     }
     
-    return q_builtins[i];
+    return i;
 }
 
 
@@ -130,9 +234,21 @@ void cg_callNode(ExprNode *call)
     ExprNode *fun = call->first_child;
     ExprNode *args = fun->next_sibling;
     
-    if(fun->node_type == BUILT_IN_FUN_CALL)
+    if(fun->node_type == BUILT_IN_FUN_CALL || fun->node_type == PRED_EXPR)
     { //builtin
-        print_code("%s", aquery_to_q_builtin(fun->data.str));
+        int fun_ix = aquery_to_q_builtin_ix(fun->data.str);
+        char *fun_nm = aquery_builtins[fun_ix];
+        
+        if(!is_overloaded(fun_nm))
+        {
+            print_code("%s", q_builtins[fun_ix]); //nothing to disambiguate
+        }
+        else
+        {
+            int num_args = get_nargs(args->first_child); //use # of args to resolve
+            int offset = (num_args == 1) ? 0 : 1;
+            print_code("%s", q_builtins[fun_ix + offset]); //organized so that the 2 argument overload comes after
+        } 
     }
     else
     { //UDF
@@ -221,6 +337,12 @@ void cg_OpNode(ExprNode *expr)
     cg_ExprNode(expr->first_child);
 }
 
+void cg_ExprList(ExprNode *expr)
+{
+    print_code("enlist;");
+    cg_ExprNode(expr->first_child);
+}
+
 
 void cg_ExprNode(ExprNode *expr)
 {
@@ -253,11 +375,12 @@ void cg_ExprNode(ExprNode *expr)
             case CASE_WHEN_CLAUSE:
             case CASE_WHEN_CLAUSES:
             case CASE_ELSE_CLAUSE:
-                print_code("case_code_here");
-                break; //TODO: handle case clauses
+                cg_caseExpr(expr);
+                break;
             case CALL_EXPR:
             case BUILT_IN_FUN_CALL:
             case UDF_CALL:
+            case PRED_EXPR: //predicates are handled like calls
                 cg_callNode(expr);
                 break;
             case INDEX_EXPR:
@@ -282,10 +405,7 @@ void cg_ExprNode(ExprNode *expr)
                 cg_OpNode(expr);
                 break;
             case LIST_EXPR:
-                CG_PRINT_DEBUG("ran into an expression list\n");
-                exit(1);
-            case PRED_EXPR: //TODO: implement predicates
-                print_code("predicate_code_here");
+                cg_ExprList(expr);
                 break;
             case WHERE_AND_EXPR: //TODO implement where and
                 print_code("where_and_expr_code_here");
@@ -304,8 +424,6 @@ void cg_ExprNode(ExprNode *expr)
             print_code(";");
             cg_ExprNode(expr->next_sibling);
         }
-    
-        
     }
 }
 
