@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "ast.h"
 #include "ast_print.h"
 #include "symtable.h"
@@ -42,6 +43,24 @@ int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
 char *AQ_TABLE_NM = ".aquery.t";
 char *AQ_COL_DICT = ".aquery.cd";
 char *AQ_SORTIX = ".aquery.six";
+char *AQ_CURR_TABLE;
+
+
+//generate some aquery functions into the file
+void gc_aq_helpers()
+{
+    print_code(
+        ".aquery.aliasc:{[sn;v] (`$(sn,\".\"),/:string c)!c:cols v} //alias cols\n"
+        ".aquery.gencd:{[sn;v] .aquery.aliasc[sn;v],cols[v]!cols v} //generate a col dictionary for table t\n"
+        );
+}
+
+//add to the column dictionary
+void add_to_dc(char *alias, char *tbl)
+{
+    print_code("%s,:.aquery.gencd[\"%s\";%s];\n", AQ_COL_DICT, alias, tbl);
+}
+
 
 
 //generates a locally fresh name for an aquery intermediate table
@@ -72,7 +91,7 @@ int is_overloaded(char *name)
 }
 
 
-int get_nargs(ExprNode *expr)
+int ct_exprs(ExprNode *expr)
 {
     int num = 0;
     ExprNode *curr = expr;
@@ -161,18 +180,47 @@ void cg_ID(ExprNode *id)
 
 void cg_rowId()
 {
-    print_code("i"); //only in queries, corresponds to q's virtual column i
+    if(IN_QUERY)
+    {
+        print_code("i"); //only in queries, corresponds to q's virtual column i
+    }
+    else
+    {
+       printf("\nERROR:ROWID can only be used in queries\n");
+       exit(1); 
+    }
+    
 }
 
-void cg_allColsNode(char *table_name)
+void cg_allCols(char *table_name)
 { //can only be used in select, so return a dictionary in q
-    print_code("({x!x}cols %s)", table_name);
+    if(IN_QUERY)
+    {
+        print_code("({x!x}cols %s)", table_name);
+    }
+    else
+    {
+        printf("\nERROR:asterisk for columns can only be used in queries\n");
+        exit(1);
+    }
 }
 
 void cg_colDotAccess(ExprNode *access)
 {
-    print_code("({x^%s x};", AQ_COL_DICT);
-    print_code("`%s.%s)", access->first_child->data.str, access->next_sibling->data.str);
+    char *tbl = access->first_child->data.str;
+    char *col = access->first_child->next_sibling->data.str;
+    
+    if(IN_QUERY)
+    {
+        print_code("({x^%s x};", AQ_COL_DICT);
+        print_code("`%s.%s)", tbl, col);
+    }
+    else
+    {
+        printf("\nERROR:correlation name access can only be used in queries\n");
+        printf("\tOffender:%s.%s\n", tbl, col);
+        exit(1);
+    }
 }
 
 
@@ -200,6 +248,7 @@ void cg_caseExpr(ExprNode *expr)
         //is this a simple case expr (case x when 2 then ble when 3 then meh..)
         //or is it a searched case expression(case when x>2 then bleh)
         int is_simple_case = case_clause->first_child != NULL;
+        print_code("("); 
         print_code("?;");
         
         if(is_simple_case)
@@ -237,6 +286,7 @@ void cg_caseExpr(ExprNode *expr)
         when_clauses->first_child = next_tuple;
         
         cg_ExprNode(expr); //call recursively, so that multiple cases become nested vector conditionals
+        print_code(")");
     }
 }
 
@@ -262,6 +312,7 @@ void cg_callNode(ExprNode *call)
     ExprNode *fun = call->first_child;
     ExprNode *args = fun->next_sibling;
     
+    print_code("(");
     if(fun->node_type == BUILT_IN_FUN_CALL || fun->node_type == PRED_EXPR)
     { //builtin
         int fun_ix = aquery_to_q_builtin_ix(fun->data.str);
@@ -273,7 +324,7 @@ void cg_callNode(ExprNode *call)
         }
         else
         {
-            int num_args = get_nargs(args->first_child); //use # of args to resolve
+            int num_args = ct_exprs(args->first_child); //use # of args to resolve
             int offset = (num_args == 1) ? 0 : 1;
             print_code("%s", q_builtins[fun_ix + offset]); //organized so that the 2 argument overload comes after
         } 
@@ -293,7 +344,7 @@ void cg_callNode(ExprNode *call)
     {
         cg_ExprNode(args->first_child); //it is a list, take out contents
     }
-    
+    print_code(")");
 }
 
 
@@ -317,6 +368,7 @@ void cg_indexNode(ExprNode *indexing)
 {
     ExprNode *src = indexing->first_child;
     ExprNode *ix = src->next_sibling;
+    print_code("(");
     switch(ix->node_type)
     {
         case ODD_IX:
@@ -335,13 +387,16 @@ void cg_indexNode(ExprNode *indexing)
     print_code(";");
     src->next_sibling = NULL; //break link with sibling, already generated index code
     cg_ExprNode(src); //generate code
+    print_code(")");
 }
 
 void cg_Neg(ExprNode *expr)
 {
+    print_code("(");
     print_code("neg");
     print_code(";");
     cg_ExprNode(expr->first_child);
+    print_code(")");
 }
 
 char *aquery_to_q_op(ExprNodeType op_type)
@@ -360,15 +415,19 @@ char *aquery_to_q_op(ExprNodeType op_type)
 void cg_OpNode(ExprNode *expr)
 {  
     CG_PRINT_DEBUG("cg_OpNode\n");
+    print_code("(");
     print_code("%s", aquery_to_q_op(expr->node_type));
     print_code(";");
     cg_ExprNode(expr->first_child);
+    print_code(")");
 }
 
 void cg_ExprList(ExprNode *expr)
 {
+    print_code("(");
     print_code("enlist;");
     cg_ExprNode(expr->first_child);
+    print_code(")");
 }
 
 
@@ -377,7 +436,6 @@ void cg_ExprNode(ExprNode *expr)
     if(expr != NULL)
     {
         CG_PRINT_DEBUG("generated expr code\n");
-        print_code("(");  
         //generate code for this child
         switch(expr->node_type)
         {
@@ -392,11 +450,13 @@ void cg_ExprNode(ExprNode *expr)
                 break;
             case COLDOTACCESS_EXPR:
                 //TODO: column dot access handling.....
-                print_code("col_dot_access_code_here");
+                cg_colDotAccess(expr);
                 break;
             case ALLCOLS_EXPR:
                 //TODO: handling all columns
-                print_code("all_cols_code_here");
+                printf("\nERROR:* for now just implemented in queries as standalone, use ROWID\n");
+                printf("\tfor things like count(*)\n");
+                exit(1);
                 break;
             case CASE_EXPR:
             case CASE_CLAUSE:
@@ -448,7 +508,6 @@ void cg_ExprNode(ExprNode *expr)
                 break;
         }
         
-        print_code(")");  
         if(expr->next_sibling != NULL)
         {
             print_code(";");
@@ -456,11 +515,6 @@ void cg_ExprNode(ExprNode *expr)
         }
     }
 }
-
-
-
-
-
 
 
 
@@ -538,4 +592,85 @@ void cg_FullQuery(FullQueryNode *full_query)
     print_code{"}[]"}; //execute function
 }
 */
+
+/* Logical Query Plans */
+
+char *cg_SimpleTable(LogicalQueryNode *node)
+{
+    add_to_dc(node->params.name, node->params.name);
+    return strdup(node->params.name);
+}
+
+char *cg_Alias(LogicalQueryNode *a)
+{
+    char *orig_name = node->arg->params.name;
+    char *alias_name = node->params.name;
+    add_to_dc(alias_name, orig_name);
+    print_code("%s:%s\n", alias_name, orig_name);
+    free(orig_name);
+    return strdup(alias_name);
+}
+
+//TODO: joins of all sorts....
+char *cg_FilterWhere(LogicalQueryNode *where)
+{
+    char *t1 = cg_LogicalQueryNode(where->arg);
+    char *t2 = gen_table_nm();
+    int n_conds = ct_exprs(where->params.exprs);
+    
+    print_code("%s:?[%s;", t2, t1);
+
+    if(n_conds = 1)
+    { //clauses of 1 element need to be enlisted
+        print_code("enlist ");
+    }
+    
+    print_code("(");
+    cg_ExprNode(wbere->params.exprs);
+    print_code(");0b;()];\n");  
+    
+    free(t1);
+    return t2;  
+}
+
+char *gc_ProjectSelect(LogicalQueryNode *proj)
+{
+    //TODO: need to account for grouping!!!
+    char *t1 = gc_LogicalQueryNode(proj->namedexprs);
+    char *t2 = gen_table_nm();
+    print_code("%s:?[%s;();0b;");
+    cg_Projections(proj->namedexprs, t1);
+    print_code("];\n");
+    free(t1);
+    return t2;
+}
+
+
+//TODO: make name resolution better, imitate q's
+void gc_Projections(NamedExprNode *nexpr, int id_ctr)
+{
+    NamedExprNode *next_nexpr = nexpr->next_sibling;
+    char *col_nm = expr->name
+
+    print_code("(enlist[");
+    if(col_nm != NULL)
+    {
+        print_code("%s", col_nm);
+    }
+    else
+    {
+        print_code("x%d", id_ctr++);
+    }
+    print_code("]!enlist ");
+    cg_ExprNode(nexpr->expr);
+    print_code(")");
+    
+    if(next_nexpr != NULL)
+    {
+        print_code(",");
+        gc_Projections(next_nexpr, id_ctr);
+    }
+}
+
+
 
