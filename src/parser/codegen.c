@@ -15,13 +15,14 @@
 #define CG_PRINT_DEBUG(...) if(CG_DEBUG) printf("---->CG DEBUGGING\n"); if(CG_DEBUG) printf(__VA_ARGS__)
 
 
-/*
- some useful q functions, which we define from the onset
-*/
+
+
 
 extern FILE *DEST_FILE; //file to write out code to
 extern Symtable *env; //we use the environment ocassionally
 int IN_QUERY = 0; //are we generating code within a query?
+int TABLE_CT = 1; //used to generate intermediate names for aquery tables, reset every function
+
 
 //Mapping q and aquery builtins and predicates
 char *aquery_builtins[] = { "abs", "avg", "avgs", "avgs", "count", "deltas", "distinct", "drop", "fill", "first", "last", "max", "maxs", "maxs", 
@@ -35,6 +36,25 @@ char *q_builtins[] = { "abs", "avg", "avgs", "mavg", "count", "deltas", "distinc
                         
 char *aquery_overloads[] = { "avgs", "maxs", "mins", "sums" };
 int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
+
+
+/* Aquery data structures for code generation */
+char *AQ_TABLE_NM = ".aquery.t";
+char *AQ_COL_DICT = ".aquery.cd";
+char *AQ_SORTIX = ".aquery.six";
+
+
+//generates a locally fresh name for an aquery intermediate table
+//caller has responsibility of freeing when done with name...
+char *gen_table_nm()
+{
+    int num_ints = floor(log(TABLE_CT)) + 1;
+    char *nm = malloc((strlen(AQ_TABLE_NM) + num_ints + 1) * sizeof(char));
+    sprintf(nm, "%s%d", AQ_TABLE_NM, TABLE_CT);
+    TABLE_CT++;
+    return nm;
+}
+
 
 int is_overloaded(char *name)
 {
@@ -69,9 +89,9 @@ int get_nargs(ExprNode *expr)
 
 
 ExprNodeType aquery_op_types[] = { LT_EXPR, GT_EXPR, LE_EXPR, GE_EXPR, EQ_EXPR, NEQ_EXPR, LOR_EXPR, 
-                                  LAND_EXPR, PLUS_EXPR, MINUS_EXPR, MULT_EXPR, DIV_EXPR, POW_EXPR };
+                                  LAND_EXPR, PLUS_EXPR, MINUS_EXPR, MULT_EXPR, DIV_EXPR, POW_EXPR, WHERE_OR_EXPR };
 
-char *q_ops[] = { "<", ">", "<=", ">=", "=", "<>", "|",  "&", "+", "-", "*", "%", "xexp" };
+char *q_ops[] = { "<", ">", "<=", ">=", "=", "<>", "|",  "&", "+", "-", "*", "%", "xexp", "|" };
 
 
 void native_comma_enlist()
@@ -131,9 +151,11 @@ void cg_ID(ExprNode *id)
         print_code("%s", id->data.str);
     }
     else
-    { //means we're in functional form, so id in an expression is a column
-      //so should be in symbol 
-        print_code("`$\"%s\"", id->data.str);
+    { //means we're in functional form, look up in column dictionary
+     // this in turn means that if a function has the same name as a column
+    //the columns masks the function, as happens in q usually
+        print_code("({x^%s x};", AQ_COL_DICT);
+        print_code("`$\"%s\")", id->data.str);
     }
 }
 
@@ -145,6 +167,12 @@ void cg_rowId()
 void cg_allColsNode(char *table_name)
 { //can only be used in select, so return a dictionary in q
     print_code("({x!x}cols %s)", table_name);
+}
+
+void cg_colDotAccess(ExprNode *access)
+{
+    print_code("({x^%s x};", AQ_COL_DICT);
+    print_code("`%s.%s)", access->first_child->data.str, access->next_sibling->data.str);
 }
 
 
@@ -407,11 +435,13 @@ void cg_ExprNode(ExprNode *expr)
             case LIST_EXPR:
                 cg_ExprList(expr);
                 break;
-            case WHERE_AND_EXPR: //TODO implement where and
-                print_code("where_and_expr_code_here");
+            case WHERE_AND_EXPR: //TODO: remove this type of node, deprecated
+                //print_code("where_and_expr_code_here");
+                printf("Reached deprecated WHERE_AND_EXPR node in AST, exiting\n");
+                exit(1);
                 break;
-            case WHERE_OR_EXPR: //TODO: implement where or
-                print_code("where_or_expr_code_here");
+            case WHERE_OR_EXPR: 
+                cg_OpNode(expr);
                 break;
             case NEG_EXPR:
                 cg_Neg(expr);
