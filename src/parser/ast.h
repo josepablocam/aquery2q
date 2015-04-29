@@ -53,6 +53,7 @@ typedef struct ExprNode {
 	int order_dep; //is this node order dependent
     int sub_order_dep; //does it have an order dependency somewhere in subtree?
     int uses_agg; //need to know if expression use aggregates for optimizer
+    int is_grouped; //requires that we use adverbs in code generation
     IDListNode *tables_involved; //names of tables involved in an expression (NULL, and only assigned if needed in optimizer)
 	union {
 		int ival;
@@ -113,6 +114,14 @@ ExprNode *make_exprListNode(ExprNode *data);
 /* exlusively for search conditions */
 ExprNode *make_predNode(char *nm);
 
+
+/* annotating expressions with grouping information (need to handl nested data differently)
+ in code generation (i.e. need to use adverbs) */
+void annotate_groupedExpr(ExprNode *data);
+void annotate_groupedNamedExpr(NamedExprNode *node);
+
+
+
  /******* Query related nodes *******/
 
 
@@ -167,6 +176,7 @@ typedef struct LogicalQueryNode {
 } LogicalQueryNode;
 
 NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr);
+void free_NamedExprNode(NamedExprNode *node);
 LogicalQueryNode *make_EmptyLogicalQueryNode(LogicalQueryNodeType type);
 LogicalQueryNode *make_table(char *name);
 LogicalQueryNode *make_alias(LogicalQueryNode *t, char *alias);

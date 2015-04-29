@@ -38,6 +38,7 @@ ExprNode *make_EmptyExprNode(ExprNodeType type)
 	node->order_dep = 0;
     node->sub_order_dep = 0;
     node->uses_agg = 0;
+    node->is_grouped = 0;
     node->tables_involved = NULL;
 	return node;
 }
@@ -366,7 +367,16 @@ ExprNode *make_exprListNode(ExprNode *data)
 }
 
 
-
+//Spread the is_grouped attribute across an expression tree
+void annotate_groupedExpr(ExprNode *data)
+{
+    if(data != NULL)
+    {
+        data->is_grouped = 1;
+        annotate_groupedExpr(data->first_child);
+        annotate_groupedExpr(data->next_sibling);
+    }
+}
 
 
 /******* 2.7: user defined functions *******/
@@ -384,6 +394,33 @@ NamedExprNode *make_NamedExprNode(char *name, ExprNode *expr)
     new_tuple->sub_order_dep = SAFE_SUB_ORDER_DEP(expr);
 	return new_tuple;
 }
+
+//chases pointers and frees names and expressions in a node
+//and any sibling
+void free_NamedExprNode(NamedExprNode *node)
+{
+    if(node != NULL)
+    {
+        ExprNode *expr = node->expr;
+        char *name = node->name;
+        NamedExprNode *next = node->next_sibling;
+
+        //TODO: WRITE FREE EXPR free(expr)
+        free(name);
+        free(node);
+        free_NamedExprNode(next);
+    }
+}
+
+void annotate_groupedNamedExpr(NamedExprNode *node)
+{
+    if(node != NULL)
+    {
+        annotate_groupedExpr(node->expr);
+        annotate_groupedNamedExpr(node->next_sibling);
+    }
+}
+
 
 //A linked list of identifiers...useful for arguments etc
 IDListNode *make_IDListNode(char *id, IDListNode *next)
