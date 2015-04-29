@@ -212,7 +212,7 @@ top_level: global_query top_level           { $$ = make_Top_GlobalQuery($1, $2);
 	|	insert_statement top_level          { $$ = make_Top_Insert($1, $2); }
 	|	update_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
 	|	delete_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
-	|	user_function_definition top_level  { $$ = make_Top_UDF($1, $2); cg_UDFDefNode($1); putchar('\n');}             
+	|	user_function_definition top_level  { $$ = make_Top_UDF($1, $2); }             
 	| /* epsilon */	                        { $$ = NULL; }
 	;
 
@@ -256,7 +256,7 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{ $$ = make_IDList
  /******* 2.3: Base query *******/
  //TODO: make this better.....
   /* assemble plan calls a different function depending on optimizer level, store order info for current query to use in symtable */
-base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); curr_order = $3; }
+base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); curr_order = $3; cg_queryPlan($$);}
 	; 
  
 select_clause: SELECT select_elem select_clause_tail { $2->next_sibling = $3; $$ = make_project(PROJECT_SELECT, NULL, $2); } /* select_elems are linked, and put into projection */
@@ -319,7 +319,8 @@ having_clause: HAVING search_condition 								{ $$ = make_filterHaving(NULL, $2
 //	;
 
 
-and_search_condition: search_condition and_search_condition_tail { $1->next_sibling = $2; $$ = make_exprListNode($1); }
+//and_search_condition: search_condition and_search_condition_tail { $1->next_sibling = $2; $$ = make_exprListNode($1); }
+and_search_condition: search_condition and_search_condition_tail { $1->next_sibling = $2; $$ = $1; }
     ;
     
 and_search_condition_tail : AND search_condition and_search_condition_tail { $2->next_sibling = $3; $$ = $2; } //don't make another exprListNode here..we want flat structure

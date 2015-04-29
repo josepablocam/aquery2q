@@ -42,16 +42,17 @@ int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
 /* Aquery data structures for code generation */
 char *AQ_TABLE_NM = ".aquery.t";
 char *AQ_COL_DICT = ".aquery.cd";
+char *AQ_TABLE_DICT = ".aquery.ct";
 char *AQ_SORTIX = ".aquery.six";
 char *AQ_CURR_TABLE;
 
 
 //generate some aquery functions into the file
-void gc_aq_helpers()
+void init_aq_helpers()
 {
     print_code(
-        ".aquery.aliasc:{[sn;v] (`$(sn,\".\"),/:string c)!c:cols v} //alias cols\n"
-        ".aquery.gencd:{[sn;v] .aquery.aliasc[sn;v],cols[v]!cols v} //generate a col dictionary for table t\n"
+        ".aquery.aliasc:{[sn;v] (`$(sn,\".\"),/:string c)!c:cols v}; //alias cols\n"
+        ".aquery.gencd:{[sn;v] .aquery.aliasc[sn;v],cols[v]!cols v}; //generate a col dictionary for table t\n"
         );
 }
 
@@ -61,6 +62,25 @@ void add_to_dc(char *alias, char *tbl)
     print_code("%s,:.aquery.gencd[\"%s\";%s];\n", AQ_COL_DICT, alias, tbl);
 }
 
+//initialize our column dictionary
+void init_dc()
+{
+    print_code("%s:(`$())!`$();\n", AQ_COL_DICT);
+}
+
+//add entry to table dictionary
+//used to trace information about underlying q name
+//e.g. say t1 has a foreign key into t
+//t0:filter(t); ej[t0;t1]; 
+//we would like to avoid the join, since t1 has a foreign key, we should just use that
+//however, that means we need to know that t0 is really a transformation of t
+//TODO: we need to use this but unsure about implications
+//e.g. what if we group t0, that is not really t any more
+//perhaps that kind of action should remove that key from the dictionary?
+void add_to_dt(char *alias, char *tbl)
+{
+    print_code("%s[`%s]:%s;\n", AQ_TABLE_DICT, alias, tbl);
+}
 
 
 //generates a locally fresh name for an aquery intermediate table
@@ -173,7 +193,7 @@ void cg_ID(ExprNode *id)
     { //means we're in functional form, look up in column dictionary
      // this in turn means that if a function has the same name as a column
     //the columns masks the function, as happens in q usually
-        print_code("({x^%s x};", AQ_COL_DICT);
+        print_code("({x^%s x}", AQ_COL_DICT);
         print_code("`$\"%s\")", id->data.str);
     }
 }
@@ -212,7 +232,7 @@ void cg_colDotAccess(ExprNode *access)
     
     if(IN_QUERY)
     {
-        print_code("({x^%s x};", AQ_COL_DICT);
+        print_code("({x^%s x}", AQ_COL_DICT);
         print_code("`%s.%s)", tbl, col);
     }
     else
@@ -601,14 +621,14 @@ char *cg_SimpleTable(LogicalQueryNode *node)
     return strdup(node->params.name);
 }
 
-char *cg_Alias(LogicalQueryNode *a)
+char *cg_Alias(LogicalQueryNode *node)
 {
     char *orig_name = node->arg->params.name;
     char *alias_name = node->params.name;
     add_to_dc(alias_name, orig_name);
     print_code("%s:%s\n", alias_name, orig_name);
     free(orig_name);
-    return strdup(alias_name);
+    return alias_name;
 }
 
 //TODO: joins of all sorts....
@@ -620,26 +640,26 @@ char *cg_FilterWhere(LogicalQueryNode *where)
     
     print_code("%s:?[%s;", t2, t1);
 
-    if(n_conds = 1)
+    if(n_conds == 1)
     { //clauses of 1 element need to be enlisted
         print_code("enlist ");
     }
     
     print_code("(");
-    cg_ExprNode(wbere->params.exprs);
+    cg_ExprNode(where->params.exprs);
     print_code(");0b;()];\n");  
     
     free(t1);
     return t2;  
 }
 
-char *gc_ProjectSelect(LogicalQueryNode *proj)
+//TODO: need to account for grouping!!!
+char *cg_ProjectSelect(LogicalQueryNode *proj)
 {
-    //TODO: need to account for grouping!!!
-    char *t1 = gc_LogicalQueryNode(proj->namedexprs);
+    char *t1 = cg_LogicalQueryNode(proj->arg);
     char *t2 = gen_table_nm();
-    print_code("%s:?[%s;();0b;");
-    cg_Projections(proj->namedexprs, t1);
+    print_code("%s:?[%s;();0b;", t2, t1);
+    cg_ProjectionTuples(proj->params.namedexprs, 0);
     print_code("];\n");
     free(t1);
     return t2;
@@ -647,12 +667,12 @@ char *gc_ProjectSelect(LogicalQueryNode *proj)
 
 
 //TODO: make name resolution better, imitate q's
-void gc_Projections(NamedExprNode *nexpr, int id_ctr)
+void cg_ProjectionTuples(NamedExprNode *nexpr, int id_ctr)
 {
     NamedExprNode *next_nexpr = nexpr->next_sibling;
-    char *col_nm = expr->name
+    char *col_nm = nexpr->name;
 
-    print_code("(enlist[");
+    print_code("(enlist[`");
     if(col_nm != NULL)
     {
         print_code("%s", col_nm);
@@ -668,8 +688,112 @@ void gc_Projections(NamedExprNode *nexpr, int id_ctr)
     if(next_nexpr != NULL)
     {
         print_code(",");
-        gc_Projections(next_nexpr, id_ctr);
+        cg_ProjectionTuples(next_nexpr, id_ctr);
     }
+}
+
+void cg_queryPlan(LogicalQueryNode *node)
+{
+    init_aq_helpers(); //TODO:delete this, just here for testing
+    IN_QUERY = 1; //turn on our flag for query 
+    init_dc(); //initialize our dictionary that keeps track of column names
+    cg_LogicalQueryNode(node); //generate query plan
+}
+
+
+char *cg_LogicalQueryNode(LogicalQueryNode *node)
+{
+    
+    char *result_table = NULL;
+    
+    if(node != NULL)
+    {
+        switch(node->node_type)
+        {
+        	case PROJECT_SELECT:
+                return cg_ProjectSelect(node);
+                break;
+        	case PROJECT_UPDATE:
+                printf("nyi update\n");
+                exit(1);
+                break;
+        	case DELETION:
+                printf("nyi deletion\n");
+                exit(1);
+                break;
+        	case FILTER_WHERE:
+                result_table = cg_FilterWhere(node);
+                break;
+        	case FILTER_HAVING:
+                printf("nyi having\n");
+                exit(1);            
+                break;
+        	case CARTESIAN_PROD:
+                printf("nyi cartesian prod\n");
+                exit(1);            
+                break;
+        	case INNER_JOIN_ON:
+                printf("nyi inner join on\n");
+                exit(1);        
+                break;
+        	case FULL_OUTER_JOIN_ON:
+                printf("nyi full outer join on \n");
+                exit(1);            
+                break;
+        	case INNER_JOIN_USING:
+                printf("nyi inner join using\n");
+                exit(1);            
+                break;
+        	case FULL_OUTER_JOIN_USING:
+                printf("nyi full outer join using\n");
+                exit(1);            
+                break;
+        	case GROUP_BY:
+                printf("nyi group by\n");
+                exit(1);            
+                break;
+        	case SIMPLE_TABLE:
+                result_table = cg_SimpleTable(node);
+                break;
+        	case ALIAS:
+                result_table = cg_Alias(node);
+                break;
+        	case SORT:
+                printf("nyi sort\n");
+                exit(1);            
+                break;
+        	case FLATTEN_FUN:
+                printf("nyi flattening\n");
+                exit(1);            
+                break;
+        	case EXPLICIT_VALUES:
+                printf("nyi explicit values\n");
+                exit(1);            
+                break;
+        	case COL_NAMES:
+                printf("nyi col names\n");
+                exit(1);            
+                break;
+            case SORT_COLS:
+                printf("nyi sort cols\n");
+                exit(1);            
+                break;
+            case SORT_EACH_COLS:
+                printf("nyi sort each cols\n");
+                exit(1);            
+                break;
+            case EQUI_JOIN_ON:
+                printf("nyi equi join on \n");
+                exit(1);            
+                break;
+            case POSS_PUSH_FILTER:
+                printf("nyi poss push filters\n");
+                exit(1);            
+                break;
+        }
+    }
+    
+    return result_table;
 }
 
 
