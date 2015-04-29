@@ -256,7 +256,8 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{ $$ = make_IDList
  /******* 2.3: Base query *******/
  //TODO: make this better.....
   /* assemble plan calls a different function depending on optimizer level, store order info for current query to use in symtable */
-base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); curr_order = $3; cg_queryPlan($$);}
+  //TODO: delete code generation function here below, currently just there to test
+base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); curr_order = $3; if($5 != NULL) { annotate_groupedNamedExpr($1->params.namedexprs); } cg_queryPlan($$);}
 	; 
  
 select_clause: SELECT select_elem select_clause_tail { $2->next_sibling = $3; $$ = make_project(PROJECT_SELECT, NULL, $2); } /* select_elems are linked, and put into projection */
@@ -292,10 +293,6 @@ order_specs_tail: ',' order_spec order_specs_tail 		{ $2->next = $3; $$ = $2; }
 	| /* epsilon */										{ $$ = NULL; }
 	;
 
-//where_clause: WHERE search_condition 		{ $$ = make_filterWhere(NULL, $2); }
-//	| /* epsilon */							{ $$ = NULL; }
-//	;
-
 where_clause: WHERE and_search_condition 		{ $$ = make_filterWhere(NULL, $2); }
 	| /* epsilon */							    { $$ = NULL; }	;
 
@@ -304,7 +301,7 @@ groupby_clause: GROUP BY comma_value_expression_list having_clause	{ $$ = pushdo
 	| /* epsilon */													{ $$ = NULL; }
 	;
 	
-having_clause: HAVING search_condition 								{ $$ = make_filterHaving(NULL, $2); }
+having_clause: HAVING and_search_condition 								{ annotate_groupedExpr($2); $$ = make_filterHaving(NULL, $2); }
 	| /* epsilon */													{ $$ =  NULL; }
 	;
 
@@ -456,7 +453,7 @@ type_name: TYPE_INT 	{$$ = $1; }
 
 
 /******* 2.6: update, insert, delete statements *******/
-update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause { $$  = assemble_base(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7); }
+update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause { if($7 != NULL){ annotate_groupedNamedExpr($4); } $$  = assemble_base(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7); }
 	;
 
 set_clauses: set_clause set_clauses_tail { $1->next_sibling = $2; $$ = $1; }
