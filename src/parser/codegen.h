@@ -12,6 +12,7 @@ void init_aq_helpers();
 void add_to_dc(char *alias, char *tbl);
 void init_dc();
 void add_to_dt(char *alias, char *tbl);
+void sort_where_clause_by_ix(char *tbl);
 char *gen_table_nm();
 
 
