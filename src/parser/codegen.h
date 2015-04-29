@@ -49,9 +49,14 @@ char *cg_SimpleTable(LogicalQueryNode *node);
 char *cg_Alias(LogicalQueryNode *a);
 char *cg_FilterWhere(LogicalQueryNode *where);
 char *gc_ProjectSelect(LogicalQueryNode *proj);
-void cg_ProjectionTuples(NamedExprNode *nexpr, int id_ctr);
+void cg_NameExprTuples(NamedExprNode *nexpr, int id_ctr); //dictionary
+char *cg_groupBy(LogicalQueryNode *node);
+NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs);
 char *cg_LogicalQueryNode(LogicalQueryNode *node);
 void cg_queryPlan(LogicalQueryNode *node);
+/* sorting related */
+char *cg_Sort(LogicalQueryNode *node); //naive
+void cg_SimpleOrder(OrderNode *ordnode); //naive
 
 
 

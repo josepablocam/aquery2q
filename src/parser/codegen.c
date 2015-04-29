@@ -40,6 +40,7 @@ int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
 
 
 /* Aquery data structures for code generation */
+char *AQ_COL_NM = "aq_";
 char *AQ_TABLE_NM = ".aq.t";
 char *AQ_COL_DICT = ".aq.cd";
 char *AQ_TABLE_DICT = ".aq.ct";
@@ -681,7 +682,7 @@ char *cg_ProjectSelect(LogicalQueryNode *proj)
     char *t1 = cg_LogicalQueryNode(proj->arg);
     char *t2 = gen_table_nm();
     print_code("%s:?[%s;();0b;", t2, t1);
-    cg_ProjectionTuples(proj->params.namedexprs, 0);
+    cg_NameExprTuples(proj->params.namedexprs, 0);
     print_code("];\n");
     free(t1);
     return t2;
@@ -689,7 +690,7 @@ char *cg_ProjectSelect(LogicalQueryNode *proj)
 
 
 //TODO: make name resolution better, imitate q's
-void cg_ProjectionTuples(NamedExprNode *nexpr, int id_ctr)
+void cg_NameExprTuples(NamedExprNode *nexpr, int id_ctr)
 {
     NamedExprNode *next_nexpr = nexpr->next_sibling;
     char *col_nm = nexpr->name;
@@ -710,9 +711,106 @@ void cg_ProjectionTuples(NamedExprNode *nexpr, int id_ctr)
     if(next_nexpr != NULL)
     {
         print_code(",");
-        cg_ProjectionTuples(next_nexpr, id_ctr);
+        cg_NameExprTuples(next_nexpr, id_ctr);
     }
 }
+
+
+//Sorting whole table, naive, and is only here in case people want to generated code
+//without the optimizations, for comparison purposes, or readability
+char *cg_Sort(LogicalQueryNode *node)
+{
+    char *t1 =  cg_LogicalQueryNode(node->arg);
+    char *t2 =   gen_table_nm();
+    print_code("%s:", t2);
+    cg_SimpleOrder(node->params.order); //`c1 xasc `c2 xdesc ....
+    print_code("%s;\n", t1);
+    free(t1);
+    return t2;
+}
+
+
+
+void cg_SimpleOrder(OrderNode *ordnode)
+{
+    if(ordnode != NULL)
+    {
+        print_code("(");
+        cg_ExprNode(ordnode->col);
+        print_code(")");
+        
+        if(ordnode->node_type == ASC_SORT)
+        {
+            print_code(" xasc ");
+        }
+        else
+        {
+            print_code(" xdesc ");
+        }
+        
+        cg_SimpleOrder(ordnode->next);
+    }
+}
+
+
+char *cg_groupBy(LogicalQueryNode *node)
+{
+    char *t1 = cg_LogicalQueryNode(node->arg);
+    char *t2 = gen_table_nm();
+    NamedExprNode *named_groups = groupExpr_to_NamedGroupExpr(node->params.exprs->first_child); //expressions are in list container, so take out with ->first_child
+    print_code("%s:?[%s;();", t2, t1);
+    cg_NameExprTuples(named_groups, 0);
+    print_code(";");
+    cg_allCols(t1); //generate dict of all column names
+    print_code("];\n");
+    free(t1);
+    free_NamedExprNode(named_groups);
+    return t2;
+}
+
+
+NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs)
+{
+    ExprNode *curr = exprs;
+    ExprNode *next = NULL;
+    NamedExprNode *nexprs = NULL;
+    NamedExprNode *named = NULL;
+    char *temp_name = NULL;
+    int temp_name_len = 0;
+    int col_ct = 1;
+    
+    
+    while(curr != NULL)
+    {
+        next = curr->next_sibling;
+        curr->next_sibling = NULL; //remove link
+        
+        temp_name_len = floor(log(col_ct)) + 1 + strlen(AQ_COL_NM);
+        temp_name = malloc((temp_name_len + 1) * sizeof(char));
+        sprintf(temp_name, "%s%d", AQ_COL_NM, col_ct);
+        
+        named = make_NamedExprNode(temp_name, curr);
+        
+        if(nexprs == NULL)
+        {
+            
+            nexprs = named;
+        }
+        else
+        {
+            nexprs->next_sibling = named;
+        }
+        
+        curr = next;
+        col_ct++;
+    }
+    
+    return nexprs;
+}
+
+
+
+
 
 void cg_queryPlan(LogicalQueryNode *node)
 {
@@ -733,7 +831,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
         switch(node->node_type)
         {
         	case PROJECT_SELECT:
-                return cg_ProjectSelect(node);
+                result_table = cg_ProjectSelect(node);
                 break;
         	case PROJECT_UPDATE:
                 printf("nyi update\n");
@@ -771,8 +869,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
                 exit(1);            
                 break;
         	case GROUP_BY:
-                printf("nyi group by\n");
-                exit(1);            
+                result_table = cg_groupBy(node);         
                 break;
         	case SIMPLE_TABLE:
                 result_table = cg_SimpleTable(node);
@@ -781,8 +878,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
                 result_table = cg_Alias(node);
                 break;
         	case SORT:
-                printf("nyi sort\n");
-                exit(1);            
+                result_table = cg_Sort(node);
                 break;
         	case FLATTEN_FUN:
                 printf("nyi flattening\n");
