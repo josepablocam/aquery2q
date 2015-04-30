@@ -19,6 +19,7 @@ char *gen_table_nm();
 
 /* Expressions */
 void cg_Constant(ExprNode *c);
+void cg_LookupCol(char *nm);
 void cg_ID(ExprNode *id);
 void cg_rowId();
 void cg_allCols(char *table_name);
@@ -49,14 +50,18 @@ char *cg_SimpleTable(LogicalQueryNode *node);
 char *cg_Alias(LogicalQueryNode *a);
 char *cg_FilterWhere(LogicalQueryNode *where);
 char *gc_ProjectSelect(LogicalQueryNode *proj);
-void cg_NameExprTuples(NamedExprNode *nexpr, int id_ctr); //dictionary
+void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr); //dictionary
 char *cg_groupBy(LogicalQueryNode *node);
 NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs);
 char *cg_LogicalQueryNode(LogicalQueryNode *node);
 void cg_queryPlan(LogicalQueryNode *node);
+char *cg_flatten(LogicalQueryNode *node);
+
 /* sorting related */
 char *cg_Sort(LogicalQueryNode *node); //naive
 void cg_SimpleOrder(OrderNode *ordnode); //naive
+void cg_SortIx(OrderNode *ordnode); //optimized
+char *cg_SortCols(LogicalQueryNode *node); //optimized
 
 
 

@@ -1553,9 +1553,11 @@ void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
     OPTIM_PRINT_DEBUG("optimizing from clause");
     ExprNode *join_filters = NULL;
     ExprNode *other_filters =  NULL;
-    ExprNode *all_filters = (*where)->params.exprs->first_child;
+    //ExprNode *all_filters = (*where)->params.exprs->first_child;
+    ExprNode *all_filters = (*where)->params.exprs;
+    
     //free the params.expr
-    free((*where)->params.exprs);
+    //free((*where)->params.exprs);
     groupExpr_OnJoin(all_filters, &join_filters, &other_filters); //separate into join and others
     
     ExprNode *oi_filters = NULL;
@@ -1613,7 +1615,8 @@ void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
     //if we still have OD filters, make them a new where clause, otherwise set to null
     if(od_filters != NULL)
     {
-       *where = make_filterWhere(NULL, make_exprListNode(od_filters));  
+       //*where = make_filterWhere(NULL, make_exprListNode(od_filters));  
+        *where = make_filterWhere(NULL, od_filters);  
     }
     else
     {
@@ -1633,7 +1636,8 @@ LogicalQueryNode *optim_sort_where(LogicalQueryNode *proj, LogicalQueryNode *fro
     ExprNode *order_indep_exprs = NULL;
     ExprNode *remaining_exprs = NULL;
     
-    partExpr_OnOrder(where->params.exprs->first_child, &order_indep_exprs, &remaining_exprs);
+    //partExpr_OnOrder(where->params.exprs->first_child, &order_indep_exprs, &remaining_exprs);
+    partExpr_OnOrder(where->params.exprs, &order_indep_exprs, &remaining_exprs);
     
     if(order_indep_exprs != NULL)
     { //perform any order-independent filtering up to first order-dependent first
