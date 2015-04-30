@@ -1,6 +1,7 @@
 /* Building an AST for aquery, builds during the parse traversal in bison */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include "ast.h"
 #include "aquery_types.h"
 #include "symtable.h"
@@ -133,7 +134,11 @@ ExprNode *make_colDotAccessNode(ExprNode *src, ExprNode *dest)
 ExprNode *make_allColsNode()
 {
 	AST_PRINT_DEBUG("making all columns node");
-	return make_EmptyExprNode(ALLCOLS_EXPR);
+	ExprNode *node = make_EmptyExprNode(ALLCOLS_EXPR);
+    node->order_dep = 1;
+    node->sub_order_dep = 1;
+    node->data.str = strdup("*");
+    return node;
 }
 
 

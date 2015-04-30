@@ -636,7 +636,7 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
     { //nothing to do if we're at the end
         return NULL;   
     }
-    else if(node->node_type == ID_EXPR)
+    else if(node->node_type == ID_EXPR || node->node_type == ALLCOLS_EXPR)
     {
         OPTIM_PRINT_DEBUG("found id");
         
@@ -1737,14 +1737,14 @@ LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from
     IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
     LogicalQueryNode *sort = NULL;
      
-    if(proj_order_cols == NULL)
-    { //no order dependencies
-        return proj; 
-    }
-    else if(in_IDList("*", proj_order_cols))
+     if(in_IDList("*", proj_order_cols))
     { //referencing "all columns" results in a full sort
         sort = order; 
         return pushdown_logical(proj, sort);     
+    }
+    else if(proj_order_cols == NULL)
+    { //no order dependencies
+        return proj; 
     }
     else
     { //only sort specific columns necessary
