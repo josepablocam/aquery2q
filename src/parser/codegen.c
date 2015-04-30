@@ -11,7 +11,7 @@
 
 
 #define print_code(...) if(GEN_CODE) fprintf(DEST_FILE, __VA_ARGS__)
-#define GEN_CODE 1
+//#define GEN_CODE 1
 #define CG_DEBUG 0
 #define CG_PRINT_DEBUG(...) if(CG_DEBUG) printf("---->CG DEBUGGING\n"); if(CG_DEBUG) printf(__VA_ARGS__)
 #define AQ_VER "1.0"
@@ -19,10 +19,13 @@
 
 
 
+
+extern int GEN_CODE;
 extern FILE *DEST_FILE; //file to write out code to
 extern Symtable *env; //we use the environment ocassionally
 int IN_QUERY = 0; //are we generating code within a query?
 int TABLE_CT = 1; //used to generate intermediate names for aquery tables, reset every function
+int QUERY_CT = 0; //used to name the functions that contain queries
 
 
 //Mapping q and aquery builtins and predicates
@@ -45,6 +48,7 @@ char *AQ_TABLE_NM = ".aq.t";
 char *AQ_COL_DICT = ".aq.cd";
 char *AQ_TABLE_DICT = ".aq.ct";
 char *AQ_SORT_IX = ".aq.six";
+char *AQ_QUERY_NM = ".aq.q";
 char *AQ_CURR_TABLE;
 
 
@@ -67,13 +71,13 @@ void init_aq_helpers()
 //add to the column dictionary
 void add_to_dc(char *alias, char *tbl)
 {
-    print_code("%s:%s,.aq.gencd[\"%s\";%s];\n", AQ_COL_DICT, AQ_COL_DICT, alias, tbl);
+    print_code(" %s:%s,.aq.gencd[\"%s\";%s];\n", AQ_COL_DICT, AQ_COL_DICT, alias, tbl);
 }
 
 //initialize our column dictionary
 void init_dc()
 {
-    print_code("%s:(`$())!`$();\n", AQ_COL_DICT);
+    print_code(" %s:(`$())!`$();\n", AQ_COL_DICT);
 }
 
 //add entry to table dictionary
@@ -87,13 +91,13 @@ void init_dc()
 //perhaps that kind of action should remove that key from the dictionary?
 void add_to_dt(char *alias, char *tbl)
 {
-    print_code("%s[`%s]:%s;\n", AQ_TABLE_DICT, alias, tbl);
+    print_code(" %s[`%s]:%s;\n", AQ_TABLE_DICT, alias, tbl);
 }
 
 //order column names so that those with a faster index come first
 void sort_where_clause_by_ix(char *tbl)
 {
-    print_code(".aq.swix[%s;] ", tbl);
+    print_code(" .aq.swix[%s;] ", tbl);
 }
 
 
@@ -639,15 +643,6 @@ void cg_LocalVar(NamedExprNode *vardef)
     cg_ExprNode(vardef->expr); //gen code for expression
 }
 
-/*
-void cg_FullQuery(FullQueryNode *full_query)
-{
-   print_code("{"); //queries are placed as anonymous functions
-    cg_LocalQueries(full_query->local_queries);
-    cg_LogicalQueryPlan(full_query->query_plan); //hardest part
-    print_code{"}[]"}; //execute function
-}
-*/
 
 /* Logical Query Plans */
 
@@ -675,7 +670,7 @@ char *cg_FilterWhere(LogicalQueryNode *where)
     char *t2 = gen_table_nm();
     int n_conds = ct_exprs(where->params.exprs);
     
-    print_code("%s:?[%s;", t2, t1);
+    print_code(" %s:?[%s;", t2, t1);
 
     if(n_conds == 1)
     { //clauses of 1 element need to be enlisted
@@ -702,7 +697,7 @@ char *cg_ProjectSelect(LogicalQueryNode *proj)
 {
     char *t1 = cg_LogicalQueryNode(proj->arg);
     char *t2 = gen_table_nm();
-    print_code("%s:?[%s;();0b;", t2, t1);
+    print_code(" %s:?[%s;();0b;", t2, t1);
     cg_NameExprTuples(t1, proj->params.namedexprs, 0);
     print_code("];\n");
     free(t1);
@@ -747,11 +742,15 @@ void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr)
 
 //Sorting whole table, naive, and is only here in case people want to generated code
 //without the optimizations, for comparison purposes, or readability
+//TODO: it seems that the table using an index
+//is significantly faster than the built in `c1 xasc `c2 etc
+//so it might be worth changing this to that.....
+//first run some experiments though to make sure this is true (generally)
 char *cg_Sort(LogicalQueryNode *node)
 {
     char *t1 = cg_LogicalQueryNode(node->arg);
     char *t2 = gen_table_nm();
-    print_code("%s:", t2);
+    print_code(" %s:", t2);
     cg_SimpleOrder(node->params.order); //`c1 xasc `c2 xdesc ....
     print_code("%s;\n", t1);
     free(t1);
@@ -804,20 +803,21 @@ char *cg_SortCols(LogicalQueryNode *node)
     char *t1 = cg_LogicalQueryNode(node->arg);
     char *t2 = gen_table_nm();
     
-    print_code("%s:?[%s;();();", AQ_SORT_IX, t1); //assign to our sorting index
+    print_code(" %s:?[%s;();();", AQ_SORT_IX, t1); //assign to our sorting index
     cg_SortIx(node->params.order); //generate index code
     print_code("];\n");
     
     //Now for each column in node->next_arg, generate a dictionary
     //of enlist[`col_name]!enlist(`col_name; .aq.six)  
     IDListNode *curr_col = node->next_arg->params.cols;
-    print_code("%s:![%s;();0b;", t2, t1);
+    print_code(" %s:![%s;();0b;", t2, t1);
     while(curr_col != NULL)
     {
         print_code("(enlist[");
         cg_LookupCol(curr_col->name); //want to make sure column mappings are preserved
-        print_code("]!enlist (%s;", AQ_SORT_IX);
+        print_code("]!enlist (");
         cg_LookupCol(curr_col->name);
+        print_code("; %s", AQ_SORT_IX);
         print_code("))");
         
         curr_col = curr_col->next_sibling;
@@ -838,7 +838,7 @@ void cg_SortIx(OrderNode *ordnode)
         next_order = curr_order->next;
         
         if(next_order == NULL)
-        {
+        { //use iasc/idesc directly if this is the deepest sorting
             print_code("(");
             cg_orderIxVerb(curr_order->node_type);
             print_code(";");
@@ -848,11 +848,12 @@ void cg_SortIx(OrderNode *ordnode)
         else
         {
             print_code("(");
-            print_code("{x");
+            print_code("{y ");
             cg_orderIxVerb(curr_order->node_type);
-            print_code("y x};");
-            cg_SortIx(next_order);
+            print_code(" x y};");
             cg_ExprNode(curr_order->col);
+            print_code(";");
+            cg_SortIx(next_order);
             print_code(")");
         }
     }
@@ -864,7 +865,7 @@ char *cg_groupBy(LogicalQueryNode *node)
     char *t1 = cg_LogicalQueryNode(node->arg);
     char *t2 = gen_table_nm();
     NamedExprNode *named_groups = groupExpr_to_NamedGroupExpr(node->params.exprs->first_child); //expressions are in list container, so take out with ->first_child
-    print_code("%s:?[%s;();", t2, t1);
+    print_code(" %s:?[%s;();", t2, t1);
     cg_NameExprTuples(t1, named_groups, 0);
     print_code(";");
     cg_allCols(t1); //generate dict of all column names
@@ -918,7 +919,7 @@ char *cg_flatten(LogicalQueryNode *node)
 {
     char *t1 = cg_LogicalQueryNode(node->arg);
     char *t2 = gen_table_nm();
-    print_code("%s:ungroup %s;\n", t2, t1);
+    print_code(" %s:ungroup %s;\n", t2, t1);
     free(t1);
     return t2;
 }
@@ -926,13 +927,14 @@ char *cg_flatten(LogicalQueryNode *node)
 
 
 
-void cg_queryPlan(LogicalQueryNode *node)
+char *cg_queryPlan(LogicalQueryNode *node)
 {
-    init_aq_helpers(); //TODO:delete this, just here for testing
     IN_QUERY = 1; //turn on our flag for query 
     init_dc(); //initialize our dictionary that keeps track of column names
-    cg_LogicalQueryNode(node); //generate query plan
+    return cg_LogicalQueryNode(node); //generate query plan and return table name
 }
+
+
 
 
 char *cg_LogicalQueryNode(LogicalQueryNode *node)
@@ -1012,6 +1014,56 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
     
     return result_table;
 }
+
+/* local queries */
+//generate code for 1 local query
+void cg_LocalQueryNode(LocalQueryNode *local)
+{
+    char *t1 = cg_queryPlan(local->query_plan); //run query and store name
+    print_code(" %s:", local->name);
+    cg_colRename(local->col_names);
+    print_code(" %s;\n", t1);
+    free(t1);
+}
+
+void cg_colRename(IDListNode *names)
+{
+    IDListNode *curr = names;
+    
+    while(curr != NULL)
+    {
+        print_code("`%s", curr->name);
+        curr = curr->next_sibling;
+    }
+    print_code(" xcol");
+}
+
+void cg_LocalQueries(LocalQueryNode *locals)
+{
+    if(locals != NULL)
+    {
+        cg_LocalQueryNode(locals);
+        cg_LocalQueries(locals->next_sibling);
+    }
+}
+
+
+    
+/* full query */
+void cg_FullQuery(FullQueryNode *full_query)
+{
+    int query_id = QUERY_CT++;
+    print_code("%s%d:", AQ_QUERY_NM, query_id); //query placed into named function
+    print_code("{[]\n");
+    cg_LocalQueries(full_query->local_queries); //any code for local queries
+    char *result_table = cg_queryPlan(full_query->query_plan); //generate main query
+    print_code(" %s\n", result_table);
+    print_code(" }\n"); //store function
+    print_code("%s%d[]\n", AQ_QUERY_NM, query_id); //call function
+    
+}
+
+
 
 
 

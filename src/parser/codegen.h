@@ -53,9 +53,17 @@ char *gc_ProjectSelect(LogicalQueryNode *proj);
 void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr); //dictionary
 char *cg_groupBy(LogicalQueryNode *node);
 NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs);
-char *cg_LogicalQueryNode(LogicalQueryNode *node);
-void cg_queryPlan(LogicalQueryNode *node);
 char *cg_flatten(LogicalQueryNode *node);
+char *cg_LogicalQueryNode(LogicalQueryNode *node);
+char *cg_queryPlan(LogicalQueryNode *node);
+
+
+/* local and full queries */
+void cg_LocalQueryNode(LocalQueryNode *local);
+void cg_colRename(IDListNode *names);
+void cg_LocalQueries(LocalQueryNode *locals);
+void cg_FullQuery(FullQueryNode *full_query);
+
 
 /* sorting related */
 char *cg_Sort(LogicalQueryNode *node); //naive
