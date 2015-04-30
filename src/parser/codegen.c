@@ -995,13 +995,16 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
                 print_code("'\"nyi explicit values\"\n");
                 break;
         	case COL_NAMES:
-                print_code("'\"nyi col names\"\n");      
+                print_code("'\"error in code gen -> terminating code gen\"\n");   
+                exit(1);   
                 break;
             case SORT_COLS:
                 result_table = cg_SortCols(node);   
                 break;
             case SORT_EACH_COLS:
                 print_code("'\"nyi sort each cols\"\n");  
+                exit(1); //we did away with this, since performance tests
+                //showed it was better to sort before grouping
                 break;
             case EQUI_JOIN_ON:
                 print_code("'\"nyi equi join on\"\n");
@@ -1060,9 +1063,42 @@ void cg_FullQuery(FullQueryNode *full_query)
     print_code(" %s\n", result_table);
     print_code(" }\n"); //store function
     print_code("%s%d[]\n", AQ_QUERY_NM, query_id); //call function
-    
+    free(result_table);
 }
 
+
+/* creating tables or views */
+
+//TODO: create view....how do we do this? considering views in q...
+//Think about this
+void cg_CreateTable(CreateNode* create)
+{
+    char *src_fun_nm = NULL;
+    CreateSourceNodeType src_type = create->src->node_type;
+    
+    if(src_type == QUERY_SOURCE)
+    {
+        cg_FullQuery(create->src->load.query)
+        //TODO: might be better to have cg_FullQuery return the name of the function
+        //and it then only gets call when it needs to be
+        print_code("%s: %s%d[];\n", create->name, AQ_QUERY_NM, QUERY_CT - 1);
+    }
+    else
+    {
+        print_code("%s:");
+        cg_Schema(create->src->load.schema);
+    }
+}
+    
+//TODO: complete schema
+void cg_Schema(SchemaNode *schema)
+{
+    //generate code for pairs, should be easy!
+}
+    
+    
+   
+}
 
 
 
