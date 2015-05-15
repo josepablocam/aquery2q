@@ -1784,7 +1784,6 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, 
     }
     
     //TODO: look up order in a way that accounts for complicated from 
-     /*
     if(order != NULL)
     { //try to remove order clause first as a result of existing order
         Symentry *entry = lookup_sym(env, get_table_name(from));
@@ -1798,7 +1797,6 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from, 
             order = NULL;
         }
     }
-    */
     
     
     if(order != NULL)

@@ -38,6 +38,7 @@ LogicalQueryNode *curr_order;
 
 //Code generation
 FILE *DEST_FILE;
+int GEN_CODE = 0;
 
 
 void yyerror(const char *);
@@ -205,8 +206,10 @@ int silence_warnings = 0;
  
  /******* 2.1: Top level program definition *******/
 
-program: top_level						    { $$ = $1; ast = $$; }												
 
+program: top_level						    { $$ = $1; ast = $$; cg_AQUERY2Q(ast); }												
+
+//TODO:delete init_aq_helpers from here, just here for testing
 top_level: global_query top_level           { $$ = make_Top_GlobalQuery($1, $2); }
 	|	create_table_or_view top_level      { $$ = make_Top_Create($1, $2); }
 	|	insert_statement top_level          { $$ = make_Top_Insert($1, $2); }
@@ -256,8 +259,8 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{ $$ = make_IDList
  /******* 2.3: Base query *******/
  //TODO: make this better.....
   /* assemble plan calls a different function depending on optimizer level, store order info for current query to use in symtable */
-  //TODO: delete code generation function here below, currently just there to test
-base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); curr_order = $3; if($5 != NULL) { annotate_groupedNamedExpr($1->params.namedexprs); } cg_queryPlan($$);}
+
+base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); curr_order = $3; if($5 != NULL) { annotate_groupedNamedExpr($1->params.namedexprs); } }
 	; 
  
 select_clause: SELECT select_elem select_clause_tail { $2->next_sibling = $3; $$ = make_project(PROJECT_SELECT, NULL, $2); } /* select_elems are linked, and put into projection */
@@ -403,6 +406,7 @@ on_clause: ON and_search_condition								{ $$ = $2; }
 	;
 
 using_clause: USING '(' comma_identifier_list ')' 				{ $$ = $3; }
+    | USING ID                                                  { $$ = make_IDListNode($2, NULL); }
 	;
 	
 table_expression: table_expression_main							{ $$ = $1;               } 
@@ -686,6 +690,7 @@ void help()
 	printf("-p  print dot file AST to stdout\n");
 	printf("-a  optimization level [0-1]\n");
     printf("-s  silence warnings\n");
+    printf("-c  generate code\n");
 }
 
 
@@ -705,7 +710,7 @@ int main(int argc, char *argv[]) {
     DEST_FILE = stdout;
     
 	
-	while((op = getopt(argc, argv, "spha:")) != -1)
+	while((op = getopt(argc, argv, "cspha:")) != -1)
 	{
 		switch(op)
 		{
@@ -715,6 +720,9 @@ int main(int argc, char *argv[]) {
 			case 'p':
 				print_ast_flag = 1;
 				break;
+            case 'c':
+                GEN_CODE = 1;
+                break;
 			case 'h':
 				help();
 				exit(0);

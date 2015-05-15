@@ -60,6 +60,7 @@ char *cg_queryPlan(LogicalQueryNode *node);
 
 /* local and full queries */
 void cg_LocalQueryNode(LocalQueryNode *local);
+void cg_colList(IDListNode *cols);
 void cg_colRename(IDListNode *names);
 void cg_LocalQueries(LocalQueryNode *locals);
 void cg_FullQuery(FullQueryNode *full_query);
@@ -71,6 +72,10 @@ void cg_SimpleOrder(OrderNode *ordnode); //naive
 void cg_SortIx(OrderNode *ordnode); //optimized
 char *cg_SortCols(LogicalQueryNode *node); //optimized
 
+
+/* top level code generation */
+void cg_AQUERY2Q(TopLevelNode *node);
+void cg_TopLevel(TopLevelNode *node);
 
 
 #endif
