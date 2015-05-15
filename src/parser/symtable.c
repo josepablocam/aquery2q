@@ -7,9 +7,9 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
-#include "ast.h"
+#include "../ast/ast.h"
 #include "symtable.h"
-#include "aquery_types.h"
+#include "../types/aquery_types.h"
 #define SYM_TABLE_DEBUG 0
 #define SYM_PRINT_DEBUG(str) if(SYM_TABLE_DEBUG) printf("---->SYM TABLE DEBUGGING: %s\n", str)
 #define STAND_ALONE 0

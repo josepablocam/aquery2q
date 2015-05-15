@@ -1,7 +1,7 @@
 #ifndef AQUERY_SYM_TABLE_H
 #define AQUERY_SYM_TABLE_H
 #define SYM_TABLE_SIZE 32
-#include "aquery_types.h"
+#include "../types/aquery_types.h"
 
 
 struct OrderNode;

@@ -1,0 +1,27 @@
+/* pg 30, example 3.4 */
+WITH
+    averages (ID, date, a21, a5) AS
+    (SELECT ID, date, avgs(21, price) as a21,
+      avgs(5, price) as a5 FROM Ticks
+        ASSUMING ASC ID, ASC timestamp
+     GROUP BY ID)
+ SELECT ID, date 
+ FROM FLATTEN(averages)
+    ASSUMING ASC ID, ASC timestamp
+ WHERE a21 > a5 AND
+       prev(a21) <= prev(a5) AND
+       prev(ID) = ID
+       
+/***Operations
+Local temporary averages:
+1 - Group Ticks by ID (group-by is order independent)
+2 - Within each group, sort: date and price by ASC ID, ASC timestamp (order-dependent operations in project clause)
+3 - Project ID, date, avgs(21, price), avgs(5, price)
+4 - Update order info for averages table in symbol table
+
+Main query:
+1 - Acknowledge that the order clause is already fulfilled by the averages table, so eliminate sorting
+2 - Flatten averages
+3 - Filter on a21 > a5 AND prev(a21) <= prev(a5) AND prev(ID) = ID
+4 - Project ID, date
+***/       

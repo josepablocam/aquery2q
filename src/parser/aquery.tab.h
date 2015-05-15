@@ -109,35 +109,36 @@
      PRD = 325,
      REV = 326,
      SUM = 327,
-     STDDEV = 328,
-     AVGS = 329,
-     DELTAS = 330,
-     MAXS = 331,
-     MINS = 332,
-     PRDS = 333,
-     SUMS = 334,
-     MAKENULL = 335,
-     FLOAT = 336,
-     INT = 337,
-     TRUE = 338,
-     FALSE = 339,
-     DATE = 340,
-     HEX = 341,
-     ID = 342,
-     STRING = 343,
-     EXP_OP = 344,
-     TIMES_OP = 345,
-     DIV_OP = 346,
-     PLUS_OP = 347,
-     MINUS_OP = 348,
-     LE_OP = 349,
-     GE_OP = 350,
-     L_OP = 351,
-     G_OP = 352,
-     EQ_OP = 353,
-     NEQ_OP = 354,
-     AND_OP = 355,
-     OR_OP = 356
+     SQRT = 328,
+     STDDEV = 329,
+     AVGS = 330,
+     DELTAS = 331,
+     MAXS = 332,
+     MINS = 333,
+     PRDS = 334,
+     SUMS = 335,
+     MAKENULL = 336,
+     FLOAT = 337,
+     INT = 338,
+     TRUE = 339,
+     FALSE = 340,
+     DATE = 341,
+     HEX = 342,
+     ID = 343,
+     STRING = 344,
+     EXP_OP = 345,
+     TIMES_OP = 346,
+     DIV_OP = 347,
+     PLUS_OP = 348,
+     MINUS_OP = 349,
+     LE_OP = 350,
+     GE_OP = 351,
+     L_OP = 352,
+     G_OP = 353,
+     EQ_OP = 354,
+     NEQ_OP = 355,
+     AND_OP = 356,
+     OR_OP = 357
    };
 #endif
 /* Tokens.  */
@@ -211,42 +212,43 @@
 #define PRD 325
 #define REV 326
 #define SUM 327
-#define STDDEV 328
-#define AVGS 329
-#define DELTAS 330
-#define MAXS 331
-#define MINS 332
-#define PRDS 333
-#define SUMS 334
-#define MAKENULL 335
-#define FLOAT 336
-#define INT 337
-#define TRUE 338
-#define FALSE 339
-#define DATE 340
-#define HEX 341
-#define ID 342
-#define STRING 343
-#define EXP_OP 344
-#define TIMES_OP 345
-#define DIV_OP 346
-#define PLUS_OP 347
-#define MINUS_OP 348
-#define LE_OP 349
-#define GE_OP 350
-#define L_OP 351
-#define G_OP 352
-#define EQ_OP 353
-#define NEQ_OP 354
-#define AND_OP 355
-#define OR_OP 356
+#define SQRT 328
+#define STDDEV 329
+#define AVGS 330
+#define DELTAS 331
+#define MAXS 332
+#define MINS 333
+#define PRDS 334
+#define SUMS 335
+#define MAKENULL 336
+#define FLOAT 337
+#define INT 338
+#define TRUE 339
+#define FALSE 340
+#define DATE 341
+#define HEX 342
+#define ID 343
+#define STRING 344
+#define EXP_OP 345
+#define TIMES_OP 346
+#define DIV_OP 347
+#define PLUS_OP 348
+#define MINUS_OP 349
+#define LE_OP 350
+#define GE_OP 351
+#define L_OP 352
+#define G_OP 353
+#define EQ_OP 354
+#define NEQ_OP 355
+#define AND_OP 356
+#define OR_OP 357
 
 
 
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 162 "aquery.y"
+#line 173 "parser/aquery.y"
 {
   int   intval;
   float floatval;
@@ -268,7 +270,7 @@ typedef union YYSTYPE
   struct TopLevelNode *top;
 }
 /* Line 1529 of yacc.c.  */
-#line 272 "aquery.tab.h"
+#line 274 "parser/aquery.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

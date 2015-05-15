@@ -1,0 +1,143 @@
+ Joining for implicit joins
+1 - separate where clause into OI, call this OI, and (first-OD and rest), call this OD
+2 - separate OI into join_filters and other_filters (join_filters are extracted from the whole of OI)
+3 - Collect the tables involved in the from clause, call this tables (we'll make this a list of logical query nodes..somehow)
+
+We have 2 helper functions:
+
+These also work for regular joins and combinations of:
+    we need to traverse the from-clause. When we encounter a cross product return the left and right, when we encounter a regular join, just return it as it is....
+
+The general heuristic for implicit joins is that we perform the join associated with the largest number of filters...
+
+DONE
+ListNodes split_from(LogicalQueryNode *from):
+    if(from == NULL):
+        return NULL
+    else if(from_type == cross):
+        return prepend(x->left, split_from(x->right))
+    else if(from_type == join)
+        return from
+    else simple:
+        return from 
+            
+
+DONE
+ListNodes *add_filter(ListNodes *tables, ExprNode *filters):
+    //adds all possible filters to each element in the list
+    for table in tables:
+        for filter in filters:
+            if(all names(filter) in names(table)):
+                deposit_filter_deep(filter, table)
+
+          
+DONE                
+Table deposit_filter_deep(filter, table):
+    if table == NULL:
+        return NULL
+    else if(set_equivalent(names(filter), names(table))): //found node
+        return filter(table)
+    else if(is_subset(names(filter), names(table))): //continue searching
+        table->child = deposit_filter_deep(child) 
+        table->sibling = deposit_filter_deep(sibling)
+        return table
+    else
+        return table
+
+DONE
+int join_possible(LogicalNode *n1, LogicalNode *n2):
+    any names(n1) in names(n2) //ie a link between the 2 sets
+
+
+
+LogicalNodes *join(ListNodes *tables, ExprNode *join_filters, ExprNode *other_filters):
+    int count = 0; //need it to make sure we execute at least 1 join
+    chosen_lhs = NULL;
+    chosen_rhs = NULL;
+    chosen_join = NULL;
+    new_tables = NULL;
+    
+    if(tables.length == 1): //already joined
+        return tables;
+    
+    if(join_filters == NULL): //no filters left, remaining are crosses
+        print warning message for user in case this is due to an error in query....
+        for table in tables:
+            if(new_tables == NULL):
+                new_tables = table
+            else
+                new_tables = cross(new_tables, table)
+        return new_tables
+            
+    //otherwise pick a suitable join
+    for join in join_filters: 
+        for lhs in tables:
+           for rhs in tables:
+              if(rhs < lhs): ignore
+              else
+                if(join_possible(lhs, join, rhs)):
+                 //if there are no other filters, first possible is good enough
+                    if(other_filters == NULL):
+                        tables_clean = remove(remove(tables, lhs), rhs);
+                        tables_clean = append(tables_clean, make_join(lhs, join, rhs))
+                        return tables_clean
+                    //otherwise count filters    
+                    poss_names = union(names(lhs), names(rhs));
+                    poss_ct = count_equality_filters(filters_withSubset(other_filters, poss_names)); 
+                    if(poss_ct > count):
+                        count = poss_ct
+                        chosen_join = join 
+                        chosen_lhs = lhs
+                        chose_rhs = rhs
+                                
+    tables_clean = remove(remove(tables, chosen_lhs), chosen_rhs)
+    new_tables = append(tables_clean, make_join(chosen_lhs, join, chosen_rhs))
+    join_filters = remove(join_filters, chosen_join)
+    return new_tables;
+    
+main:
+     while(tables != 1 || other_filters != NULL):
+         add_filter(tables, other_filters);
+         tables = join(tables, join_filters, other_filters)
+         add_filters_with_unknown(tables);
+     return simple_from_optim(tables, OD);
+    
+    
+            
+
+1 - Separate where clauses into join filters and others
+2 - separate others into OI up to first aggregate (UFA) and remaining
+3 - apply join strategy above using from clause, join filters, and UFA
+4 - split remaining into OI and up to first OD
+5 - apply OI
+6 - sort
+7 - apply OD
+
+
+
+To incorporate indices:
+ 1 - create new node called possible_push, which has as argument a join,
+     (if not a join, then we should just push down, and not create this node),
+and as next argument it has 2 nodes, 1 for left operand and 1 for right operand (think about this design)
+2 - then the code generated is pretty much
+	left.code
+        right.code
+        $[cols_in_join in attr(a) U attr(b); poss.push.code join.code(left, right);
+	  join.code(poss_push.code.left left, poss_push.code.right right)]
+
+3 - we need to add this to ast_print
+4 - modify apply filters to only apply equality selections
+5 - non-duality selections should then get applied after each join (since we want
+ poss_push to sit on top of a join, always).
+
+
+
+   
+
+
+
+
+
+
+
+

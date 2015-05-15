@@ -1,1 +1,0 @@
-The flex and bison files in this directory implement a LALR parser for Aquery, an ordered database query language developed by Alberto Lerner and Dennis Shasha.

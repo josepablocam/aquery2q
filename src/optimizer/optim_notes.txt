@@ -1,0 +1,103 @@
+1 - We should change the where search condition clause to be able to easily identify order-dependent and order-independent clauses
+
+Make it an and-separated list, remove or, force people to use || or && if they want within a clause. 
+
+2 - order-dependent filtering in where clause
+    - Strip out order independent filters, apply first
+    - Apply order dependent filters
+        Need:
+        a)in search condition: find out columns that need to be sorted (not all will need sorting)
+        b)projection/groupby: search all column references
+        Reason: We needed data aligned to be able to filter correctly
+        Action: union both lists of columns, sort. Done
+ 
+ ----> to move beyond here: where clause was order independent completely
+ 
+3 - group by is order-dependent
+    - Sort all column references in groupby/having and projection clauses
+        Need:
+        a) in groupby/having: all column references
+        b) in projection: all column references
+        Reason: Data must be aligned between groups and other clauses
+        Action: union both groups, and sort.
+
+-----> to move beyond here: group-by was order independent
+    
+4 - groupby/having is order independent, and projection is order dependent
+   Need:
+   a) in projection clause: all references that are order dependent
+   Reason: We will sort within each group
+   Action: add a sort_each node that references each column from (a)
+
+
+At end we can tag our the result as having been sorted by ORDERING clause.
+So if, temp table or creating etc, this information should be recorded
+
+Tasks:
+1 - Figuring out order dependence: easy, our tree calculates this already
+2 - Retrieving order dependent column references: harder
+some columns become order dependent because of interaction with other order dependent columns, even in order independent clauses
+
+Consider
+max(c1 + c2) * first(c2) ....we need to sort c2, so gonna have to sort c1 as well....
+
+
+Algorithm:
+1 - Use top-level tag when you go into the tree (when traversing a projection, we can always default to OD, until we find out a reason not to....)
+2 - Any column references that we encounter while tag = OD, we append to a linked list L
+3 - If we are traversing down an OI node, we instead collect an additional list of lists, P. P is collected as follows:
+     - We return any column references from left-child, and right-child.
+     - If we are in a order annihilating operation, we append to P, and return Nil to whoever called us (i.e. the lists within P track direct order-relevant interactions)
+     
+4 - Once we are done, we know traverse each list of lists in P, and check if any member in the list is in L, if so, we append that sublist to L. We iterate until no additions are made....
+     
+     
+
+
+-------> For joins in from clause
+
+
+1 - do we want to use all columns or just those that are needed (e.g t1,t2, t2 is huge and we only ever use 1 column from t2)
+
+2 - Applying where clauses now depends on what joins have happened. 
+Where clauses get tagged with
+1) tables they reference
+2) order information (as usual)
+
+Where: all order independent (or there is no ordering clause)
+    - apply any single table reference clauses to those single tables
+    - if a clause requires x,y,z, then apply after joining x,y,z
+    - if a clause references a column, without source table, then we need to wait after all joins done (implicitly depends on all)....
+    
+    
+    
+    
+We want the ordered table on the left (cross in q is order preserving in the left), so rearrange joins etc so that ordered result is on left....
+--ie. if the ordering clause depends on x,y,...z, we want that join on the left hand-side.....
+- To sort on an ordering clause involving tables x,y,...z, we need that join to have been performed.
+
+    
+---> there is no order
+    - all column references in where/groupby-having/projection have a table source
+        - take only the columns we need and perform join etc
+     - Not all column references have table source
+        - apply where clause references that 
+        
+        
+        
+
+When working with more complicated from clauses, we need to be careful about correctly handling dot-col accesses. Meaning, when we sort, the “src.dest” structure needs to be maintained. Does this imply having a different function to handle that? not likely, but rather perhaps a parameter to original, or something like that….
+
+
+
+
+
+
+
+
+
+   
+    
+   
+    
+

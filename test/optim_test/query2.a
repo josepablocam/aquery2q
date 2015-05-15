@@ -1,0 +1,12 @@
+/* pg 25, example 3.1 */
+SELECT max(price - mins(price))
+FROM Ticks
+    ASSUMING ASC timestamp
+WHERE ID="ACME" AND
+    date = '05/11/2003'
+
+/***Operations
+1 - Filter Ticks on ID="ACME" AND date='05/11/2003' (order-independent filtering)
+2 - Sort price on ASC timestamp (order-dependent operation in projection clause)
+3 - Project max(price - mins(price))
+***/

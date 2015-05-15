@@ -62,7 +62,7 @@ SELECT avg(px-closingpx) as diff FROM t FULL OUTER JOIN st USING (date, ticker) 
 WITH local(date, a21, a5) AS (
 	SELECT avgs(21, px) as a21, avgs(5, px) as a5 FROM t ASSUMING ASC ticker, ASC date GROUP BY ticker
 )
-SELECT ticker, date FROM FLATTEN(local) WHERE a21>5 AND prev(a21)<= prev(a5) AND prev(ticker)=ticker
+SELECT ticker, date FROM FLATTEN(local) WHERE a21>a5 AND prev(a21)<= prev(a5) AND prev(ticker)=ticker
 
 
 //Test 3.2: using nested queries (not allowed in aquery) for moving averages example.

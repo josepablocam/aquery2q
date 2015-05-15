@@ -1,0 +1,206 @@
+/*
+    In this document we work through Aquery examples from Alberto Lerner's
+    thesis and Aquery presentation, along with additional examples provided
+    by Dr Shasha. In each example we detail the order of sorts and other operations. 
+    We provide rationale when necessary for clarity.
+*/
+
+
+
+
+/********************************************************** 
+***********Examples from aquery thesis*********************
+**********************************************************/
+
+/* pg 24 */
+SELECT price
+FROM Ticks
+    ASSUMING ASC timestamp
+WHERE ID = "ACME"
+
+/***Operations
+1 - Filter Ticks on ID="ACME" (order-independent filtering)
+2 - Sort price on ASC timestamp
+3 - Project price
+***/
+
+
+/* pg 25, example 3.1 */
+SELECT max(price - mins(price))
+FROM Ticks
+    ASSUMING ASC timestamp
+WHERE ID="ACME" AND
+    date = '05/11/2003'
+
+/***Operations
+1 - Filter Ticks on ID="ACME" AND date='05/11/2003' (order-independent filtering)
+2 - Sort price on ASC timestamp (order-dependent operation in projection clause)
+3 - Project max(price - mins(price))
+***/
+
+
+
+/* pg 29, example 3.3 */
+SELECT src, dest, avg(length), count(timestamp)
+FROM Packets
+    ASSUMING ASC src, DESC dest, ASC timestamp
+GROUP BY src, dest, sums(deltas(timestamp) > 120)
+
+/***Operations
+1 - Sort all column references in projection and group-by clauses: src, dest, length, timestamp, on ASC src, DESC dest, ASC timestamp (order-dependent group-by, we need all data aligned)
+2 - Within each group: project src, dest, avg(lenght), count(timestamp)
+***/
+
+
+/* pg 30, example 3.4 */
+WITH
+    averages (ID, date, a21, a5) AS
+    (SELECT ID, date, avgs(21, price) as a21,
+      avgs(5, price) as a5 FROM Ticks
+        ASSUMING ASC ID, ASC timestamp
+     GROUP BY ID)
+ SELECT ID, date 
+ FROM FLATTEN(averages)
+    ASSUMING ASC ID, ASC timestamp
+ WHERE a21 > a5 AND
+       prev(a21) <= prev(a5) AND
+       prev(ID) = ID
+       
+/***Operations
+Local temporary averages:
+1 - Group Ticks by ID (group-by is order independent)
+2 - Within each group, sort: date and price by ASC ID, ASC timestamp (order-dependent operations in project clause)
+3 - Project ID, date, avgs(21, price), avgs(5, price)
+4 - Update order info for averages table in symbol table
+
+Main query:
+1 - Acknowledge that the order clause is already fulfilled by the averages table, so eliminate sorting
+2 - Flatten averages
+3 - Filter on a21 > a5 AND prev(a21) <= prev(a5) AND prev(ID) = ID
+4 - Project ID, date
+***/       
+
+/* pg 32, example 3.5 */
+SELECT t.ID, last(10, price)
+FROM Ticks t, Portfiolio p
+    ASSUMING ASC timestamp
+WHERE t.ID = p.ID
+GROUP BY t.ID
+
+/***Operations
+1 - Cross Ticks and Portfolio 
+2 - Filter on t.ID = p.ID (order independent)
+3 - Group by t.ID (for sort embedding)
+4 - Within each group, sort price on ASC timestamp
+5 - Project t.ID, last(10, price)
+***/
+
+
+/* pg 33, example 3.6 */
+WITH
+    OneDay AS
+    (SELECT ID, price, timestamp
+     FROM Ticks
+        ASSUMING ASC timestamp
+     WHERE date = '05/11/2003')
+ SELECT ID, count(*) 
+ FROM OneDay
+    ASSUMING ASC timestamp
+    WHERE ROWID < 1000
+    GROUP BY ID
+    
+/***Operations
+Local Temporary OneDay:
+1 - Filter Ticks on date = '05/11/2003' (order-independent filter)
+2 - Sort ID, price, timestamp on asc timestamp
+3 - Project ID, price, timestamp
+4 - Update order info for OneDay in symbol table
+
+Main Query:
+1 - Acknowledge that OneDay is already sorted on timestamp, remove ordering clause
+2 - Filter on ROWID < 1000
+3 - Group by ID
+4 - Project ID, count(*)
+***/    
+    
+    
+
+/* pg 35 */
+SELECT src, dest, avg(length), count(timestamp)
+FROM Packets
+    ASSUMING ASC src, DESC dest, ASC timestamp
+GROUP BY src, dest, sums(deltas(timestamp) > 120)
+
+/***Operations
+1 - Sort all column references on ASC src, DESC dest, ASC timestamp (order-dependent group by)
+2 - Within each group: project src, dest, avg(length), count(timestamp) 
+***/
+
+
+/********************************************************** 
+***********Examples from aquery presentation notes*********
+**********************************************************/
+
+
+/* moving average over arrables*/
+SELECT month, avgs(3, sales) 
+FROM Sales 
+ASSUMING ASC month
+
+/***Operations
+1 - Sort month, sales on ASC month
+2 - Project month, avgs(3, sales)
+***/
+
+
+/* best profit query comparison */
+SELECT max(price - mins(price))
+FROM ticks
+    ASSUMING ASC timestamp
+WHERE ID="S"
+AND tradeDate='01/10/2003'
+
+/***Operations
+1 - Filter ticks on ID="S" AND tradeDate='01/10/2003' (order-independent)
+2 - Sort price on ASC timestamp (order-dependent expression in project clause)
+3 - Project max(price - mins(price))
+***/
+
+
+/* Interchange sorting + order preserving operators */
+SELECT ts.ID, avgs(10, hq.ClosePrice) 
+FROM TradedStocks AS ts INNER JOIN
+    HistoricQuotes AS hq
+	ON ts.ID=hq.ID AND ts.TradeDate=hq.date //note use of ON given differing col names
+ASSUMING ASC hq.TradeDate
+GROUP BY Id
+
+
+/***Operations
+1 - Inner join ts and hq on ts.ID=hq.ID AND ts.TradeDate=hq.date
+2 - group by ID
+3 - Within each group: sort ClosePrice on ASC TradeDate
+4 - Within each group: project ID, avgs(10, ClosePrice)
+***/
+
+
+
+/* last price for a name query */
+
+SELECT last(price)
+FROM ticks t, base b
+    ASSUMING ASC name, ASC timestamp
+WHERE t.ID = b.ID AND name = "x"
+
+/***Operations
+1 - Cross ticks and base
+2 - Filter on t.ID=b.ID AND name="x"
+3 - Sort price on ASC name, ASC timestamp
+4 - Project last(price)
+***/
+
+
+
+	
+
+

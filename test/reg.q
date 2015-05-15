@@ -5,10 +5,25 @@
 \
 
 
-.aq.util.time:{p:parse except/[ ;"\t\n\r"]x; ct:.z.P; r:eval p; `time`result!(%[;1e6].z.P-ct;r)}
+//function timer, takes function, evals and returns time and result
+.aq.util.time:{ct:.z.P; r:x[`fun][]; `name`time`result!(x`name;%[;1e6].z.P-ct;r)}
+.aq.util.mktbl:{[nr;nc]flip (`$"c",/:string til nc)!nr cut (nr*nc)?10}; 
+//Test bed
+.aq.test.tests:([name:`$()] details:(); fun:()) 
+//register a new test
+.aq.test.register:{`.aq.test.tests upsert (x;y;z)}
+//run a single test
+.aq.test.runTest:{[x;y] 1 "------->Test:",(string y`name),"\n\tDetails:",(y`details),"\n"; r:.aq.util.time y; 1"\tTime:",(string r`time),"ms\n"; .Q.gc[]; $[x;r;r _`result]}
+//run all tests, keep results (1b) or discard (0b) and solely keep info about test and time
+.aq.test.runTests:{.aq.test.runTest[x;] each 0!.aq.test.tests}
+
+
 
 \S 10
 show "creating regression test set"
+
+
+
 //t, e.g. many observations of few instances, and few features
 //for this we will borrow the idea of stock trades from Dr. Shasha's regressiont test in 
 tickers:`ibm`hp`goog`aapl`fb
@@ -16,118 +31,125 @@ il:`long$1e7
 t:([]ticker:il?tickers;  date:il?.z.D; px:il?100.; size:il?`long$1e5)
 st:`ticker`date`closingpx`traded xcol update px:count[px]?px from (floor count[t]*0.25)?t //creating additional table with roughly 25% of the # of records as t
 
-/
-    Section 1: base query tests
-\
+
+//    Section 1: base query tests
+
 
 //Test 1.1: simple selection of column subset
-.aq.test.t11:{.aq.util.time "select ticker, px, date from t"}
+.aq.test.register[`test1_1;"simple selection of col subset";{select ticker, px, date from t}]
 
 //Test 1.2: simple selection of column subset with 1 constraint
-.aq.test.t12:{.aq.util.time "select ticker, px, date from t where ticker=`ibm"}
+.aq.test.register[`test1_2;"simple selection of col subset w/1 constraint";{select ticker, px, date from t where ticker=`ibm}]
 
 //Test 1.3: simple selection of column subset with multiple constraints
-.aq.test.t13:{.aq.util.time "select ticker, px, date from t where ticker=`ibm, size>1000"}
+.aq.test.register[`test1_3;"simple selection of column subset with multiple constraints";{select ticker, px, date from t where ticker=`ibm, size>1000}]
 
 //Test 1.4: calculating group-by based aggregation
-.aq.test.t14:{.aq.util.time "select avg px by ticker from t"}
+.aq.test.register[`test1_4;"calculating group-by based aggregation";{select avg px by ticker from t}]
 
 //Test 1.5: calculating multiple group-by based aggregations
-.aq.test.t15:{.aq.util.time "select avg px, min size, max date by ticker from t"}
+.aq.test.register[`test1_5;"calculating multiple group-by based aggregations";{select avg px, min size, max date by ticker from t}]
 
 //Test 1.6: multiple group-by based aggregations and 1 constraint
-.aq.test.t16:{.aq.util.time "select avg px, min size by ticker from t where ticker=`fb"}
+.aq.test.register[`test1_6;"multiple group-by based aggregations and 1 constraint";{select avg px, min size by ticker from t where ticker=`fb}]
 
 //Test 1.7: multiple group-by based aggregations and multiple constraints
-.aq.test.t17:{.aq.util.time "select avg px, min size by ticker from t where ticker=`fb, date=2013.02.04, size > 100"}
+.aq.test.register[`test1_7;"multiple group-by based aggregations and multiple constraints";{select avg px, min size by ticker from t where ticker=`fb, date=2013.02.04, size > 100}]
 
 //Test 1.8: simple sorting by ticker and within that by date
-.aq.test.t18:{.aq.util.time "`ticker`date xasc t"}
+.aq.test.register[`test1_8;"simple sorting by ticker and within that by date";{`ticker`date xasc t}]
 
 //Test 1.9: combining selection, sorting and constraint
-.aq.test.t19:{.aq.util.time "select ticker, px from `ticker`date xasc t where size>100"}
+.aq.test.register[`test1_9;"combining selection, sorting and constraint";{select ticker, px from `ticker`date xasc t where size>100}]
 
 //Test 1.10: combining selection, sorting, aggregate based on sorting, and constraint
-.aq.test.t110:{.aq.util.time "select min date by ticker from `ticker`date xasc t where size>100"}
+.aq.test.register[`test1_10;"combining selection, sorting, aggregate based on sorting, and constraint";{select min date by ticker from `ticker`date xasc t where size>100}]
 
-/
-   Section 2: Testing joins and their use in queries
-\
+
+
+//   Section 2: Testing joins and their use in queries
+
 
 //Test 2.1: simple join and aggregate
-.aq.test.t21:{.aq.util.time "select diff:avg px-closingpx by ticker from t lj `date`ticker xkey st"}
+.aq.test.register[`test2_1;"simple join and aggregate";{select diff:avg px-closingpx by ticker from t lj `date`ticker xkey st}]
+
 
 //Test 2.2: join, with constraints, and aggregate
-.aq.test.t22:{.aq.util.time "select diff:avg px-closingpx by ticker from t lj `date`ticker xkey st where date.year=2000"}
+.aq.test.register[`test2_2;"join, with constraints, and aggregate";{select diff:avg px-closingpx by ticker from t lj `date`ticker xkey st where date.year=2000}]
+
 
 //Test 2.3: join, pushing down constraints, and aggregate (Note that the nested query is not allowed in aquery, sthg like this would solely come from optim stage)
-.aq.test.t23:{.aq.util.time "select diff:avg px-closingpx by ticker from (select from t where date.year=2000) lj `date`ticker xkey select from st where date.year=2000"}
+.aq.test.register[`test2_3;"join, pushing down constraints, and aggregate";{select diff:avg px-closingpx by ticker from (select from t where date.year=2000) lj `date`ticker xkey select from st where date.year=2000}]
 
 
-/
-    Section 3: Testing local queries, for q, we will create "locals" by taking advantage of the function call, creating all "locals"
-    as local function variables
-\
+//    Section 3: Testing local queries, for q, we will create "locals" by taking advantage of the function call, creating all "locals"
+//    as local function variables
+
 
 
 
 
 //Test 3.1: using local queries for moving averages example
-.aq.test.t31:{
- .aq.util.time "temp:select date, a21:21 mavg px, a5:5 mavg px by ticker from `ticker`date xasc t;
-                select ticker, date from ungroup temp where a21>a5,prev[a21]<=prev a5,prev[ticker]=ticker"
-    }
+.aq.test.register[`test3_1;"using local queries for moving averages example";{
+    temp:select date, a21:21 mavg px, a5:5 mavg px by ticker from `ticker`date xasc t;
+    select ticker, date from ungroup temp where a21>a5,prev[a21]<=prev a5,prev[ticker]=ticker
+  }]
+
 
 //Test 3.2: using nested queries (not allowed in aquery) for moving averages example.
-.aq.test.t32:{.aq.util.time "select from (update a21:21 mavg px, a5:5 mavg px by ticker from `ticker`date xasc t) where a21>a5, prev[a21]<=prev a5, prev[ticker]=ticker"}
+.aq.test.register[`test3_2;"using nested queries (not allowed in aquery) for moving averages example.";{
+  select from (update a21:21 mavg px, a5:5 mavg px by ticker from `ticker`date xasc t) where a21>a5, prev[a21]<=prev a5, prev[ticker]=ticker
+  }]
 
 
-/
-    Section 4: table creation,  insert/update/delete statements
-\
+
+//    Section 4: table creation,  insert/update/delete statements
+
 
 //Test 4.1: create a table
-.aq.test.t41:{.aq.util.time "([]ticker:`$(); px:`float$(); size:`long$())"}
+.aq.test.register[`test4_1;"create a table";{([]ticker:`$(); px:`float$(); size:`long$())}]
+
 
 //Test 4.2: create table and populate using values
-.aq.test.t42:{
-    .aq.util.time "temp:([]ticker:`$(); px:`float$(); size:`long$());
-                   temp upsert flip (`a`b`c`d`e`f`g`h;1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8;1 2 3 4 5 6 7 8)"
-    }
+.aq.test.register[`test4_2;"create table and populate using values";{
+        temp:([]ticker:`$(); px:`float$(); size:`long$());
+        temp upsert flip (`a`b`c`d`e`f`g`h;1.1 1.2 1.3 1.4 1.5 1.6 1.7 1.8;1 2 3 4 5 6 7 8)
+  }]
 
 //Test 4.3: create a table and populate using query (cols in same order)
-.aq.test.t43:{
-    .aq.util.time "temp:([]ticker:`$(); px:`float$(); size:`long$());
-                   temp upsert select ticker, px, size from t where ticker=`fb"
- };
+.aq.test.register[`test4_3;"create a table and populate using query (cols in same order)";{
+        temp:([]ticker:`$(); px:`float$(); size:`long$());
+        temp upsert select ticker, px, size from t where ticker=`fb
+  }]
+
 
 //Test 4.4: create table, populate with query, but using different column order
-.aq.test.t44:{
-    .aq.util.time "temp:([]ticker:`$(); size:`long$(); px:`float$());
-                   temp upsert `ticker`size`px xcols select ticker, px, size from t where ticker=`fb"
- }
+.aq.test.register[`test4_4;"create table, populate with query, but using different column order";{
+        temp:([]ticker:`$(); size:`long$(); px:`float$());
+        temp upsert `ticker`size`px xcols select ticker, px, size from t where ticker=`fb
+  }]
 
 //Test 4.5: update a new column to hold the minimum price for a ticker
-.aq.test.t45:{.aq.util.time "update minpx:min px by ticker from `t"}
+.aq.test.register[`test4_5;"update a new column to hold the minimum price for a ticker";{update minpx:min px by ticker from `t}]
 
 //Test 4.6: update a new column to hold the first price per ticker, assuming sorted by year
-.aq.test.t46:{.aq.util.time "update firstyrpx:first px by ticker from `date xasc `t"}
+.aq.test.register[`test4_6;"update a new column to hold the first price per ticker, assuming sorted by year";{update firstyrpx:first px by ticker from `date xasc `t}]
 
 //Test 4.7: delete rows associated with the first 14 trade days listed in our table
-.aq.test.t47:{.aq.util.time "delete from `date xasc `t where date in 14 sublist distinct date"}
+.aq.test.register[`test4_7;"delete rows associated with the first 14 trade days listed in our table";{delete from `date xasc `t where date in 14 sublist distinct date}]
 
 
 
-/
-	Section 5: Tests from Alberto Lerner's thesis and presentation on aquery. 
-	Please see the .pdf file accompanying this implementation for references to both
-	We assume the existence of tables: Ticks, Portfolio, Packets, Sales, TradedStocks, HistoricQuotes as per references in both documents
-\
+
+//	Section 5: Tests from Alberto Lerner's thesis and presentation on aquery. 
+//	Please see the .pdf file accompanying this implementation for references to both
+//	We assume the existence of tables: Ticks, Portfolio, Packets, Sales, TradedStocks, HistoricQuotes as per references in both documents
+
 
 //Creating necessary tables
-n:`int$1e6 
+n:`int$1e6;
 Ticks:([]ID:n?`S`ACME`OTHER`CORP; date:n?.z.D; timestamp:n?.z.P; price:n?100.)
-Portfolio:update cost:position*n?100. from ([]ID:n?`S`ACME`OTHER`CORP,upper 4?`3; position:1e4+n?1e6)
+Portfolio:([]ID:`S`ACME`OTHER`CORP; position:1e4+4?1e6)
 Packets:select from ([]src:n?100; dest:n?100; length:n?256; timestamp:.z.P+10*n?`int$1e9) where src<>dest
 Sales:update sales:count[i]?1e6 from ([]month:`month${neg[x]?x}1+`long$`month$.z.D)
 TradedStocks:([]ID:n?`S`ACME`OTHER`CORP; TradeDate:n?.z.D);
@@ -135,46 +157,162 @@ HistoricQuotes:update ClosePrice:count[i]?100. from `ID`date xcol distinct Trade
 base:([] ID:n?`S`ACME`OTHER`CORP; name:n?`$'.Q.a)
 
 //Test 5.1: pg 24
-.aq.test.t51:{.aq.util.time "select price from `timestamp xasc Ticks where ID=`ACME"}
+.aq.test.register[`test5_1;"Thesis: pg 24";{select price from `timestamp xasc Ticks where ID=`ACME}]
+
 
 //Test 5.2: pg 25, example 3.1
-//naively written
-.aq.test.t52:{.aq.util.time "select max price-mins price from `timestamp xasc Ticks where ID=`ACME, date=2003.05.11"}
+//naively writtenm
+.aq.test.register[`test5_2;"Thesis: pg 25, example 3.1";{select max price-mins price from `timestamp xasc Ticks where ID=`ACME, date=2003.05.11}]
 
 //Test 5.3: pg 29, example 3.3
-.aq.test.t53:{.aq.util.time "select avg length, ct:count timestamp by src, dest, sums (120*1e9)<deltas timestamp from `src xasc `dest xdesc `timestamp xasc Packets"}
+.aq.test.register[`test5_3;"Thesis: pg 29, example 3.3";{select avg length, ct:count timestamp by src, dest, sums (120*1e9)<deltas timestamp from `src xasc `dest xdesc `timestamp xasc Packets}]
+
 
 //Test 5.4: pg 30, example 3.4
-.aq.test.t54:{
-    .aq.util.time "as:select date, timestamp, a21:21 mavg price, a5:5 mavg price by ID from `ID`timestamp xasc Ticks;
-                    select ID, date from `ID`timestamp xasc ungroup as where a21>a5,(prev a21) <=prev a5, (prev ID)=ID"
- }
+.aq.test.register[`test5_4;"Thesis: pg 30, example 3.4";{
+    as:select date, timestamp, a21:21 mavg price, a5:5 mavg price by ID from `ID`timestamp xasc Ticks;
+    select ID, date from `ID`timestamp xasc ungroup as where a21>a5,(prev a21) <=prev a5, (prev ID)=ID
+    }]
+
 
 //Test 5.5: pg 32, example 3.5
-//recreating innerjoin semantics from traditional sql, seems ej can't handle the full tables, wsfull
-.aq.test.t55:{.aq.util.time "select 10 sublist price by ID from ej[`ID;1000#Ticks;1000#Portfolio]"}
+//recreating innerjoin semantics from traditional sql
+.aq.test.register[`test5_5;"Thesis: pg 32, example 3.5";{select 10 sublist price by ID from ej[`ID;Ticks;Portfolio]}]
+
 
 //Test 5.6: pg 33, example 3.6
-.aq.test.t56:{
-    .aq.util.time "OneDay:select ID, price, timestamp from `timestamp xasc Ticks where date=2003.05.11;
-                    select count i by ID from `timestamp xasc OneDay where i < 1000"
-       }
+.aq.test.register[`test5_6;"Thesis: pg 33, example 3.6";{
+     OneDay:select ID, price, timestamp from `timestamp xasc Ticks where date=2003.05.11;
+     select count i by ID from `timestamp xasc OneDay where i < 1000
+ }]
 
 //Test 5.7: moving average over arrables
-.aq.test.t57:{.aq.util.time "select month, 3 mavg sales from `month xasc Sales"}
+.aq.test.register[`test5_7;"Thesis: moving average over arrables";{select month, 3 mavg sales from `month xasc Sales}]
 
 
-//Test 5.8: Interchange sorting + order preserving operators
+
+//Test 5.8:
 //recreating innerjoin semantics from traditional sql
 ejOn:{y[where count each i],'z raze i:where each z x/:y} //similar to ej but now x is a predicate, need to test further currently too slow to use
 //.aq.test.t58:{.aq.util.time "select ID, 10 mavg ClosePrice by ID from `TradeDate xasc ejOn[{(x[`ID]=y`ID)&x[`TradeDate]=y`date};TradedStocks;HistoricQuotes]"}
-.aq.test.t58:{.aq.util.time "select 10 mavg ClosePrice by ID from `date xasc ej[`ID`date;`ID`date xcol TradedStocks;`ID xcol HistoricQuotes]"}
+
+.aq.test.register[`test5_8;"Thesis: recreating innerjoin semantics from traditional sql";{select 10 mavg ClosePrice by ID from `date xasc ej[`ID`date;`ID`date xcol TradedStocks;`ID xcol HistoricQuotes]}]
 
 
 //Test 5.9: last price for a name query (too large and blows up memory if operates on whole table, it's ej's fault..need to do this smarter)
-.aq.test.t59:{.aq.util.time "select last price from `name`timestamp xasc ej[`ID;1000#select from base where name=`x;1000#Ticks]"}
+.aq.test.register[`test5_9;"Thesis: last price for a name query ";{select last price from `name`timestamp xasc ej[`ID;1000#select from base where name=`x;1000#Ticks]}]
 
 
-.aq.util.runTests:{{show "------>running ",string x;show r:(.aq.test x)[];.Q.gc[];r`time} each key 1_.aq.test}
+
+
+//Testing whether sorting before joining or sorting after joining impacts performance
+xncols:10;
+nrows:`int$1e6;
+kt:([]ID:til nrows; cid:nrows?`5)
+kt:kt,'flip (`$"c",/:string til xncols)!flip xncols cut (xncols*count kt)?10b
+t1:([]ID:nrows?`long$nrows;date:nrows?.z.D; timestamp:nrows?.z.P; px:nrows?100.; vol:nrows?10; vol2:nrows?10);
+
+
+sortCols1:{six:ix iasc x[`date]ix:iasc x`timestamp;update px:px six from x};
+.aq.test.register[`test6_0a;"Sort/Joining: Simple, sort pre-ej";{ej[`ID;sortCols1 t1;kt]}]
+.aq.test.register[`test6_0b;"Sort/Joining: Simple, sort post-ej";{sortCols1 ej[`ID;t1;kt]}]
+//What about with different types of joins
+.aq.test.register[`test6_1a;"Sort/Joining: 1-col sort pre-lj";{(sortCols1 t1) lj `ID xkey kt}]
+.aq.test.register[`test6_1b;"Sort/Joining: 1-col sort post-lj";{sortCols1 t1 lj `ID xkey kt}]
+.aq.test.register[`test6_1c;"Sort/Joining: 1-col sort pre-ij";{(sortCols1 t1) ij `ID xkey kt}]
+.aq.test.register[`test6_1d;"Sort/Joining: 1-col sort post-ij";{sortCols1 t1 ij `ID xkey kt}]
+.aq.test.register[`test6_1e;"Sort/Joining: 1-col sort pre-uj";{0!(`ID xkey sortCols1 t1) uj `ID xkey kt}]
+.aq.test.register[`test6_1f;"Sort/Joining: 1-col sort post-uj";{sortCols1 0!(`ID xkey t1) uj `ID xkey kt}]
+//What about if we have to sort multiple columns, not just one?
+sortCols2:{six:ix iasc x[`date]ix:iasc x`timestamp;update px:px six, vol:vol six, vol2:vol2 six from x}
+.aq.test.register[`test6_2a;"Sort/Joining: 3-col sort pre-ej";{ej[`ID;sortCols2 t1;kt]}]
+.aq.test.register[`test6_2b;"Sort/Joining: 3-col sort post-ej";{sortCols2 ej[`ID;t1;kt]}]
+.aq.test.register[`test6_2c;"Sort/Joining: 3-col sort pre-lj";{(sortCols2 t1) lj `ID xkey kt}]
+.aq.test.register[`test6_2d;"Sort/Joining: 3-col sort post-lj";{sortCols2 t1 lj `ID xkey kt}]
+.aq.test.register[`test6_2e;"Sort/Joining: 3-col sort pre-ij";{(sortCols2 t1) ij `ID xkey kt}]
+.aq.test.register[`test6_2f;"Sort/Joining: 3-col sort post-ij";{sortCols2 t1 ij `ID xkey kt}]
+.aq.test.register[`test6_2g;"Sort/Joining: 3-col sort pre-uj";{0!(`ID xkey sortCols2 t1) uj `ID xkey kt}]
+.aq.test.register[`test6_2h;"Sort/Joining: 3-col sort post-uj";{sortCols2 0!(`ID xkey t1) uj `ID xkey kt}]
+//Naturally, if we sort all cols rather than only specifically needed cols, then sorting before the join is always better, since there are less cols
+sortAll:{`date`timestamp xasc x}
+.aq.test.register[`test6_3a;"Sort/Joining: table sort pre-ej";{ej[`ID;sortAll t1;kt]}]
+.aq.test.register[`test6_3b;"Sort/Joining: table sort post-ej";{sortAll ej[`ID;t1;kt]}]
+.aq.test.register[`test6_3c;"Sort/Joining: table sort pre-lj";{(sortAll t1) lj `ID xkey kt}]
+.aq.test.register[`test6_3d;"Sort/Joining: table sort post-lj";{sortAll t1 lj `ID xkey kt}]
+.aq.test.register[`test6_3e;"Sort/Joining: table sort pre-ij";{(sortAll t1) ij `ID xkey kt}]
+.aq.test.register[`test6_3f;"Sort/Joining: table sort post-ij";{sortAll t1 ij `ID xkey kt}]
+.aq.test.register[`test6_3g;"Sort/Joining: table sort pre-uj";{0!(`ID xkey sortAll t1) uj `ID xkey kt}]
+.aq.test.register[`test6_3h;"Sort/Joining: table sort post-uj";{sortAll 0!(`ID xkey t1) uj `ID xkey kt}]
+//Adding order-independent filtering
+OIfilter:{x where 0=x[`vol2] mod 2}
+.aq.test.register[`test6_4a;"Sort/Joining: 3-col sort pre-ej with pre-sort OI filtering on LHS table";{ej[`ID;sortCols2 OIfilter t1;kt]}]
+.aq.test.register[`test6_4b;"Sort/Joining: 3-col sort post-ej with pre-sort OI filtering on LHS table";{sortCols2 ej[`ID;OIfilter t1;kt]}]
+.aq.test.register[`test6_4c;"Sort/Joining: 3-col sort pre-lj with pre-sort OI filtering on LHS table";{(sortCols2 OIfilter t1) lj `ID xkey kt}]
+.aq.test.register[`test6_4d;"Sort/Joining: 3-col sort post-lj with pre-sort OI filtering on LHS table";{sortCols2 (OIfilter t1) lj `ID xkey kt}]
+.aq.test.register[`test6_4e;"Sort/Joining: 3-col sort pre-ij with pre-sort OI filtering on LHS table";{(sortCols2 OIfilter t1) ij `ID xkey kt}]
+.aq.test.register[`test6_4f;"Sort/Joining: 3-col sort post-ij with pre-sort OI filtering on LHS table";{sortCols2 (OIfilter t1) ij `ID xkey kt}]
+.aq.test.register[`test6_4g;"Sort/Joining: 3-col sort pre-uj with pre-sort OI filtering on LHS table";{0!(`ID xkey sortCols2 OIfilter t1) uj `ID xkey kt}]
+.aq.test.register[`test6_4h;"Sort/Joining: 3-col sort post-uj with pre-sort OI filtering on LHS table";{sortCols2 0!(`ID xkey OIfilter t1) uj `ID xkey kt}]
+
+
+///Comparing performance using various approaches to a join-based query
+//Aquery:select ID, max(t.px), first(1, t.vol), last(1, t.vol2), first(1, kt.cid) from t, kt assuming asc date, asc timestamp where t.ID = kt.ID and sums(t.vol) >= 200 and year(t.date) = max(year(t.date)) group by t.ID
+//select maxpx:max px, first vol by ID from 
+
+.aq.test.register[`test7_1;"Sample query 1: naive"; 
+    {select max px, first vol, last vol2, first cid by ID from (`date`timestamp xasc ej[`ID;t1;kt]) where date.year=max date.year,200<=sums vol}
+    ]
+
+.aq.test.register[`test7_2;"Sample query 1: naive join, heuristic rest";
+    {
+      joined:ej[`ID;t1;kt];
+      filtered:select from joined where date.year=max date.year; //filter on OI clause prior to OD clauses encountered
+      six:ix iasc filtered[`date] ix:iasc filtered`timestamp;    //sorting indices
+      sorted:update ID:ID six, px:px six, vol:vol six, vol2:vol2 six, cid:cid six from filtered;     //sorting necessary columns
+      sfiltered:select from sorted where 200<=sums vol;         //filter on OD clauses
+      select max px, first vol, last vol2, first cid by ID from sfiltered
+    }]
+
+.aq.test.register[`test7_3;"Sample query 1: heuristic join, heuristic rest";
+    {
+        six:ix iasc t1[`date] ix:iasc t1`timestamp;    //sorting indices
+        st1:update px:px six, vol:vol six, vol2:vol2 six, ID:ID six, date:date six from t1; //sort necessary columns, we end up having to sort date since we want to sort prior to joining
+        //and we cannot apply any filters until we join, given issue exemplified below
+        jts:ej[`ID;st1;kt];                                                   //join
+        fts:select from jts where date.year = max date.year;                 //filter on OI clause prior to OD clauses encountered
+        fts:select from fts where 200<=sums vol;                            //filter on OD
+        select max px, first vol, last vol2,first cid by ID from fts
+    }]
+
+//TODO: test sorting before and after joining considering the fact that multiple columns
+//need to be sorted, including those previously only involved in OI filters
+scols:{[s;c;t] six:s t; ![t;();0b;cl!(cl:(),c),\:enlist six]}
+needsort:`px`vol; //2 columns always need sorting
+sortspec:{ix iasc x[`date] ix:iasc x`timestamp}
+strat1j:{[c;s;t1;t2] scols[s;needsort;]  ej[c;t1;t2]} //join id, sorting, t1, t2
+strat2j:{[c;s;t1;t2] st:scols[s;cols t1;] t1; ej[c;st;t2]} 
+t1ext:t1,'.aq.util.mktbl[count t1;4];
+.aq.test.register[`test8_1a;"Join/Sort:join then sort";{strat1j[`ID;sortspec;5#'t1ext;kt]}];
+.aq.test.register[`test8_1b;"Join/Sort:sort then join(0 extra)";{strat2j[`ID;sortspec;5#'t1ext;kt]}];
+.aq.test.register[`test8_2a;"Join/Sort:join then sort";{strat1j[`ID;sortspec;6#'t1ext;kt]}];
+.aq.test.register[`test8_2b;"Join/Sort:sort then join(2 extra)";{strat2j[`ID;sortspec;6#'t1ext;kt]}];
+.aq.test.register[`test8_3a;"Join/Sort:join then sort";{strat1j[`ID;sortspec;8#'t1ext;kt]}];
+.aq.test.register[`test8_3b;"Join/Sort:sort then join(4 extra)";{strat2j[`ID;sortspec;8#'t1ext;kt]}];
+.aq.test.register[`test8_4a;"Join/Sort:join then sort";{strat1j[`ID;sortspec;10#'t1ext;kt]}];
+.aq.test.register[`test8_4b;"Join/Sort:sort then join(6 extra)";{strat2j[`ID;sortspec;10#'t1ext;kt]}];
+//Try this with uj
+
+.aq.test.results:.aq.test.runTests 0b
+
+
+
+
+
+
+
+
+
+
+
 
 

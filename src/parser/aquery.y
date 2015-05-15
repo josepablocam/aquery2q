@@ -5,10 +5,10 @@
 #include <ctype.h>
 #include <unistd.h>
 #include "symtable.h"  /* manages the symbol table, to enable meta data lookup */	
-#include "ast.h"       /* builds ast for parser */
-#include "ast_print.h" /* provides dot printing of ast */
-#include "optimizer.h" /* optimizing for query plans */
-#include "codegen.h" /* generates q code */
+#include "../ast/ast.h"       /* builds ast for parser */
+#include "../ast/ast_print.h" /* provides dot printing of ast */
+#include "../optimizer/optimizer.h" /* optimizing for query plans */
+#include "../codegen/codegen.h" /* generates q code */
 	
 #define YYDEBUG 1
 #define ERRORCOLOR  "\x1B[32m"
