@@ -1,0 +1,37 @@
+Possible strategies to handle columng naming
+observations
+- only filters that we know the table for get pushed beneath joins, so those should always be fine!
+
+
+
+
+
+1 - keep original column names, add entries for table.column
+   - issues:
+   		- what about a x (b x c)
+		columns that are in commmon between b and c will have been renamed at tme of b x c joine, however, now columns in common between a and b will appear at time of a x (), and now we won't know if the columns should be prefixed with b.col or c.col (unless we keep track of what columns were lriginally in what tables (or aliases))
+
+
+
+
+2 - rename column names to table_column, add entries for column and table.column
+  - issue:
+  		-really the main issue arises with join using: we want to rename table_column to column, for join, and then we want to add table1_column, table2_column and column to the dictionary
+		
+		potential issue:
+		(a x b using c1) x (c x d using c1) using c2
+		(AB has c1 named c1) (CD has c1 named c1) using c2
+		now when we join, we need to distinguish between AB c1 (a.c1/b.c1)
+		and CD c1 (c.c1/d.c1)
+		
+		rename c1 to a_c1_b_c1 and c_c1_d_c1, andd mappings to that...
+		
+		
+		a_c1 b_c1
+		
+
+			
+			
+			
+- when we join using, that column should be avialable under all names (and without prefixes)
+		
