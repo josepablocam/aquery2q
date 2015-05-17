@@ -1545,8 +1545,7 @@ int is_simple_from(LogicalQueryNode *node)
 void optim_from(LogicalQueryNode **from, LogicalQueryNode **where)
 {
     if(*where == NULL)
-    {
-        check_warn_Join();
+    { //TODO: and if from has cross: check_warn_Join();
         return; //nothing to do
     }
     

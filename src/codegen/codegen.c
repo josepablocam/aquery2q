@@ -29,16 +29,16 @@ int QUERY_CT = 0; //used to name the functions that contain queries
 
 
 //Mapping q and aquery builtins and predicates
-char *aquery_builtins[] = { "abs", "avg", "avgs", "avgs", "count", "deltas", "distinct", "drop", "fill", "first", "last", "max", "maxs", "maxs", 
+char *aquery_builtins[] = { "abs", "avg", "avgs", "avgs", "count", "deltas", "distinct", "drop", "fill", "first", "first", "last", "last", "max", "maxs", "maxs", 
                             "min", "mins", "mins", "mod", "next", "prev", "prd", "prds", "reverse", "sum", "sums", "sums", "sqrt", "stddev", "make_null",
                             "not", "is", "between", "in", "like", "null", "overlaps", "enlist"};
                             
-char *q_builtins[] = { "abs", "avg", "avgs", "mavg", "count", "deltas", "distinct", "_", "^", "first", "last", "max", "maxs", "mmax", 
+char *q_builtins[] = { "abs", "avg", "avgs", "mavg", "count", "deltas", "distinct", "_", "^", "first", "sublist", "last", ".aq.negsublist", "max", "maxs", "mmax", 
                         "min", "mins", "mmin", "mod", "next", "prev", "prd", "prds", "reverse", "sum", "sums", "msum", "sqrt", "dev", "first 0#",
                         "not", "::", "within", "in", "{[x;y] x like string y}", "null", "{[x;y] not (x[1]<y[0])|y[1]<x[0]}", "enlist"};
                         
                         
-char *aquery_overloads[] = { "avgs", "maxs", "mins", "sums" };
+char *aquery_overloads[] = { "avgs", "maxs", "mins", "sums" , "first", "last"};
 int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
 
 
@@ -68,11 +68,12 @@ void init_aq_helpers()
     //rename columns to aquery column name standard
     print_code(".aq.rcols:{[t;p] (`$(p,\"%s\"),/:string cols t) xcol t};\n", AQ_COL_DELIM);
     //collect information about column names for a JOIN USING
-    print_code(".aq.ju:{[cs;j] $[2<>count m:cs where cs like \"*%s\",s:string j;'\"ambig-join:\",s;`rename`remap!(m!2#n;(m,j)!(1+count m)#n:`$\"_\"sv string m)]}\n", AQ_COL_DELIM);
+    print_code(".aq.ju:{[cs;j] $[2<>count m:cs where cs like \"*%s\",s:string j;'\"ambig-join:\",s;`rename`remap!(m!2#n;((%s?m),j)!(1+count m)#n:`$\"_\"sv string m)]}\n", AQ_COL_DELIM, AQ_COL_DICT);
     
     print_code(
         ".aq.scbix:{[v] m[`c] iasc `s`p`g`u?(m:0!meta v)`a}; //sort column names by attribute\n"
         ".aq.swix:{[v;w] w iasc .aq.scbix[v]?w@'where each type[`]=(type each) each w} //sort where clause by attributes of cols used\n"
+        ".aq.negsublist:{[x;y] neg[x] sublist y}"
         "\n\n"
         "// Start of code\n"
     );
@@ -922,15 +923,15 @@ NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs)
     ExprNode *next = NULL;
     NamedExprNode *nexprs = NULL;
     NamedExprNode *named = NULL;
+    NamedExprNode *prev = NULL;
     char *temp_name = NULL;
     int temp_name_len = 0;
     int col_ct = 1;
     
-    
     while(curr != NULL)
     {
-        next = curr->next_sibling;
-        curr->next_sibling = NULL; //remove link
+        next = curr->next_sibling; //store sibling
+        curr->next_sibling = NULL; //remove link to sibling expression (want each group-by expression separately)
         
         temp_name_len = floor(log(col_ct)) + 1 + strlen(AQ_COL_NM);
         temp_name = malloc((temp_name_len + 1) * sizeof(char));
@@ -941,11 +942,13 @@ NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs)
         if(nexprs == NULL)
         {
             
-            nexprs = named;
+            nexprs = named; //this is the start of our named expression list
+            prev = nexprs; //store separately so that we can advance along the list and always add to end
         }
         else
         {
-            nexprs->next_sibling = named;
+            prev->next_sibling = named; //add in the next element
+            prev = named; //make this the end of the list
         }
         
         curr = next;
@@ -1112,16 +1115,20 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
 void cg_LocalQueryNode(LocalQueryNode *local)
 {
     char *t1 = cg_queryPlan(local->query_plan); //run query and store name
+
     print_code(" %s:", local->name);
-    cg_colRename(local->col_names);
-    print_code(" %s;\n", t1);
+    if(local->col_names != NULL)
+    {
+        cg_colRename(local->col_names);  
+    }
+    print_code("%s;\n", t1);
     free(t1);
 }
 
 void cg_colRename(IDListNode *names)
 {
     cg_colList(names);
-    print_code(" xcol");
+    print_code(" xcol ");
 }
 
 

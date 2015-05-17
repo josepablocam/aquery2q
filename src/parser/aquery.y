@@ -207,7 +207,7 @@ int silence_warnings = 0;
  /******* 2.1: Top level program definition *******/
 
 
-program: top_level						    { $$ = $1; ast = $$; cg_AQUERY2Q(ast); }												
+program: top_level						    { $$ = $1; ast = $$; }												
 
 //TODO:delete init_aq_helpers from here, just here for testing
 top_level: global_query top_level           { $$ = make_Top_GlobalQuery($1, $2); }
@@ -304,7 +304,7 @@ groupby_clause: GROUP BY comma_value_expression_list having_clause	{ $$ = pushdo
 	| /* epsilon */													{ $$ = NULL; }
 	;
 	
-having_clause: HAVING and_search_condition 								{ annotate_groupedExpr($2); $$ = make_filterHaving(NULL, $2); }
+having_clause: HAVING and_search_condition 						    { annotate_groupedExpr($2); $$ = make_filterHaving(NULL, $2); }
 	| /* epsilon */													{ $$ =  NULL; }
 	;
 
@@ -686,11 +686,13 @@ void yyerror(const char *s)
 
 void help()
 {
-	printf("Usage: ./a2q [-p][-a <#>] aquery_file\n");
+	printf("Usage: ./a2q [-p|-c][-o output_q_file][-a <#>] aquery_file\n");
 	printf("-p  print dot file AST to stdout\n");
 	printf("-a  optimization level [0-1]\n");
     printf("-s  silence warnings\n");
     printf("-c  generate code\n");
+    printf("-o  code output file\n");
+    printf("-c/-p are mutually exclusive\n");
 }
 
 
@@ -710,7 +712,7 @@ int main(int argc, char *argv[]) {
     DEST_FILE = stdout;
     
 	
-	while((op = getopt(argc, argv, "cspha:")) != -1)
+	while((op = getopt(argc, argv, "cspha:o:")) != -1)
 	{
 		switch(op)
 		{
@@ -743,6 +745,14 @@ int main(int argc, char *argv[]) {
 					optim_level = max_optim_level;
 				}
 				break;
+            case 'o':
+                DEST_FILE = fopen(optarg, "w");
+                if(DEST_FILE == NULL)
+                {
+            		printf("Unable to open %s for writing\n", optarg);
+            		exit(1);
+                }
+                break;
 			case '?':
 				if(optopt == 'a')
 				{
@@ -755,7 +765,13 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	
-	
+    //can not generate code and print out ast...creates mess in stdout and we manipulate tree in code generation...
+    if(print_ast_flag && GEN_CODE)
+    {
+        help();
+        exit(1);
+    }
+    
 	FILE *to_parse;
     
 	if(1 > argc - optind) 
@@ -790,7 +806,17 @@ int main(int argc, char *argv[]) {
 	if(print_ast_flag)
 	{
 		print_ast(ast);
-	}		
+	}
+    else if(GEN_CODE)
+    {
+        cg_AQUERY2Q(ast); 
+        fclose(DEST_FILE);
+    }
+    else
+    {
+        printf("Input file fits Aquery grammar, call with -c[code] or -p[ast viz]\n");
+    }		
 		
+    return 0;
 }
 
