@@ -533,7 +533,7 @@ void cg_ExprNode(ExprNode *expr)
                 break;
             case ALLCOLS_EXPR:
                 //TODO: handling all columns
-                printf("\nERROR:* for now just implemented in queries as standalone, use ROWID\n");
+                printf("\nERROR:* for now just implemented in queries as standalone, use ROWID or alternative column name\n");
                 printf("\tfor things like count(*)\n");
                 exit(1);
                 break;
