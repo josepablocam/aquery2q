@@ -14,6 +14,7 @@ void init_dc();
 void add_to_dt(char *alias, char *tbl);
 void sort_where_clause_by_ix(char *tbl);
 char *gen_table_nm();
+void cols_to_Aquery(char *new, char *t, char *p);
 
 
 
@@ -71,6 +72,12 @@ char *cg_Sort(LogicalQueryNode *node); //naive
 void cg_SimpleOrder(OrderNode *ordnode); //naive
 void cg_SortIx(OrderNode *ordnode); //optimized
 char *cg_SortCols(LogicalQueryNode *node); //optimized
+
+
+/* inner join using */
+void cg_RenameColsJoinUsing(char *t);
+void cg_PrepareJoinUsing(char *t1, char *t2, IDListNode *using);
+char *cg_IJUsing(LogicalQueryNode *ij);
 
 
 /* top level code generation */

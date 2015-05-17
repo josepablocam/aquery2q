@@ -45,12 +45,14 @@ int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
 /* Aquery data structures for code generation */
 char *AQ_COL_NM = "aq_";
 char *AQ_TABLE_NM = ".aq.t";
-char *AQ_COL_DICT = ".aq.cd";
+char *AQ_COL_DICT = ".aq.cd"; //mapping of column names (A(c1) creates entries as c1 -> A__c1, A.c1 -> A__c1)
+char *AQ_COL_LIST = ".aq.pc"; //prior columns involved, used to detect conflicts
+char *AQ_COL_DELIM = "__";
 char *AQ_TABLE_DICT = ".aq.ct";
 char *AQ_SORT_IX = ".aq.six";
 char *AQ_QUERY_NM = ".aq.q";
-char *AQ_CONF_COLS = ".aq.cc"; //conflicting columns
-char *AQ_CURR_TABLE;
+char *AQ_JOIN_USING_INFO = ".aq.jui";
+
 
 
 //generate some aquery functions into the file
@@ -60,33 +62,40 @@ void init_aq_helpers()
     print_code(
         "// ***** Aquery utilities ***** ///\n"
         "//table related\n"
-        //".aq.gencd:{[sn;v] (`$(sn,\".\"),/:string c)!c:cols v }; //generate a col dictionary for potential alias col names in table t\n"
-        ".aq.gencd:{[t;sn] ((`$(sn,\".\"),/:sc),c)!(2*count c)#`$(sn,\"_\"),/:sc:string c:cols t}\n"
-        ".aq.rcols:{[t;p] (`$(p,\"_\"),/:string cols t) xcol t}; //rename cols to prepend table nm/alias\n"
+        );
+    //generate column name dictionary
+    print_code(".aq.gencd:{[t;sn] ((`$(sn,\".\"),/:sc),c)!(2*count c)#`$(sn,\"%s\"),/:sc:string c:cols t}\n", AQ_COL_DELIM);
+    //rename columns to aquery column name standard
+    print_code(".aq.rcols:{[t;p] (`$(p,\"%s\"),/:string cols t) xcol t};\n", AQ_COL_DELIM);
+    //collect information about column names for a JOIN USING
+    print_code(".aq.ju:{[cs;j] $[2<>count m:cs where cs like \"*%s\",s:string j;'\"ambig-join:\",s;`rename`remap!(m!2#n;(m,j)!(1+count m)#n:`$\"_\"sv string m)]}\n", AQ_COL_DELIM);
+    
+    print_code(
         ".aq.scbix:{[v] m[`c] iasc `s`p`g`u?(m:0!meta v)`a}; //sort column names by attribute\n"
         ".aq.swix:{[v;w] w iasc .aq.scbix[v]?w@'where each type[`]=(type each) each w} //sort where clause by attributes of cols used\n"
         "\n\n"
         "// Start of code\n"
-       
     );
 }
 
 //add to the column dictionary
 void add_to_dc(char *tbl, char *alias)
 {
-    print_code(" %s:{(key[x] inter key y) _ x,y}[%s;.aq.gencd[%s;\"%s\"]];\n", AQ_COL_DICT, AQ_COL_DICT, tbl, alias);
+    print_code(" %s:{(key[y] inter %s) _ x,y}[%s;.aq.gencd[%s;\"%s\"]]; //drop ambiguous cols from map\n", AQ_COL_DICT, AQ_COL_LIST, AQ_COL_DICT, tbl, alias);
+    print_code(" %s:%s union cols %s; //store orig col names to avoid collisions\n",AQ_COL_LIST, AQ_COL_LIST, tbl); //store down table column
 }
 
-void rename_cols(char *new, char *t, char *p)
+void cols_to_Aquery(char *new, char *t, char *p)
 {
-    print_code(" %s:.aq.rcols[%s;\"%s\"];\n", new, t, p);
+    print_code(" %s:.aq.rcols[%s;\"%s\"]; //rename cols to t__c format\n", new, t, p);
 }
 
 
 //initialize our column dictionary
 void init_dc()
 {
-    print_code(" %s:(`$())!`$();\n", AQ_COL_DICT);
+    print_code(" %s:(); //init col names list\n", AQ_COL_LIST);
+    print_code(" %s:(`$())!`$(); //init col names map\n", AQ_COL_DICT);
 }
 
 //add entry to table dictionary
@@ -662,7 +671,7 @@ char *cg_SimpleTable(LogicalQueryNode *node)
     //add column mappings
     add_to_dc(orig_name, orig_name);
     //rename cols
-    rename_cols(new_name, orig_name, orig_name);
+    cols_to_Aquery(new_name, orig_name, orig_name);
     return new_name;
 }
 
@@ -684,7 +693,7 @@ char *cg_Alias(LogicalQueryNode *node)
     //add column mappings
     add_to_dc(orig_name, alias_name);
     //rename cols
-    rename_cols(new_name, orig_name, alias_name);
+    cols_to_Aquery(new_name, orig_name, alias_name);
     return new_name;
 }
 
@@ -956,8 +965,6 @@ char *cg_flatten(LogicalQueryNode *node)
 }
 
 
-
-
 char *cg_queryPlan(LogicalQueryNode *node)
 {
     IN_QUERY = 1; //turn on our flag for query 
@@ -966,15 +973,8 @@ char *cg_queryPlan(LogicalQueryNode *node)
 }
 
 
-
-
 /* JOINS */
 //inner join using -> the simpliest
-// void cg_ConflictCols(char *n1, char *n2)
-// {
-//     print_code(" %s:.aq.cc[%s;%s];\n", AQ_CONF_COLS, n1, n2);
-// }
-
 void cg_colList(IDListNode *cols)
 {
     IDListNode *curr = cols;
@@ -986,85 +986,44 @@ void cg_colList(IDListNode *cols)
     }
 }
 
-
-// void cg_RemoveUsingFromConflicts(IDListNode *using_cols)
-// {
-//     //remove the column names we plan to join on
-//     print_code(" %s:%s except ", AQ_CONF_COLS, AQ_CONF_COLS);
-//     cg_colList(using_cols);
-//     print_code(";\n");
-// }
-
-//table name, prefix to append
-// void cg_RenameConflictCols(char *n1, char *p1)
-// {
-//     //rename conflcits in table
-//     print_code(" %s:.aq.rcols[%s;%s;%s];\n", n1, n1, p1, AQ_CONF_COLS);
-//     //remap column names to new names in column dictionary
-//     print_code(" %s,:.aq.rcmap[\"%s\";%s];\n", AQ_COL_DICT, n1, AQ_CONF_COLS);
-// }
-    
- 
-//manage renaming of columns, adding new column names to dictionaries etc
-// void cg_PrepareJoinUsing(char *n1, char *n2, char *p1, char *p2, IDListNode *using_cols)
-// {
-//     cg_ConflictCols(n1, n2); //set variable with conflicting column names
-//     cg_RemoveUsingFromConflicts(using_cols);
-//     cg_RenameConflictCols(n1, p1);
-//     cg_RenameConflictCols(n2, p2);
-// }
-
-
-//TODO: this means we need to be able to alias older joins...which we cannot do currently
-// char *retrieve_Name(LogicalQueryNode *node)
-// {
-//     if(node != NULL)
-//     {
-//         print_code("'\"error needs alias\"");
-//         return NULL;
-//     }
-//     else if(node->node_type == SIMPLE_TABLE)
-//     {
-//         return node->params.name;
-//     }
-//     else if(node->node_type == ALIAS)
-//     {
-//         return node->params.name;
-//     }
-//     else
-//     {
-//         return retrieve_Name(node->arg);
-//     }
-// }
-//
-// char *cg_IJUsing(LogicalQueryNode *ij)
-// {
-//     char *t1 = cg_LogicalQueryNode(ij->arg);
-//     char *p1 = retrieve_Name(ij->arg);
-//     char *t2 = cg_LogicalQueryNode(ij->next_arg);
-//     char *p2 = retrieve_Name(ij->next_arg);
-//     cg_PrepareJoinUsing(t1, t2, p1, p2, ij->params.cols);
-//     char *joined = gen_table_nm();
-//
-//     //inner joing semantics from sql correspond to an equijoin (ej) in q
-//     print_code(" %s:ej[", joined);
-//     cg_colList(ij->params.cols);
-//     print_code(";%s;%s];\n", t1, t2);
-//
-//     free(t1);
-//     free(t2);
-//     return joined;
-// }
-
-void rename_join_cols(char *tbl)
+void cg_PrepareJoinUsing(char *t1, char *t2, IDListNode *using)
 {
+    //collect information on columns etc
+    print_code(" %s:{c!raze each x c:cols x} .aq.ju[cols[%s],cols %s;] each (),", AQ_JOIN_USING_INFO, t1, t2);
+    cg_colList(using);
+    print_code(";\n");
     
+    //update column dictionary
+    print_code(" %s,:%s`remap;\n", AQ_COL_DICT, AQ_JOIN_USING_INFO);
 }
+
+void cg_RenameColsJoinUsing(char *t)
+{
+    print_code(" {(c^%s[`rename] c:cols x) xcol x}%s", AQ_JOIN_USING_INFO, t);
+}
+
+
 char *cg_IJUsing(LogicalQueryNode *ij)
 {
-    
-}
+    char *t1 = cg_LogicalQueryNode(ij->arg);
+    char *t2 = cg_LogicalQueryNode(ij->next_arg);
+    IDListNode *using = ij->params.cols;
+    cg_PrepareJoinUsing(t1, t2, using);
+    char *joined_nm = gen_table_nm();
 
+    //inner joing semantics from sql correspond to an equijoin (ej) in q
+    print_code(" %s:ej[%s ", joined_nm, AQ_COL_DICT);
+    cg_colList(using);
+    print_code(";");
+    cg_RenameColsJoinUsing(t1);
+    print_code(";");
+    cg_RenameColsJoinUsing(t2);
+    print_code("]; //inner join using\n");
+  
+    free(t1);
+    free(t2);
+    return joined_nm;
+}
 
 
 char *cg_LogicalQueryNode(LogicalQueryNode *node)
@@ -1101,7 +1060,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
                 print_code("'\"nyi full outer join on\"\n");          
                 break;
         	case INNER_JOIN_USING:
-                print_code("'\"nyi inner join using\"\n");        
+                result_table = cg_IJUsing(node);      
                 break;
         	case FULL_OUTER_JOIN_USING:
                 print_code("'\"nyi full outer join using\"\n");    
