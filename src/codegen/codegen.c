@@ -134,7 +134,7 @@ void poss_add_each(ExprNode *expr)
 //caller has responsibility of freeing when done with name...
 char *gen_table_nm()
 {
-    int num_ints = floor(log(TABLE_CT)) + 1;
+    int num_ints = ((int) log((double) TABLE_CT)) + 1;
     char *nm = malloc((strlen(AQ_TABLE_NM) + num_ints + 1) * sizeof(char));
     sprintf(nm, "%s%d", AQ_TABLE_NM, TABLE_CT);
     TABLE_CT++;
@@ -933,7 +933,7 @@ NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs)
         next = curr->next_sibling; //store sibling
         curr->next_sibling = NULL; //remove link to sibling expression (want each group-by expression separately)
         
-        temp_name_len = floor(log(col_ct)) + 1 + strlen(AQ_COL_NM);
+        temp_name_len = ((int) log((double) col_ct)) + 1 + strlen(AQ_COL_NM);
         temp_name = malloc((temp_name_len + 1) * sizeof(char));
         sprintf(temp_name, "%s%d", AQ_COL_NM, col_ct);
         
@@ -992,7 +992,7 @@ void cg_colList(IDListNode *cols)
 void cg_PrepareJoinUsing(char *t1, char *t2, IDListNode *using)
 {
     //collect information on columns etc
-    print_code(" %s:{c!raze each x c:cols x} .aq.ju[cols[%s],cols %s;] each (),", AQ_JOIN_USING_INFO, t1, t2);
+    print_code(" %s:raze each flip .aq.ju[cols[%s],cols %s;] each (),", AQ_JOIN_USING_INFO, t1, t2);
     cg_colList(using);
     print_code(";\n");
     
