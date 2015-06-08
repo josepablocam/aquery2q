@@ -13,6 +13,9 @@
 #define SAFE_ORDER_DEP(x) ((x) != NULL && (x)->order_dep)
 #define SAFE_SUB_ORDER_DEP(x) ((x) != NULL && (x)->sub_order_dep)
 #define SAFE_USES_AGG(x) ((x) != NULL && (x)->uses_agg)
+#define SAFE_IS_ODX(x) ((x) == NULL || (x)->is_odx)
+
+
 
 void spread_order(ExprNode *parent, ExprNode *child)
 {
@@ -40,6 +43,7 @@ ExprNode *make_EmptyExprNode(ExprNodeType type)
     node->sub_order_dep = 0;
     node->uses_agg = 0;
     node->is_grouped = 0;
+    node->is_odx = 0;
     node->tables_involved = NULL;
 	return node;
 }
@@ -57,6 +61,7 @@ ExprNode *make_int(int i)
 	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = INT_TYPE;
 	node->data.ival = i;
+    node->is_odx = 1;
 	return node;
 }
 
@@ -66,6 +71,7 @@ ExprNode *make_float(float f)
 	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = FLOAT_TYPE;
 	node->data.fval = f;
+    node->is_odx = 1;
 	return node;
 }
 
@@ -75,6 +81,7 @@ ExprNode *make_date(char *date)
 	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = DATE_TYPE;
 	node->data.str = date; //any memory necessary was already allocated by flex
+    node->is_odx = 1;
 	return node;
 }
 
@@ -84,6 +91,7 @@ ExprNode *make_string(char *str)
 	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = STRING_TYPE;
 	node->data.str = str; //any memory necessary was already allocated by flex
+    node->is_odx = 1;
 	return node;
 }
 
@@ -93,6 +101,7 @@ ExprNode *make_hex(char *hex)
 	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = HEX_TYPE;
 	node->data.str = hex; //any memory necessary was already allocated by flex
+    node->is_odx = 1;
 	return node;
 }
 
@@ -102,6 +111,7 @@ ExprNode *make_bool(int boolean)
 	ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
 	node->data_type = BOOLEAN_TYPE;
 	node->data.ival = boolean; 
+    node->is_odx = 1;
 	return node;
 }
 
@@ -112,6 +122,7 @@ ExprNode *make_id(Symtable *symtable, char *id)
 	Symentry *info = lookup_sym(symtable, id);
 	node->data_type = UNKNOWN_TYPE; //TODO: fix this: (info != NULL) ? info->type : 
 	node->data.str = id;
+    node->is_odx = info != NULL && info->is_odx; //need to have info to state this
 	return node;
 }
 
@@ -158,6 +169,10 @@ ExprNode *make_caseNode(ExprNode *case_clause, ExprNode *when_clauses, ExprNode 
     spread_order(new_node, when_clauses);
     spread_order(new_node, else_clause);
     
+    new_node->is_odx = SAFE_IS_ODX(case_clause);
+    new_node->is_odx &= SAFE_IS_ODX(when_clauses);
+    new_node->is_odx &= SAFE_IS_ODX(else_clause);
+    
     new_node->uses_agg = SAFE_USES_AGG(case_clause) || SAFE_USES_AGG(when_clauses) || SAFE_USES_AGG(else_clause);
 
 	return new_node;
@@ -171,6 +186,7 @@ ExprNode *make_caseClauseNode(ExprNode *exp)
 	new_node->first_child = exp;
     spread_order(new_node, exp);
     new_node->uses_agg = SAFE_USES_AGG(exp);
+    new_node->is_odx = SAFE_IS_ODX(exp);
 	return new_node;
 }
 
@@ -183,6 +199,7 @@ ExprNode *make_caseWhenNode(ExprNode *when, ExprNode *conseq)
     spread_order(new_node, when);
     spread_order(new_node, conseq);
     new_node->uses_agg = SAFE_USES_AGG(when) || SAFE_USES_AGG(conseq);
+    new_node->is_odx = SAFE_IS_ODX(when) && SAFE_IS_ODX(conseq);
     return new_node;
 }
 
@@ -195,6 +212,7 @@ ExprNode *make_whenClausesNode(ExprNode *h, ExprNode *t)
     spread_order(new_node, h);
     spread_order(new_node, t);
     new_node->uses_agg = SAFE_USES_AGG(h) || SAFE_USES_AGG(t);
+    new_node->is_odx = SAFE_IS_ODX(h) && SAFE_IS_ODX(t);
 	return new_node;
 }
 
@@ -205,6 +223,7 @@ ExprNode *make_elseClauseNode(ExprNode *exp)
 	new_node->first_child = exp;
 	spread_order(new_node, exp);
     new_node->uses_agg = SAFE_USES_AGG(exp);
+    new_node->is_odx = SAFE_IS_ODX(exp);
 	return new_node;
 }
 
@@ -219,6 +238,7 @@ ExprNode *make_indexNode(ExprNode *src, ExprNode *ix)
 	src->next_sibling = ix;
     spread_order(new_node, src);
     new_node->uses_agg = SAFE_USES_AGG(src);
+    new_node->is_odx = SAFE_IS_ODX(src);
 	return new_node;
 }
 
@@ -232,7 +252,8 @@ ExprNode *make_callNode(ExprNode *fun, ExprNode *args)
     spread_order(new_node, args);
     new_node->order_dep = fun->order_dep;
     new_node->sub_order_dep |= new_node->order_dep;
-    new_node->uses_agg = SAFE_USES_AGG(fun) || SAFE_USES_AGG(args); 
+    new_node->uses_agg = SAFE_USES_AGG(fun) || SAFE_USES_AGG(args);
+    new_node->is_odx = SAFE_IS_ODX(fun);
 	return new_node;	
 }
 
@@ -245,6 +266,7 @@ ExprNode *make_builtInFunNode(Symtable *symtable, char *nm)
 	new_node->data.str = nm;
 	new_node->order_dep = meta_info->order_dep;
     new_node->uses_agg = 1; //all built-ins are aggregates
+    new_node->is_odx = meta_info->is_odx;
 	return new_node;
 }
 
@@ -264,6 +286,7 @@ ExprNode *make_udfNode(Symtable *symtable, char *nm)
     //for safety, to make sure optimizer doesn't change query semantics
     new_node->order_dep = meta_info == NULL || SAFE_ORDER_DEP(meta_info);
     new_node->uses_agg = meta_info == NULL || SAFE_USES_AGG(meta_info);
+    new_node->is_odx = meta_info != NULL && meta_info->is_odx;
 	return new_node;
 }
 
@@ -297,6 +320,7 @@ ExprNode *make_neg(ExprNode *expr)
 	new_node->first_child = expr;
     spread_order(new_node, expr);
     new_node->uses_agg = SAFE_USES_AGG(expr);
+    new_node->is_odx = SAFE_IS_ODX(expr);
 	return new_node;
 }
 
@@ -315,6 +339,7 @@ ExprNode *make_compNode(ExprNodeType op, ExprNode *x, ExprNode *y)
     spread_order(new_node, x);
     spread_order(new_node, y);
     new_node->uses_agg = x->uses_agg || y->uses_agg;
+    new_node->is_odx = SAFE_IS_ODX(x) && SAFE_IS_ODX(y);
 	return new_node;	
 }
 
@@ -329,6 +354,7 @@ ExprNode *make_logicOpNode(ExprNodeType op, ExprNode *x, ExprNode *y)
     spread_order(new_node, x);
     spread_order(new_node, y);
     new_node->uses_agg = x->uses_agg || y->uses_agg;
+    new_node->is_odx = SAFE_IS_ODX(x) && SAFE_IS_ODX(y);
 	return new_node;
 }
 
@@ -349,6 +375,7 @@ ExprNode *make_arithNode(ExprNodeType op, ExprNode *x, ExprNode *y)
     spread_order(new_node, x);
     spread_order(new_node, y);
     new_node->uses_agg = x->uses_agg || y->uses_agg;
+    new_node->is_odx = SAFE_IS_ODX(x) && SAFE_IS_ODX(y);
 	return new_node;
 }
 
@@ -360,12 +387,14 @@ ExprNode *make_exprListNode(ExprNode *data)
 	AST_PRINT_DEBUG("making expression list");
 	ExprNode *list = make_EmptyExprNode(LIST_EXPR);
 	list->first_child = data;
+    list->is_odx = 1;
     
     ExprNode *child;
     
     for(child = data; child != NULL; child = child->next_sibling)
     {
         spread_order(list, child);
+        list->is_odx &= SAFE_IS_ODX(child);
     }
     
 	return list;
@@ -479,6 +508,7 @@ UDFBodyNode *make_UDFEmptyBodyNode(UDFBodyNodeType type)
 	new_node->next_sibling = NULL;
     new_node->order_dep = 0;
     new_node->uses_agg = 0;
+    new_node->is_odx = 0;
 
 	return new_node;
 }
@@ -490,6 +520,7 @@ UDFBodyNode *make_UDFExpr(ExprNode *expr)
 	body_elem->elem.expr = expr;
     body_elem->order_dep = SAFE_ORDER_DEP(expr) || SAFE_SUB_ORDER_DEP(expr);
     body_elem->uses_agg = SAFE_USES_AGG(expr);
+    body_elem->is_odx = SAFE_IS_ODX(expr);
 	return body_elem;
 }
 
@@ -499,6 +530,7 @@ UDFBodyNode *make_UDFVardef(NamedExprNode *vardef)
 	body_elem->elem.vardef = vardef;
     body_elem->order_dep = SAFE_ORDER_DEP(vardef->expr)|| SAFE_SUB_ORDER_DEP(vardef->expr);
 	body_elem->uses_agg = SAFE_USES_AGG(vardef->expr);
+    body_elem->is_odx = SAFE_IS_ODX(vardef->expr);
     return body_elem;
 }
 
@@ -508,6 +540,7 @@ UDFBodyNode *make_UDFQuery(FullQueryNode *query)
 	body_elem->elem.query = query;
     body_elem->order_dep = 1; //TODO: decide if we want to even keep queries around here
     body_elem->uses_agg = 1;
+    body_elem->is_odx = 0;
 	return body_elem;
 }
 
@@ -520,17 +553,25 @@ UDFDefNode *make_UDFDefNode(char *name, IDListNode *args, UDFBodyNode *body)
 	new_fun->body = body;
     new_fun->order_dep = 0; //set below based on body
     new_fun->uses_agg = 0; //set below based on body
+    new_fun->is_odx = 1; //is order dependence annihilating until proven otherwise
     
     //Need to traverse entire function definition to glean this information
     UDFBodyNode *statement;
-    for(statement = body; statement != NULL; statement = statement->next_sibling)
+    UDFBodyNode *prev_statement = NULL;
+    
+    for(statement = body; 
+        statement != NULL; 
+        prev_statement = statement, statement = statement->next_sibling)
     {
         new_fun->order_dep |= SAFE_ORDER_DEP(statement);
-        new_fun->uses_agg |= SAFE_USES_AGG(body); 
+        new_fun->uses_agg |= SAFE_USES_AGG(statement); 
+        new_fun->is_odx  &= SAFE_IS_ODX(statement);
     }
     
 	return new_fun;
 }
+
+
 
 
  /******* 2.3.1: search condition *******/

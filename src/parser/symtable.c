@@ -31,6 +31,7 @@ Symentry *make_symentry(char *name, DataType type, int order_d, int agg)
 	newentry->type = type;
 	newentry->order_dep = order_d;
 	newentry->uses_agg = agg; //uses an aggregate
+    newentry->is_odx = 0; //is order dependence annihilating
 	newentry->next = NULL;
     newentry->order_spec = NULL;
 	
@@ -273,15 +274,25 @@ Symtable *init_symtable()
 		1, 1, 1, 0, 1, 0, 1, 1,
 		1, 1, 0, 1, 1, 0, 1, 0,
 		0, 0
-		};	
+		};
+        
+    const int is_odx[] = {
+		0, 1, 0, 1, 0, 0, 0,
+		0, 0, 0, 1, 0, 1, 0, 0,
+		0, 0, 1, 0, 0, 1, 0, 1,
+		1, 1
+		};
 	
 	Symtable *env = make_symtable();
+    Symentry *info;
 	int i, len = sizeof(built_in_names) /  sizeof(char *);
 	
 	//populate with information about built-ins properties, note that we duplicate the string, as we need these to be persistent
 	for(i = 0 ; i < len; i++)
 	{
 		put_sym(env, strdup(built_in_names[i]), FUNCTION_TYPE, built_in_order_dep[i], 1);
+        info = lookup_sym(env, (char *)built_in_names[i]);
+        info->is_odx = is_odx[i];
 	}
 	
 	return env;
