@@ -11,6 +11,7 @@ typedef struct symentry {
 	struct symentry* next; //linking
 	int order_dep; //order dependent
 	int uses_agg; //uses an aggregate
+    int is_odx; //is an order dependence annihilating elem
     struct OrderNode *order_spec; //any order information
 } Symentry;
 

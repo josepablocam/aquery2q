@@ -55,6 +55,7 @@ typedef struct ExprNode {
     int sub_order_dep; //does it have an order dependency somewhere in subtree?
     int uses_agg; //need to know if expression use aggregates for optimizer
     int is_grouped; //requires that we use adverbs in code generation
+    int is_odx; //need to know if an expression consists solely of order dependence annihilating expressions
     IDListNode *tables_involved; //names of tables involved in an expression (NULL, and only assigned if needed in optimizer)
 	union {
 		int ival;
@@ -230,6 +231,7 @@ typedef struct UDFBodyNode {
 	struct UDFBodyNode *next_sibling;
     int order_dep;
     int uses_agg;
+    int is_odx;
 } UDFBodyNode;
 
 typedef struct UDFDefNode {
@@ -238,6 +240,7 @@ typedef struct UDFDefNode {
 	UDFBodyNode *body;
     int order_dep;
     int uses_agg;
+    int is_odx;
 } UDFDefNode;
 
 

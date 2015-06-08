@@ -493,7 +493,13 @@ user_function_definition: FUNCTION ID         { put_sym(env, $2, FUNCTION_TYPE, 
 					     ')' 
 						'{' 
 						    function_body 	 
-						'}'                   { env = pop_env(env); $$ =  make_UDFDefNode($2, $5, $8); entry = lookup_sym(env, $2); entry->order_dep = $$->order_dep; entry->uses_agg = $$->uses_agg; } /* update order dependence infor for function */ 
+						'}'                   { $$ =  make_UDFDefNode($2, $5, $8); 
+                                                entry = lookup_sym(env, $2); 
+                                                entry->order_dep = $$->order_dep; 
+                                                entry->uses_agg = $$->uses_agg; 
+                                                entry->is_odx = $$->is_odx;
+                                                env = pop_env(env);
+                                                } /* update order dependence infor for function */ 
 						; 
 
 def_arg_list: ID  def_arg_list_tail		{ put_sym(env, $1, UNKNOWN_TYPE, 0, 0); $$ = make_IDListNode($1, $2); }			 
@@ -518,7 +524,11 @@ function_body_elem: value_expression		{$$ = make_UDFExpr($1);   }
 	| full_query							{$$ = make_UDFQuery($1);  }
 	;
 	
-function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE, 0, 0);    $$ = make_NamedExprNode($1, $3); } ;
+function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UNKNOWN_TYPE, 0, 0);
+                                                            entry = lookup_sym(env, $1); 
+                                                            entry->is_odx = $3->is_odx;
+                                                            $$ = make_NamedExprNode($1, $3);  
+                                                             } ;
 
 
 /******* 2.8: value expressions *******/

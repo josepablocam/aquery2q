@@ -290,6 +290,7 @@ ExprNode *deepcopy_ExprNode(ExprNode *node)
         copy->order_dep = node->order_dep;
         copy->sub_order_dep = node->sub_order_dep;
         copy->uses_agg = node->uses_agg;
+        copy->is_odx = node->is_odx;
         copy->tables_involved = deepcopy_IDListNode(node->tables_involved);
         
         //Copy any data necessary, note strings need to be copied deeply too
@@ -576,12 +577,12 @@ IDListNode *add_interactionsToSort(GenList *interact, IDListNode *need_sort)
 }
 
 //Collect the columns that need to be sorted given dependencies in an expression AST
-IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start)
+IDListNode *collect_sortCols(ExprNode *od_expr, int in_proj)
 {
     IDListNode *need_sort = NULL;
     GenList *potential = NULL;
     
-    IDListNode *top = collect_sortCols0(od_expr, add_from_start, &need_sort, &potential);
+    IDListNode *top = collect_sortCols0(od_expr, in_proj, &need_sort, &potential, in_proj);
     potential = list_prepend(potential, top);
     
     OPTIM_PRINT_DEBUG("returned from collect_sortCols0");
@@ -591,7 +592,7 @@ IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start)
 
 
 //Collect the columns that need to be sorted given dependencies in a named expression AST
-IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
+IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs)
 {
     IDListNode *need_sort = NULL;
     GenList *potential = NULL;
@@ -604,7 +605,8 @@ IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start)
     { 
         OPTIM_PRINT_DEBUG("running over named expression");
         //print_expr(curr_nexpr->expr, x, &x);
-        top = collect_sortCols0(curr_nexpr->expr, add_from_start, &need_sort, &potential);
+        //add from start and require order annihilating not just order independent to avoid adding to list
+        top = collect_sortCols0(curr_nexpr->expr, 1, &need_sort, &potential, 1); 
         potential = list_prepend(potential, top);
         
         curr_nexpr = curr_nexpr->next_sibling;
@@ -629,12 +631,12 @@ char *qualify_name(char *table_name, char *col_name)
 
 int is_name(ExprNodeType type)
 {
-  return type == ID_EXPR || type == ALLCOLS_EXPR || type == COLDOTACCESS_EXPR;
+  return type == ID_EXPR || type == ALLCOLS_EXPR || type == COLDOTACCESS_EXPR || type == ROWID_EXPR;
 }
 
 
 
-IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort_ptr, GenList **potential_ptr)
+IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort_ptr, GenList **potential_ptr, int in_proj)
 {
     IDListNode *child = NULL;
     IDListNode *sibling = NULL;
@@ -657,45 +659,50 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
         {
             OPTIM_PRINT_DEBUG("adding id to sort list");
             *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(name, NULL));//union with list of def sorted
-            collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //explore sibling
+            collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr, in_proj); //explore sibling
             return NULL; //already appending to need_sort here, don't need to add to potential, so just return a null
         }
         else
         {
             OPTIM_PRINT_DEBUG("sending id back up");
             child = make_IDListNode(name, NULL); //return id to add to potential
-            sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+            sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr, in_proj);
             return unionIDList(child, sibling);
         }       
     }
     else if(node->node_type == CALL_EXPR)
     {
         //whether or not we continue to add to sort list can change based on operator properties
-        new_add_flag = node->order_dep; 
-
+        //whether we want to add things based solely on order-dependence or on whether it 
+        //eliminates the need for order is based on whether or not we are in a project
+        //e.g. f(x)={x} select f(c1) from t assuming asc c10 where f(c1) > 10
+        //we don't want to sort c1 prior to the selection, f(c1) is indeed order independent
+        //however, we do want to sort it for the projection, as the result requires that we order c1
+        new_add_flag = node->order_dep || ((in_proj && node->is_odx) ? node->order_dep : 1); 
+        
         if(!new_add_flag)
-        { //we have reached an order-independent function call, like max/min
+        { //we have reached an order-annihilating function call, like max/min
             OPTIM_PRINT_DEBUG("found order annihilating call, exploring child");
-            child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr);
+            child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr, in_proj);
             OPTIM_PRINT_DEBUG("appending potential list at order annihilating call");
             *potential_ptr = list_prepend(*potential_ptr, child); //we stop "bubbling up" interactions here
             OPTIM_PRINT_DEBUG("exploring call's sibling");
-            return collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //send back interactions in sibling node, not your own anymore
+            return collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr, in_proj); //send back interactions in sibling node, not your own anymore
         }
         else
         {
             OPTIM_PRINT_DEBUG("found order dependent call, exploring args");
-            child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr); //no need to add to potential, adding to need_sort
+            child = collect_sortCols0(node->first_child, new_add_flag, need_sort_ptr, potential_ptr, in_proj); //no need to add to potential, adding to need_sort
             OPTIM_PRINT_DEBUG("done exploring order dependent call, returning list of ");
-            return collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //return interactions in sibling node
+            return collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr, in_proj); //return interactions in sibling node
         }
     }
     else
     {
         OPTIM_PRINT_DEBUG("found random node, exploring child");
-        child = collect_sortCols0(node->first_child, add_flag | node->order_dep, need_sort_ptr, potential_ptr);
+        child = collect_sortCols0(node->first_child, add_flag | node->order_dep, need_sort_ptr, potential_ptr, in_proj);
         OPTIM_PRINT_DEBUG("exploring random node's sibling");
-        sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
+        sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr, in_proj);
         return unionIDList(child, sibling);
     }
     
@@ -1702,7 +1709,7 @@ LogicalQueryNode *optim_sort_group_oi(LogicalQueryNode *proj, LogicalQueryNode *
     LogicalQueryNode *sort = NULL;
     
     //assume need sorting in proj clause unless order annihilating operators applied
-    IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
+    IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs);
     
     if(proj_order_cols == NULL)
     { //no order dependencies in projection
@@ -1726,7 +1733,7 @@ LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj, LogicalQueryNode *from
 {
     OPTIM_PRINT_DEBUG("optimizing projection");
     //assume need sorting in proj clause unless order annihilating operators applied
-    IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs, 1);
+    IDListNode *proj_order_cols = collect_sortColsNamedExpr(proj->params.namedexprs);
     LogicalQueryNode *sort = NULL;
      
      if(in_IDList("*", proj_order_cols))
@@ -1939,7 +1946,7 @@ int main()
     NamedExprNode *n2 = make_NamedExprNode(strdup("calc_2"), add_em);
     n1->next_sibling = n2;
     printf("looking for order dependencies in named expressions\n");
-    IDListNode *found =  collect_sortColsNamedExpr(n1, 0);
+    IDListNode *found =  collect_sortColsNamedExpr(n1);
     print_id_list(found, x, &x);
     
     //Testing deep copy of expressions

@@ -69,8 +69,8 @@ int is_setEqual_IDLists(IDListNode *l1, IDListNode *l2);
 
 IDListNode *add_interactionsToSort(GenList *interact, IDListNode *need_sort);
 IDListNode *collect_sortCols(ExprNode *od_expr, int add_from_start);
-IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs, int add_from_start);
-IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort, GenList **potential);
+IDListNode *collect_sortColsNamedExpr(NamedExprNode *nexprs);
+IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort, GenList **potential, int in_proj);
 
 ExprNode *append_toExpr(ExprNode *list, ExprNode *add);
 
