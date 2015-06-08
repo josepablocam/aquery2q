@@ -6,3 +6,4 @@ echo "generating unoptimized code"
 ../a2q -c progress_report_examples.a > generated.q
 echo "generating optimized code"
 ../a2q -c -a 1 progress_report_examples.a > generated_optimized.q
+q progress_report_examples.q

@@ -93,7 +93,7 @@ runtest each string tests
 show "****Running optimized aquery compilation"
 verify each string tests
 runtest each string tests
-
+exit 0
 
 
 
