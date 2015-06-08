@@ -626,6 +626,14 @@ char *qualify_name(char *table_name, char *col_name)
     return qualified_name;
 }
 
+
+int is_name(ExprNodeType type)
+{
+  return type == ID_EXPR || type == ALLCOLS_EXPR || type == COLDOTACCESS_EXPR;
+}
+
+
+
 IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_sort_ptr, GenList **potential_ptr)
 {
     IDListNode *child = NULL;
@@ -636,44 +644,29 @@ IDListNode *collect_sortCols0(ExprNode *node, int add_flag, IDListNode **need_so
     { //nothing to do if we're at the end
         return NULL;   
     }
-    else if(node->node_type == ID_EXPR || node->node_type == ALLCOLS_EXPR)
+    else if(is_name(node->node_type))
     {
         OPTIM_PRINT_DEBUG("found id");
+        
+        //what name should we be adding to our lists?
+        char *name = (node->node_type == COLDOTACCESS_EXPR) ? 
+            qualify_name(node->first_child->data.str, node->first_child->next_sibling->data.str)
+            : strdup(node->data.str);
         
         if(add_flag)
         {
             OPTIM_PRINT_DEBUG("adding id to sort list");
-            *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(strdup(node->data.str), NULL));//union with list of def sorted
+            *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(name, NULL));//union with list of def sorted
             collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //explore sibling
             return NULL; //already appending to need_sort here, don't need to add to potential, so just return a null
         }
         else
         {
             OPTIM_PRINT_DEBUG("sending id back up");
-            child = make_IDListNode(strdup(node->data.str), NULL); //return id to add to potential
+            child = make_IDListNode(name, NULL); //return id to add to potential
             sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
             return unionIDList(child, sibling);
         }       
-    }
-    else if(node->node_type == COLDOTACCESS_EXPR)
-    { //TODO: figure out how to handle dot column accesses correctly
-       OPTIM_PRINT_DEBUG("found col dot access, accessing dest child");
-       char *qualified_name = qualify_name(node->first_child->data.str, node->first_child->next_sibling->data.str);
-       
-       if(add_flag)
-       {
-           OPTIM_PRINT_DEBUG("adding id to sort list");
-           *need_sort_ptr = unionIDList(*need_sort_ptr, make_IDListNode(qualified_name, NULL));//union with list of def sorted
-           collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr); //explore sibling
-           return NULL; //already appending to need_sort here, don't need to add to potential, so just return a null
-       }
-       else
-       {
-           OPTIM_PRINT_DEBUG("sending id back up");
-           child = make_IDListNode(qualified_name, NULL); //return id to add to potential
-           sibling = collect_sortCols0(node->next_sibling, add_flag, need_sort_ptr, potential_ptr);
-           return unionIDList(child, sibling);
-       }
     }
     else if(node->node_type == CALL_EXPR)
     {
