@@ -1029,6 +1029,18 @@ char *cg_IJUsing(LogicalQueryNode *ij)
 }
 
 
+char *cg_CartesianProd(LogicalQueryNode *cart)
+{
+    char *t1 = cg_LogicalQueryNode(cart->arg);
+    char *t2 = cg_LogicalQueryNode(cart->next_arg);
+    char *crossed_name = gen_table_nm();
+    print_code(" %s:%s cross %s;\n", crossed_name, t1, t2);
+    free(t1);
+    free(t2);
+    return crossed_name;
+}
+
+
 char *cg_LogicalQueryNode(LogicalQueryNode *node)
 {
     
@@ -1054,7 +1066,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
                 result_table = cg_FilterWhere(node);        
                 break;
         	case CARTESIAN_PROD:
-                print_code("'\"nyi cartesian prod\"\n");       
+                result_table = cg_CartesianProd(node);     
                 break;
         	case INNER_JOIN_ON:
                 print_code("'\"nyi inner join on\"\n");
