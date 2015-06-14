@@ -50,6 +50,7 @@ void cg_LocalVar(NamedExprNode *vardef);
 char *cg_SimpleTable(LogicalQueryNode *node);
 char *cg_Alias(LogicalQueryNode *a);
 char *cg_FilterWhere(LogicalQueryNode *where);
+void cg_FilterWhere0(ExprNode *selection, char *from);
 char *gc_ProjectSelect(LogicalQueryNode *proj);
 void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr); //dictionary
 char *cg_groupBy(LogicalQueryNode *node);
@@ -78,6 +79,15 @@ char *cg_SortCols(LogicalQueryNode *node); //optimized
 void cg_RenameColsJoinUsing(char *t);
 void cg_PrepareJoinUsing(char *t1, char *t2, IDListNode *using);
 char *cg_IJUsing(LogicalQueryNode *ij);
+void cg_IJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2);
+
+/* pushing filters under joins: poss push filter */
+char *cg_PossPushFilter(LogicalQueryNode *poss_push);
+int pushToLeftPossPush(LogicalQueryNode *poss_push);
+typedef void (*cg_join_push)(LogicalQueryNode *join, char *joined, char *t1, char *t2);
+cg_join_push pickJoinTypePossPush(LogicalQueryNode *join);
+void cg_AttributeCheckPossPush(IDListNode *cols, char *table);
+IDListNode *colsCheckPossPush(LogicalQueryNode *join);
 
 
 /* top level code generation */

@@ -110,6 +110,7 @@ GenList *split_from(LogicalQueryNode *node);
 void partExpr_OnAgg(ExprNode *expr, ExprNode **no_agg, ExprNode **agg);
 char *get_table_src(ExprNode *expr);
 IDListNode *collect_TablesExpr(ExprNode *exp);
+IDListNode *collect_TablesFrom(LogicalQueryNode *ts);
 int is_JoinClause(ExprNode *expr);
 void groupExpr_OnJoin(ExprNode *expr, ExprNode **join_filters, ExprNode **other_filters);
 int Expr_has_subset_tables(ExprNode *expr, void *names);

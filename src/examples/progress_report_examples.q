@@ -8,7 +8,8 @@
 \S 10
 //Creating necessary tables
 n:`int$1e6;
-Ticks:([]ID:n?`S`ACME`OTHER`CORP; date:n?.z.D; timestamp:n?.z.P; price:n?100.)
+Ticks:([]ID:n?`S`ACME`OTHER`CORP; date:n?.z.D; timestamp:n?.z.P; price:n?100.; ixCol:til n);
+TicksWithAttr:update ID:`g#asc ID from Ticks;
 Portfolio:([]ID:`S`ACME`OTHER`CORP; position:1e4+4?1e6)
 Packets:select from ([]src:n?100; dest:n?100; length:n?256; timestamp:.z.P+10*n?`int$1e9) where src<>dest
 Sales:update sales:count[i]?1e6 from ([]month:`month${neg[x]?x}1+`long$`month$.z.D)
@@ -56,6 +57,8 @@ q7:{select 10 mavg ClosePrice by ID from `date xasc ej[`ID`date;`ID`date xcol Tr
 
 q8:{select last price from `name`timestamp xasc ej[`ID;base;Ticks] where name=`x}
 
+// testing push filters
+q9:{select from ej[`ID;TicksWithAttr;Portfolio] where ixCol < 1000}
 
 //Performance comparison
 nruns:10;
@@ -71,7 +74,7 @@ runtest:{
  show -1+ar%qr;
  }
 
-tests:`q0`q1`q2`q3`q4`q5`q6`q7`q8
+tests:`q0`q1`q2`q3`q4`q5`q6`q7`q8`q9
 
 verify:{
 	show "--->correctness results for ",x;
@@ -79,7 +82,6 @@ verify:{
 	//ad-hoc changes to handle remaining issues in aquery (like not automatically adding
 	//group cols)
 	qr:$[x like "q2"; delete timestamp from qr; qr];
-	
 	aq:eval (`$".aq.",x;::);
 	show qr~cols[qr] xcol aq;
  }

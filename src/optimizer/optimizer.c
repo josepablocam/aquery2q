@@ -716,6 +716,7 @@ IDListNode *collect_AllCols(ExprNode *node)
     IDListNode *child = NULL;
     IDListNode *sibling = NULL;
 
+   
     if(node == NULL)
     {
         return NULL;   

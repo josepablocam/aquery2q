@@ -170,4 +170,9 @@ FUNCTION pythag(x, y) {
     sqr_y := y * y;
     sqrt(sqr_x + sqr_y)
 }
+
+
+// Testing push filters (TicksWithAttr.ID has attribute, and we test a non-equality selection)
+SELECT * from TicksWithAttr t INNER JOIN Portfolio p USING ID WHERE t.ixCol < 1000
+
 	

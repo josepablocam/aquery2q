@@ -7,6 +7,7 @@
 #include "../ast/ast.h"
 #include "../ast/ast_print.h"
 #include "../parser/symtable.h"
+#include "../optimizer/optimizer.h"
 #include "codegen.h"
 
 
@@ -52,6 +53,7 @@ char *AQ_TABLE_DICT = ".aq.ct";
 char *AQ_SORT_IX = ".aq.six";
 char *AQ_QUERY_NM = ".aq.q";
 char *AQ_JOIN_USING_INFO = ".aq.jui";
+char *AQ_CHECK_ATTR = ".aq.chkattr";
 
 
 
@@ -73,7 +75,8 @@ void init_aq_helpers()
     print_code(
         ".aq.scbix:{[v] m[`c] iasc `s`p`g`u?(m:0!meta v)`a}; //sort column names by attribute\n"
         ".aq.swix:{[v;w] w iasc .aq.scbix[v]?w@'where each type[`]=(type each) each w} //sort where clause by attributes of cols used\n"
-        ".aq.negsublist:{[x;y] neg[x] sublist y}"
+        ".aq.negsublist:{[x;y] neg[x] sublist y}\n"
+        ".aq.chkattr:{[x;t] any (.aq.cd where any each flip .aq.cd like/: \"*\",/:string (),x) in exec c from meta t where not null a}\n"    
         "\n\n"
         "// Start of code\n"
     );
@@ -704,28 +707,35 @@ char *cg_FilterWhere(LogicalQueryNode *where)
 {
     char *t1 = cg_LogicalQueryNode(where->arg);
     char *t2 = gen_table_nm();
-    int n_conds = ct_exprs(where->params.exprs);
+    print_code(" %s:", t2);
+    cg_FilterWhere0(where->params.exprs, t1);
+    print_code(";");
+    free(t1);
+    return t2;  
+}
+
+
+void cg_FilterWhere0(ExprNode *selection, char *from)
+{
+    int n_conds = ct_exprs(selection);
     
-    print_code(" %s:?[%s;", t2, t1);
+    print_code("?[%s;", from);
 
     if(n_conds == 1)
     { //clauses of 1 element need to be enlisted
         print_code("enlist ");
-        cg_ExprNode(where->params.exprs);
+        cg_ExprNode(selection);
     }
     else
     {
-        sort_where_clause_by_ix(t1);
+        sort_where_clause_by_ix(from);
         print_code("(");
-        cg_ExprNode(where->params.exprs);
+        cg_ExprNode(selection);
         print_code(")");
     }
     
 
-    print_code(";0b;()];\n");  
-    
-    free(t1);
-    return t2;  
+    print_code(";0b;()]");    
 }
 
 //TODO: need to account for grouping!!!
@@ -739,6 +749,7 @@ char *cg_ProjectSelect(LogicalQueryNode *proj)
     free(t1);
     return t2;
 }
+
 
 
 //TODO: make name resolution better, imitate q's
@@ -1010,23 +1021,30 @@ char *cg_IJUsing(LogicalQueryNode *ij)
 {
     char *t1 = cg_LogicalQueryNode(ij->arg);
     char *t2 = cg_LogicalQueryNode(ij->next_arg);
-    IDListNode *using = ij->params.cols;
-    cg_PrepareJoinUsing(t1, t2, using);
     char *joined_nm = gen_table_nm();
 
     //inner joing semantics from sql correspond to an equijoin (ej) in q
-    print_code(" %s:ej[%s ", joined_nm, AQ_COL_DICT);
+    cg_IJUsing0(ij, joined_nm, t1, t2);
+    print_code("; //inner join using\n");
+    free(t1);
+    free(t2);
+    return joined_nm;
+}
+
+void cg_IJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2)
+{
+    IDListNode *using = ij->params.cols;
+    cg_PrepareJoinUsing(t1, t2, using);
+    //inner joing semantics from sql correspond to an equijoin (ej) in q
+    print_code(" %s:ej[%s ", joined, AQ_COL_DICT);
     cg_colList(using);
     print_code(";");
     cg_RenameColsJoinUsing(t1);
     print_code(";");
     cg_RenameColsJoinUsing(t2);
-    print_code("]; //inner join using\n");
-  
-    free(t1);
-    free(t2);
-    return joined_nm;
+    print_code("]");  
 }
+
 
 
 char *cg_CartesianProd(LogicalQueryNode *cart)
@@ -1038,6 +1056,115 @@ char *cg_CartesianProd(LogicalQueryNode *cart)
     free(t1);
     free(t2);
     return crossed_name;
+}
+
+
+//potentially push a filter down below a join
+//If there is no attribute on join columns, push, otherwise join first
+char *cg_PossPushFilter(LogicalQueryNode *poss_push)
+{
+    LogicalQueryNode *join = poss_push->arg;
+    ExprNode *selection = poss_push->params.exprs;
+    
+    //generate code for tables involved
+    char *t1 = cg_LogicalQueryNode(join->arg); //LHS
+    char *t2 = cg_LogicalQueryNode(join->next_arg); //RHS
+    char *joined_name = gen_table_nm();
+    
+    int push_left = pushToLeftPossPush(poss_push);
+    char *push_to = push_left ? t1 : t2; //which side to push to
+    char *push_to_filtered = gen_table_nm();
+    
+    //columns used in join clause and that should be checked for attributes
+    IDListNode *cols_in_join = colsCheckPossPush(join);
+    cg_join_push join_fun = pickJoinTypePossPush(join); //cg function for join
+    
+    print_code(" %s:$[", joined_name);
+    //check attribute
+    cg_AttributeCheckPossPush(cols_in_join, push_to);
+    print_code("; //check attributes\n");
+    
+    //Case 1: there is an attribute in join clause, join and then select
+    print_code(" [\n"); //multiple actions associated with this if statement
+    //execute join
+    join_fun(join, joined_name, t1, t2);
+    print_code(";\n");
+    //execute selection
+    print_code(" ");
+    cg_FilterWhere0(selection, joined_name);
+    print_code(" \n ] //join then select\n");
+    print_code(" ;\n");
+
+    //Case 2: there is no attribute, select and then join
+    print_code(" [\n");
+    print_code(" %s:", push_to_filtered);
+    cg_FilterWhere0(selection, push_to);
+    print_code(";\n");
+    //execute join
+    // execute appropriate join (need to make sure order is still same to maintain semantics)
+    push_left ? 
+        join_fun(join, joined_name, push_to_filtered, t2) 
+        : 
+        join_fun(join, joined_name, t1, push_to_filtered);
+    print_code("\n ] //select then join\n");       
+    print_code(" ];\n");
+    free(t1);
+    free(t2);
+    free(push_to_filtered);
+    
+    return joined_name;
+    
+}
+
+IDListNode *colsCheckPossPush(LogicalQueryNode *join)
+{
+    switch(join->node_type)
+    {
+        case INNER_JOIN_USING:
+        case FULL_OUTER_JOIN_USING:
+            return join->params.cols;
+            break;
+        case INNER_JOIN_ON:
+        case FULL_OUTER_JOIN_ON:
+            return collect_AllCols(join->params.exprs);
+            break;
+        default:
+            print_code("'\"Error generating code for possible push selection\n\"");
+            exit(0);
+            break;
+    }
+}
+
+
+int pushToLeftPossPush(LogicalQueryNode *poss_push)
+{
+    IDListNode *tables_filter = collect_TablesExpr(poss_push->params.exprs);
+    IDListNode *tables_left = collect_TablesFrom(poss_push->arg->arg);
+    return any_in_IDList(tables_filter, tables_left);
+}
+
+cg_join_push pickJoinTypePossPush(LogicalQueryNode *join)
+{
+   switch(join->node_type)
+   {
+       case INNER_JOIN_USING:
+           return cg_IJUsing0;
+           break;
+       default:
+           print_code("'\"nyi push filter of this join\"");
+           return NULL;
+   } 
+}
+    
+    
+    
+//q code for checking if a any list of ids is found in a set of attributes
+void cg_AttributeCheckPossPush(IDListNode *cols, char *table)
+{
+    print_code("%s[", AQ_CHECK_ATTR);
+    cg_colList(cols);
+    print_code(";");
+    print_code("%s]", table);
 }
 
 
@@ -1099,22 +1226,21 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node)
                 print_code("'\"nyi explicit values\"\n");
                 break;
         	case COL_NAMES:
-                print_code("'\"error in code gen -> terminating code gen\"\n");   
-                exit(1);   
+                print_code("'\"nyi explicit COL NAMES\"\n");    
                 break;
             case SORT_COLS:
                 result_table = cg_SortCols(node);   
                 break;
             case SORT_EACH_COLS:
                 print_code("'\"nyi sort each cols\"\n");  
-                exit(1); //we did away with this, since performance tests
+                //we did away with this, since performance tests
                 //showed it was better to sort before grouping
                 break;
             case EQUI_JOIN_ON:
                 print_code("'\"nyi equi join on\"\n");
                 break;
             case POSS_PUSH_FILTER:
-                print_code("'\"nyi poss push filters\"\n");
+                result_table = cg_PossPushFilter(node);
                 break;
         }
     }
