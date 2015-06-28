@@ -757,7 +757,9 @@ char *cg_ProjectSelect(LogicalQueryNode *proj)
     char *t1 = cg_LogicalQueryNode(proj->arg);
     char *t2 = gen_table_nm();
     print_code(" %s:?[%s;();0b;", t2, t1);
-    acct_for_computed_groupBys();
+    if (proj->params.namedexprs->expr->is_grouped) {
+        acct_for_computed_groupBys();
+    }
     cg_NameExprTuples(t1, proj->params.namedexprs, 0);
     print_code("];\n");
     free(t1);
