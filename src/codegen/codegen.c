@@ -996,7 +996,6 @@ char *cg_flatten(LogicalQueryNode *node)
 
 char *cg_queryPlan(LogicalQueryNode *node)
 {
-    IN_QUERY = 1; //turn on our flag for query 
     init_dc(); //initialize our dictionary that keeps track of column names
     return cg_LogicalQueryNode(node); //generate query plan and return table name
 }
@@ -1299,6 +1298,7 @@ void cg_LocalQueries(LocalQueryNode *locals)
 /* full query */
 void cg_FullQuery(FullQueryNode *full_query)
 {
+    IN_QUERY = 1; //turn on our flag for query 
     int query_id = QUERY_CT++;
     print_code("%s%d:", AQ_QUERY_NM, query_id); //query placed into named function
     print_code("{[]\n");
@@ -1308,6 +1308,7 @@ void cg_FullQuery(FullQueryNode *full_query)
     print_code(" }\n"); //store function
     print_code("%s%d[]\n", AQ_QUERY_NM, query_id); //call function
     free(result_table);
+    IN_QUERY = 0; //turn off our flag for query
 }
 
 
