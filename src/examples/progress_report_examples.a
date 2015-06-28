@@ -32,11 +32,10 @@ WHERE ID="ACME" AND
 
 
 /* MODIFIED:
-    1 - added first to src, dest, to avoid vectors
-    2 - convert 120 to nanoseconds
+    1 - convert 120 to nanoseconds
 */
 /* pg 29, example 3.3 */
-SELECT first(src), first(dest), avg(length), count(timestamp)
+SELECT src, dest, avg(length), count(timestamp)
 FROM Packets
     ASSUMING ASC src, DESC dest, ASC timestamp
 GROUP BY src, dest, sums(deltas(timestamp) > (120 * 1000000000))
@@ -62,10 +61,9 @@ WITH
 
 /* MODIFIED: 
     1 - changed Ticks t, Portfolio p to Ticks t INNER JOIN Portfolio p USING ID 
-    2 - added first(t.ID) after group, to avoid vector    
 */
 /* pg 32, example 3.5 */
-SELECT first(t.ID), last(10, price)
+SELECT t.ID, last(10, price)
 FROM Ticks t INNER JOIN Portfolio p USING ID
     ASSUMING ASC timestamp
 GROUP BY t.ID
@@ -83,7 +81,7 @@ WITH
      FROM Ticks
         ASSUMING ASC timestamp
      WHERE date = '05/11/2003')
- SELECT first(ID), count(ID) 
+ SELECT ID, count(ID) 
  FROM OneDay
     ASSUMING ASC timestamp
     WHERE ROWID < 1000
@@ -135,11 +133,10 @@ ASSUMING ASC month
 /* MODIFIED:
  1 - replaced INNER JOIN ON with INNER JOIN USING (which means I have also renamed
     the columns as necessary
- 2 - added first to ts.ID to avoid vector after group by
  - the original query is found above (commented-out)
 */
 
-SELECT first(ts.ID), avgs(10, hq.ClosePrice) 
+SELECT ID, avgs(10, hq.ClosePrice) 
 FROM TradedStocks AS ts INNER JOIN
     HistoricQuotes AS hq
 	USING (ID, date) 
