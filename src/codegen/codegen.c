@@ -44,7 +44,7 @@ int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
 
 
 /* Aquery data structures for code generation */
-char *AQ_COL_NM = "aq_";
+char *AQ_COL_NM = "aq__";
 char *AQ_TABLE_NM = ".aq.t";
 char *AQ_COL_DICT = ".aq.cd"; //mapping of column names (A(c1) creates entries as c1 -> A__c1, A.c1 -> A__c1)
 char *AQ_COL_LIST = ".aq.pc"; //prior columns involved, used to detect conflicts
@@ -54,6 +54,7 @@ char *AQ_SORT_IX = ".aq.six";
 char *AQ_QUERY_NM = ".aq.q";
 char *AQ_JOIN_USING_INFO = ".aq.jui";
 char *AQ_CHECK_ATTR = ".aq.chkattr";
+char *AQ_GROUPED_EXPR = ".aq.grpexpr"; // keep track of what the group by has, to avoid recalc in projection
 
 
 
@@ -77,6 +78,7 @@ void init_aq_helpers()
         ".aq.swix:{[v;w] w iasc .aq.scbix[v]?w@'where each type[`]=(type each) each w} //sort where clause by attributes of cols used\n"
         ".aq.negsublist:{[x;y] neg[x] sublist y}\n"
         ".aq.chkattr:{[x;t] any (.aq.cd where any each flip .aq.cd like/: \"*\",/:string (),x) in exec c from meta t where not null a}\n"    
+        ".aq.acctgrps:{[p;g] @[p;key[p] ix;:;key[g] ix:where any each value[p]~/:\\:vg:value g]}\n"
         "\n\n"
         "// Start of code\n"
     );
@@ -94,12 +96,12 @@ void cols_to_Aquery(char *new, char *t, char *p)
     print_code(" %s:.aq.rcols[%s;\"%s\"]; //rename cols to t__c format\n", new, t, p);
 }
 
-
 //initialize our column dictionary
 void init_dc()
 {
     print_code(" %s:(); //init col names list\n", AQ_COL_LIST);
     print_code(" %s:(`$())!`$(); //init col names map\n", AQ_COL_DICT);
+    print_code(" %s:(`$())!(); //init grouped expr map\n", AQ_GROUPED_EXPR);
 }
 
 //add entry to table dictionary
@@ -120,6 +122,17 @@ void add_to_dt(char *alias, char *tbl)
 void sort_where_clause_by_ix(char *tbl)
 {
     print_code(" .aq.swix[%s;] ", tbl);
+}
+
+//account for pre-computed group expressions when projecting
+//e.g. if you calculated 2 + c1 as a group by, and then your projection has an element
+// 2 + c1 as ..., then you should not compute 2 + c1 again, but just taking the value of the grouped
+//column. This solves having to apply first to get it in atom form. Matches up with mysql semantics
+//and avoid unnecessary recomputing. This is done by explicitly checking the value in a dictionary
+//used for projection with equality with the value in a dictionary used for grouping. So x + 2 is
+//different from 2 + x
+void acct_for_computed_groupBys() {
+    print_code(" .aq.acctgrps[ ; %s]", AQ_GROUPED_EXPR); // done as projected q function
 }
 
 
@@ -709,7 +722,7 @@ char *cg_FilterWhere(LogicalQueryNode *where)
     char *t2 = gen_table_nm();
     print_code(" %s:", t2);
     cg_FilterWhere0(where->params.exprs, t1);
-    print_code(";");
+    print_code(";\n");
     free(t1);
     return t2;  
 }
@@ -744,6 +757,7 @@ char *cg_ProjectSelect(LogicalQueryNode *proj)
     char *t1 = cg_LogicalQueryNode(proj->arg);
     char *t2 = gen_table_nm();
     print_code(" %s:?[%s;();0b;", t2, t1);
+    acct_for_computed_groupBys();
     cg_NameExprTuples(t1, proj->params.namedexprs, 0);
     print_code("];\n");
     free(t1);
@@ -772,7 +786,7 @@ void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr)
         }
         else
         {
-            print_code("x%d", id_ctr++);
+            print_code("x__%d", id_ctr++);
         }
         print_code("]!enlist ");
         cg_ExprNode(nexpr->expr);
@@ -918,6 +932,7 @@ char *cg_groupBy(LogicalQueryNode *node)
     char *t2 = gen_table_nm();
     NamedExprNode *named_groups = groupExpr_to_NamedGroupExpr(node->params.exprs->first_child); //expressions are in list container, so take out with ->first_child
     print_code(" %s:?[%s;();", t2, t1);
+    print_code("%s:", AQ_GROUPED_EXPR); //store the group by expression info
     cg_NameExprTuples(t1, named_groups, 0);
     print_code(";");
     cg_allCols(t1); //generate dict of all column names
