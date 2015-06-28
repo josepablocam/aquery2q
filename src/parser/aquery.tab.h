@@ -138,7 +138,8 @@
      EQ_OP = 354,
      NEQ_OP = 355,
      AND_OP = 356,
-     OR_OP = 357
+     OR_OP = 357,
+     VERBATIM_Q_CODE = 358
    };
 #endif
 /* Tokens.  */
@@ -242,13 +243,14 @@
 #define NEQ_OP 355
 #define AND_OP 356
 #define OR_OP 357
+#define VERBATIM_Q_CODE 358
 
 
 
 
 #if ! defined YYSTYPE && ! defined YYSTYPE_IS_DECLARED
 typedef union YYSTYPE
-#line 173 "parser/aquery.y"
+#line 176 "parser/aquery.y"
 {
   int   intval;
   float floatval;
@@ -270,7 +272,7 @@ typedef union YYSTYPE
   struct TopLevelNode *top;
 }
 /* Line 1529 of yacc.c.  */
-#line 274 "parser/aquery.tab.h"
+#line 276 "parser/aquery.tab.h"
 	YYSTYPE;
 # define yystype YYSTYPE /* obsolescent; will be withdrawn */
 # define YYSTYPE_IS_DECLARED 1

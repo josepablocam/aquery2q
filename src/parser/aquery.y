@@ -101,6 +101,9 @@ int silence_warnings = 0;
  
  /* Math operators */
 %token EXP_OP TIMES_OP DIV_OP PLUS_OP MINUS_OP LE_OP GE_OP L_OP G_OP EQ_OP NEQ_OP AND_OP OR_OP
+
+ /* VERBATIM Q CODE MARKER */
+%token <str> VERBATIM_Q_CODE
   
  
 /* Additional Abstract Syntax Tree Types */
@@ -209,16 +212,18 @@ int silence_warnings = 0;
 
 program: top_level						    { $$ = $1; ast = $$; }												
 
-//TODO:delete init_aq_helpers from here, just here for testing
 top_level: global_query top_level           { $$ = make_Top_GlobalQuery($1, $2); }
 	|	create_table_or_view top_level      { $$ = make_Top_Create($1, $2); }
 	|	insert_statement top_level          { $$ = make_Top_Insert($1, $2); }
 	|	update_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
 	|	delete_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
-	|	user_function_definition top_level  { $$ = make_Top_UDF($1, $2); }             
+	|	user_function_definition top_level  { $$ = make_Top_UDF($1, $2); }
+	|   VERBATIM_Q_CODE top_level           { $$ = make_Top_VerbatimQ($1, $2); }
 	| /* epsilon */	                        { $$ = NULL; }
 	;
 
+
+ /*[% %]
 
  /******* 2.2: Local and global queries *******/
  

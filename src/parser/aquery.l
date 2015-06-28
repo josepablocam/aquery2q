@@ -10,6 +10,8 @@ int col_num = 0;
 void count(); 
 void consume_multi_line_comment();
 void consume_single_line_comment();
+void consume_verbatim_q();
+
 
 
 %}
@@ -21,6 +23,7 @@ void consume_single_line_comment();
  
 "/*"			{ count(); consume_multi_line_comment();  }
 "//"			{ count(); consume_single_line_comment(); }
+"??"            { count(); consume_verbatim_q(); return VERBATIM_Q_CODE; }
 
  /* SQL: select query key words */
 ("WITH")|("with")           { count(); return WITH;      }
@@ -169,8 +172,6 @@ void consume_single_line_comment();
  "["		{ count(); return '['; }
  "]"		{ count(); return ']'; }
 
-
-
  /* TODO: add better error handling/reporting */
 .		     { printf("Unidentified token:%s, line:%d, column:%d\n", yytext, line_num, col_num); exit(1); }
 
@@ -238,6 +239,57 @@ void consume_multi_line_comment() {
 	while(!comment_end);
 	
 	
+}
+
+void consume_verbatim_q() {
+    char c = input(), c1;
+    int q_code_end = 0;
+    int limit = 200; //roughly 2 lines of text...should be good enough for most purposes
+    int charct = 0;  //track how many chars we used up
+    int ix = 0;  // track index for next char
+    char *qcode = malloc(sizeof(char) * (limit + 1));  //pointer to hold our q code
+    char *swp; //pointer to expand string if beyond the limit
+
+    	do
+    	{
+    		/* consume q code */
+    		if(c == '\0')
+    		{
+    			q_code_end = 1;
+    		}
+    		else
+    		{
+    			c1 = input();
+    			move_col_line(c);
+    			q_code_end = (c == '?') && (c1 == '?');
+
+    			if (!q_code_end)
+    			{
+                    // add character to q code stream
+                    if(charct < limit)
+                    { //we still have space in current pointer
+                        qcode[ix++] = c;
+                        charct++;
+                    }
+                    else
+                    { // we ran out of space, create a pointer long enough for current contents
+                      // plus another iteration fo limit
+                        swp = malloc(sizeof(char) * (ix + 2));
+                        qcode[ix] = '\0'; //null terminate before copying
+                        swp = strcpy(swp, qcode); //copy over the current code
+                        free(qcode); //free up the previous pointer and swap pointers
+                        qcode = swp;
+                        qcode[ix++] = c; //add new char
+                        charct = 1; //restart character count
+                    }
+    			}
+    			c = c1;
+    		}
+    	}
+    	while(!q_code_end);
+
+    	qcode[ix] = '\0'; // add null char
+    	yylval.str = qcode; // set bison string pointer to q code
 }
 
 
