@@ -929,6 +929,14 @@ TopLevelNode *make_Top_UpdateDelete(LogicalQueryNode *ud, TopLevelNode *next)
 	return top;
 }
 
+TopLevelNode *make_Top_VerbatimQ(char *qcode, TopLevelNode *next)
+{
+    TopLevelNode *top = make_EmptyTopLevelNode(VERBATIM_Q);
+    top->elem.verbatimQ = qcode;
+    top->next_sibling = next;
+    return top;
+}
+
 #if STAND_ALONE
 int main()
 {

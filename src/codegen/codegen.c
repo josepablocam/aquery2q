@@ -1370,6 +1370,10 @@ void cg_TopLevel(TopLevelNode *node)
             case CREATE_STMT:
                 print_code("'\"nyi create statements\"\n");
                 break;
+            case VERBATIM_Q:
+                print_code("//verbatim q code\n");
+                print_code("%s\n", node->elem.verbatimQ);
+                break;
         }
         
         cg_TopLevel(node->next_sibling);

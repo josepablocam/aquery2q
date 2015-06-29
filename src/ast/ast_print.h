@@ -51,5 +51,7 @@ void print_schema(SchemaNode *elem, int parent_id, int *id);
 //insert statements
 void print_insert(InsertNode *ins, int parent_id, int *id);
 
+//native q code
+void print_verbatim_q(char *qcode, int parent_id, int *id);
 
 #endif

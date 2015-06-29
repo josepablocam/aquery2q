@@ -150,6 +150,8 @@ void print_top_level(TopLevelNode *top, int parent_id, int *id)
 			case UPDATE_DELETE_STMT:
 				print_logical_query(top->elem.updatedelete, self_id, id);
 				break;
+			case VERBATIM_Q:
+			    print_verbatim_q(top->elem.verbatimQ, self_id, id);
 			}
 	
 		//print sibling nodes
@@ -541,6 +543,12 @@ void print_insert(InsertNode *ins, int parent_id, int *id)
 	}
 	print_full_query(ins->src, parent_id, id);
 }
+
+//verbatim q code
+void print_verbatim_q(char *code, int parent_id, int *id) {
+	int self_id = print_self(parent_id, id, "native q code");
+}
+
 
 //#ifdef STAND_ALONE
 //	int main()

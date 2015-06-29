@@ -305,7 +305,8 @@ typedef enum TopLevelNodeType {
 	UDF_DEF, 
 	INSERT_STMT, 
 	UPDATE_DELETE_STMT, 
-	CREATE_STMT 
+	CREATE_STMT,
+	VERBATIM_Q
  } TopLevelNodeType;
 
 typedef struct TopLevelNode {
@@ -316,6 +317,7 @@ typedef struct TopLevelNode {
 		CreateNode *create; //create table/view
 		InsertNode *insert; //insert statement
 		LogicalQueryNode *updatedelete;
+		char *verbatimQ; //verbatim q code
 	} elem;
 	struct TopLevelNode *next_sibling;
 } TopLevelNode;
@@ -326,6 +328,7 @@ TopLevelNode *make_Top_UDF(UDFDefNode *def, TopLevelNode *next);
 TopLevelNode *make_Top_Create(CreateNode *create, TopLevelNode *next);
 TopLevelNode *make_Top_Insert(InsertNode *ins, TopLevelNode *next);
 TopLevelNode *make_Top_UpdateDelete(LogicalQueryNode *ud, TopLevelNode *next);
+TopLevelNode *make_Top_VerbatimQ(char *qcode, TopLevelNode *next);
 
 
 #endif
