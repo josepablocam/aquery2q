@@ -21,9 +21,9 @@ void consume_verbatim_q();
 %%
  /* comments */
  
-"/*"			{ count(); consume_multi_line_comment();  }
-"//"			{ count(); consume_single_line_comment(); }
-"??"            { count(); consume_verbatim_q(); return VERBATIM_Q_CODE; }
+"/*"			 { count(); consume_multi_line_comment();  }
+"//"			 { count(); consume_single_line_comment(); }
+"<q>"            { count(); consume_verbatim_q(); return VERBATIM_Q_CODE; }
 
  /* SQL: select query key words */
 ("WITH")|("with")           { count(); return WITH;      }
@@ -242,7 +242,7 @@ void consume_multi_line_comment() {
 }
 
 void consume_verbatim_q() {
-    char c = input(), c1;
+    char c1 = input(), c2, c3, c4;
     int q_code_end = 0;
     int limit = 200; //roughly 2 lines of text...should be good enough for most purposes
     int charct = 0;  //track how many chars we used up
@@ -253,37 +253,55 @@ void consume_verbatim_q() {
     	do
     	{
     		/* consume q code */
-    		if(c == '\0')
+    		if(c1 == '\0')
     		{
     			q_code_end = 1;
     		}
     		else
     		{
-    			c1 = input();
-    			move_col_line(c);
-    			q_code_end = (c == '?') && (c1 == '?');
+    			move_col_line(c1);
+    			if (c1 == '<') {
+                    c2 = input();
+                    c3 = input();
+                    c4 = input();
+                    q_code_end = (c2 == '/') && (c3 == 'q') && (c4 == '>');
+
+                    if (!q_code_end)
+                    {
+                       unput(c2);
+                       unput(c3);
+                       unput(c4);
+                    }
+    			}
 
     			if (!q_code_end)
     			{
                     // add character to q code stream
                     if(charct < limit)
                     { //we still have space in current pointer
-                        qcode[ix++] = c;
+                        qcode[ix++] = c1;
                         charct++;
                     }
                     else
                     { // we ran out of space, create a pointer long enough for current contents
                       // plus another iteration fo limit
-                        swp = malloc(sizeof(char) * (ix + 2));
+                        swp = malloc(sizeof(char) * (ix + limit + 2));
                         qcode[ix] = '\0'; //null terminate before copying
                         swp = strcpy(swp, qcode); //copy over the current code
                         free(qcode); //free up the previous pointer and swap pointers
                         qcode = swp;
-                        qcode[ix++] = c; //add new char
+                        qcode[ix++] = c1; //add new char
                         charct = 1; //restart character count
                     }
+
+                    c1 = input();
     			}
-    			c = c1;
+                else
+                {
+                    move_col_line(c2);
+                    move_col_line(c3);
+                    move_col_line(c4);
+                }
     		}
     	}
     	while(!q_code_end);
