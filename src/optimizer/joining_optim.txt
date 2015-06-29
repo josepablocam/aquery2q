@@ -129,15 +129,3 @@ and as next argument it has 2 nodes, 1 for left operand and 1 for right operand 
 4 - modify apply filters to only apply equality selections
 5 - non-duality selections should then get applied after each join (since we want
  poss_push to sit on top of a join, always).
-
-
-
-   
-
-
-
-
-
-
-
-

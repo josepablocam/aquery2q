@@ -17,7 +17,6 @@ char *gen_table_nm();
 void cols_to_Aquery(char *new, char *t, char *p);
 void acct_for_computed_groupBys();
 
-
 /* Expressions */
 void cg_Constant(ExprNode *c);
 void cg_LookupCol(char *nm);
@@ -52,13 +51,13 @@ char *cg_Alias(LogicalQueryNode *a);
 char *cg_FilterWhere(LogicalQueryNode *where);
 void cg_FilterWhere0(ExprNode *selection, char *from);
 char *gc_ProjectSelect(LogicalQueryNode *proj);
-void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr); //dictionary
+void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr,
+                       int id_ctr); // dictionary
 char *cg_groupBy(LogicalQueryNode *node);
 NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs);
 char *cg_flatten(LogicalQueryNode *node);
 char *cg_LogicalQueryNode(LogicalQueryNode *node);
 char *cg_queryPlan(LogicalQueryNode *node);
-
 
 /* local and full queries */
 void cg_LocalQueryNode(LocalQueryNode *local);
@@ -67,13 +66,11 @@ void cg_colRename(IDListNode *names);
 void cg_LocalQueries(LocalQueryNode *locals);
 void cg_FullQuery(FullQueryNode *full_query);
 
-
 /* sorting related */
-char *cg_Sort(LogicalQueryNode *node); //naive
-void cg_SimpleOrder(OrderNode *ordnode); //naive
-void cg_SortIx(OrderNode *ordnode); //optimized
-char *cg_SortCols(LogicalQueryNode *node); //optimized
-
+char *cg_Sort(LogicalQueryNode *node); // naive
+void cg_SimpleOrder(OrderNode *ordnode); // naive
+void cg_SortIx(OrderNode *ordnode); // optimized
+char *cg_SortCols(LogicalQueryNode *node); // optimized
 
 /* inner join using */
 void cg_RenameColsJoinUsing(char *t);
@@ -84,15 +81,14 @@ void cg_IJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2);
 /* pushing filters under joins: poss push filter */
 char *cg_PossPushFilter(LogicalQueryNode *poss_push);
 int pushToLeftPossPush(LogicalQueryNode *poss_push);
-typedef void (*cg_join_push)(LogicalQueryNode *join, char *joined, char *t1, char *t2);
+typedef void (*cg_join_push)(LogicalQueryNode *join, char *joined, char *t1,
+                             char *t2);
 cg_join_push pickJoinTypePossPush(LogicalQueryNode *join);
 void cg_AttributeCheckPossPush(IDListNode *cols, char *table);
 IDListNode *colsCheckPossPush(LogicalQueryNode *join);
 
-
 /* top level code generation */
 void cg_AQUERY2Q(TopLevelNode *node);
 void cg_TopLevel(TopLevelNode *node);
-
 
 #endif

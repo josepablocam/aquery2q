@@ -1,18 +1,18 @@
 #ifndef AST_PRINT_H
 #define AST_PRINT_H
 
-//generic utilitiest
+// generic utilitiest
 void print_node(int id, const char *label);
 void print_edge(int src, int dest);
 int print_self(int parent_id, int *id, const char *label);
 
-//program
+// program
 void print_ast(TopLevelNode *prog);
 
-//toplevel
+// toplevel
 void print_top_level(TopLevelNode *top, int parent_id, int *id);
 
-//queries
+// queries
 void print_full_query(FullQueryNode *full, int parent_id, int *id);
 void print_local_query(LocalQueryNode *local, int parent_id, int *id);
 void print_name(const char *name, int parent_id, int *id);
@@ -36,22 +36,22 @@ void print_order(OrderNode *order, int parent_id, int *id);
 void print_col_spec(LogicalQueryNode *cols, int parent_id, int *id);
 void print_sort_cols(LogicalQueryNode *sort, int parent_id, int *id);
 
-//optimized queries
+// optimized queries
 void print_compute_sortix(LogicalQueryNode *comp, int parent_id, int *id);
 
-//UDFs
+// UDFs
 void print_body(UDFBodyNode *body, int parent_id, int *id);
 void print_udf_def(UDFDefNode *udf, int parent_id, int *id);
 
-//Create statements
+// Create statements
 void print_create(CreateNode *cr, int parent_id, int *id);
 void print_create_source(CreateSourceNode *src, int parent_id, int *id);
 void print_schema(SchemaNode *elem, int parent_id, int *id);
 
-//insert statements
+// insert statements
 void print_insert(InsertNode *ins, int parent_id, int *id);
 
-//native q code
+// native q code
 void print_verbatim_q(char *qcode, int parent_id, int *id);
 
 #endif

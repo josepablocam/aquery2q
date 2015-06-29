@@ -87,17 +87,3 @@ We want the ordered table on the left (cross in q is order preserving in the lef
         
 
 When working with more complicated from clauses, we need to be careful about correctly handling dot-col accesses. Meaning, when we sort, the “src.dest” structure needs to be maintained. Does this imply having a different function to handle that? not likely, but rather perhaps a parameter to original, or something like that….
-
-
-
-
-
-
-
-
-
-   
-    
-   
-    
-
