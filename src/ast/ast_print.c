@@ -24,7 +24,7 @@ const char *LogicalQueryNodeTypeName[] = {
 const char *CreateNodeTypeName[] = {"create_table", "create_view"};
 
 const char *TopLevelNodeTypeName[] = {"global query", "udf def", "insert stmt",
-                                      "update/delete stmt", "create stmt"};
+                                      "update/delete stmt", "create stmt", "native q code"};
 
 const char *OrderNodeTypeName[] = {"ascending", "descending"};
 
@@ -421,7 +421,7 @@ void print_insert(InsertNode *ins, int parent_id, int *id) {
 
 // verbatim q code
 void print_verbatim_q(char *code, int parent_id, int *id) {
-  int self_id = print_self(parent_id, id, "native q code");
+  int self_id = print_self(parent_id, id, code);
 }
 
 //#ifdef STAND_ALONE
