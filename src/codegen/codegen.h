@@ -77,6 +77,8 @@ void cg_RenameColsJoinUsing(char *t);
 void cg_PrepareJoinUsing(char *t1, char *t2, IDListNode *using);
 char *cg_IJUsing(LogicalQueryNode *ij);
 void cg_IJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2);
+char *cg_FOJUsing(LogicalQueryNode *ij);
+void cg_FOJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2);
 
 /* pushing filters under joins: poss push filter */
 char *cg_PossPushFilter(LogicalQueryNode *poss_push);

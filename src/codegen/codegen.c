@@ -96,6 +96,13 @@ void init_aq_helpers() {
              "\"*\",/:string (),x) in exec c from meta t where not null a}\n"
              ".aq.acctgrps:{[p;g] @[p;key[p] ix;:;key[g] ix:where any each "
              "value[p]~/:\\:vg:value g]}\n"
+             " //full outer join using (definition compliant with traditional sql semantics\n"
+             ".aq.getdups:{[c;t] t where not differ c#t} //get records for repeated keys\n"
+             ".aq.foju:{\n"
+             " missing:{y upsert 0!(x#y)_x xkey z}[x;;]/[.aq.getdups[x;] each (ej[x:(),x;y;z];y:0!y;z:0!z)];\n"
+             " (0!uj[x xkey y;x xkey z]) upsert missing\n"
+             " }\n"
+
              "\n\n"
              "// Start of code\n");
 }
@@ -911,6 +918,21 @@ void cg_RenameColsJoinUsing(char *t) {
   print_code(" {(c^%s[`rename] c:cols x) xcol x}%s", AQ_JOIN_USING_INFO, t);
 }
 
+
+
+void cg_IJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2) {
+  IDListNode *using = ij->params.cols;
+  cg_PrepareJoinUsing(t1, t2, using);
+  // inner joing semantics from sql correspond to an equijoin (ej) in q
+  print_code(" %s:ej[%s ", joined, AQ_COL_DICT);
+  cg_colList(using);
+  print_code(";");
+  cg_RenameColsJoinUsing(t1);
+  print_code(";");
+  cg_RenameColsJoinUsing(t2);
+  print_code("]");
+}
+
 char *cg_IJUsing(LogicalQueryNode *ij) {
   char *t1 = cg_LogicalQueryNode(ij->arg);
   char *t2 = cg_LogicalQueryNode(ij->next_arg);
@@ -924,17 +946,30 @@ char *cg_IJUsing(LogicalQueryNode *ij) {
   return joined_nm;
 }
 
-void cg_IJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2) {
+void cg_FOJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2) {
   IDListNode *using = ij->params.cols;
   cg_PrepareJoinUsing(t1, t2, using);
-  // inner joing semantics from sql correspond to an equijoin (ej) in q
-  print_code(" %s:ej[%s ", joined, AQ_COL_DICT);
+  // full outer joing semantics from sql implemented in aquery
+  print_code(" %s:.aq.foju[%s ", joined, AQ_COL_DICT);
   cg_colList(using);
   print_code(";");
   cg_RenameColsJoinUsing(t1);
   print_code(";");
   cg_RenameColsJoinUsing(t2);
   print_code("]");
+}
+
+
+char *cg_FOJUsing(LogicalQueryNode *ij) {
+  char *t1 = cg_LogicalQueryNode(ij->arg);
+  char *t2 = cg_LogicalQueryNode(ij->next_arg);
+  char *joined_nm = gen_table_nm();
+
+  cg_FOJUsing0(ij, joined_nm, t1, t2);
+  print_code("; //full outer join using\n");
+  free(t1);
+  free(t2);
+  return joined_nm;
 }
 
 char *cg_CartesianProd(LogicalQueryNode *cart) {
@@ -1077,7 +1112,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_IJUsing(node);
       break;
     case FULL_OUTER_JOIN_USING:
-      print_code("'\"nyi full outer join using\"\n");
+      result_table = cg_FOJUsing(node);
       break;
     case GROUP_BY:
       result_table = cg_groupBy(node);
