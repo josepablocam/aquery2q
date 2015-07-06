@@ -255,24 +255,26 @@ void consume_verbatim_q() {
     		/* consume q code */
     		if(c1 == '\0')
     		{
-    			q_code_end = 1;
+    		    printf("missing matching </q>\n");
+    		    exit(1);
     		}
     		else
     		{
-    			move_col_line(c1);
-    			if (c1 == '<') {
-                    c2 = input();
-                    c3 = input();
-                    c4 = input();
-                    q_code_end = (c2 == '/') && (c3 == 'q') && (c4 == '>');
+    			  move_col_line(c1);
+    			  if (c1 == '<')
+    			  {
+                c2 = input();
+                c3 = input();
+                c4 = input();
+                q_code_end = (c2 == '/') && (c3 == 'q') && (c4 == '>');
 
-                    if (!q_code_end)
-                    {
-                       unput(c2);
-                       unput(c3);
-                       unput(c4);
-                    }
-    			}
+                if (!q_code_end)
+                {
+                  unput(c2);
+                  unput(c3);
+                  unput(c4);
+                }
+    			  }
 
     			if (!q_code_end)
     			{
@@ -285,7 +287,8 @@ void consume_verbatim_q() {
                     else
                     { // we ran out of space, create a pointer long enough for current contents
                       // plus another iteration fo limit
-                        swp = malloc(sizeof(char) * (ix + limit + 2));
+                        swp = malloc(sizeof(char) * (ix + limit + 2)); //(ix + 1) counts elems
+                                                                       // limit + 1 for null char
                         qcode[ix] = '\0'; //null terminate before copying
                         swp = strcpy(swp, qcode); //copy over the current code
                         free(qcode); //free up the previous pointer and swap pointers
@@ -296,12 +299,12 @@ void consume_verbatim_q() {
 
                     c1 = input();
     			}
-                else
-                {
-                    move_col_line(c2);
-                    move_col_line(c3);
-                    move_col_line(c4);
-                }
+          else
+          {
+              move_col_line(c2);
+              move_col_line(c3);
+              move_col_line(c4);
+          }
     		}
     	}
     	while(!q_code_end);
