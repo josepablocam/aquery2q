@@ -99,13 +99,14 @@ void init_aq_helpers() {
              " //full outer join using (definition compliant with traditional sql semantics\n"
              "k).aq.ejix:{(=x#z:0!z)x#y:0!y} // from ej\n"
              ".aq.foju:{\n"
-             "  ejz:raze ejnix:.aq.ejix[x:(),x;y:0!y;z:0!z]; //indices for equi join\n"
-             " 	ejr:y[ejy:where count each ejnix],'(x _ z) ejz; // perform equi join\n"
-             "	my:y (til count y) except ejy; // records in y not in equi join\n"
-             "	mz:z (til count z) except ejz; // records z not in equi join\n"
-             "	ejr upsert/(my;mz) // add missing records\n"
-             " }\n"
-
+             "  nix:.aq.ejix[x:(),x;y:0!y;z:0!z];\n"
+             "  iz:raze nix; //indices in z for equijoin\n"
+             "  iy:where count each nix; // indices in y for equijoin\n"
+             "  ejr:y[iy],'(x _ z) iz; // perform equi join\n"
+             "  my:select from y where not i in iy; // records in y not in equi join\n"
+             "  mz:select from z where not i in iz; // records z not in equi join\n"
+             "  ejr upsert/(my;mz) // add missing records\n"
+             "  }\n"
              "\n\n"
              "// Start of code\n");
 }
@@ -1081,6 +1082,7 @@ void cg_AttributeCheckPossPush(IDListNode *cols, char *table) {
   print_code("%s]", table);
 }
 
+
 char *cg_LogicalQueryNode(LogicalQueryNode *node) {
 
   char *result_table = NULL;
@@ -1235,6 +1237,45 @@ void cg_Schema(SchemaNode *schema)
 
 }
 */
+/*
+void cg_InsertStmt(InsertNode *insert) {
+  LogicalQueryNode *dest = insert->dest;
+  LogicalQueryNode *curr = dest;
+  char *tableInsertedInto = NULL;
+
+  // find name of table we're inserting into...we want to make sure sorting etc
+  // modifies it
+  while (curr != NULL && tableInsertedInto == NULL)
+  {
+    if (curr->node_type == SIMPLE_TABLE)
+    {
+      tableInsertedInto = strdup(curr->params.name);
+    }
+    curr = curr->arg;
+  }
+
+  //generate code for the destination of the insert
+  char *t1 = cg_LogicalQueryNode(insert->dest);
+  print_code(" %s:%s; //make insertion mod to original\n", tableInsertedInto, t1);
+  //generate code for the source of the data
+  if (insert->src->node_type) {
+    //explicit values, then insert directly
+    //and modifier means putting names as dictionary
+    // keys
+  }
+  else
+  { //query, so generated query
+    char *srctablenm = cg_FullQuery(insert->src);
+    //generate modifiers as `c1`c2`c3#srctable
+
+
+    free(srctablenm);
+  }
+
+  free(tableInsertedInto);
+  free(t1);
+}
+*/
 
 void cg_TopLevel(TopLevelNode *node) {
   if (node != NULL) {
@@ -1246,7 +1287,7 @@ void cg_TopLevel(TopLevelNode *node) {
       cg_UDFDefNode(node->elem.udf);
       break;
     case INSERT_STMT:
-      print_code("'\"nyi insert statements\"\n");
+      //cg_InsertStmt(node->elem.insert);
       break;
     case UPDATE_DELETE_STMT:
       print_code("'\"nyi update/delete statements\"\n");

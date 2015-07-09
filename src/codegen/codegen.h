@@ -89,8 +89,12 @@ cg_join_push pickJoinTypePossPush(LogicalQueryNode *join);
 void cg_AttributeCheckPossPush(IDListNode *cols, char *table);
 IDListNode *colsCheckPossPush(LogicalQueryNode *join);
 
+/* insertion */
+void cg_InsertStmt(InsertNode *insert);
+
 /* top level code generation */
 void cg_AQUERY2Q(TopLevelNode *node);
 void cg_TopLevel(TopLevelNode *node);
+
 
 #endif
