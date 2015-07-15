@@ -65,6 +65,7 @@ void cg_colList(IDListNode *cols);
 void cg_colRename(IDListNode *names);
 void cg_LocalQueries(LocalQueryNode *locals);
 void cg_FullQuery(FullQueryNode *full_query);
+char *cg_FullQuery_Embedded(FullQueryNode *full_query);
 
 /* sorting related */
 char *cg_Sort(LogicalQueryNode *node); // naive
@@ -91,6 +92,10 @@ IDListNode *colsCheckPossPush(LogicalQueryNode *join);
 
 /* insertion */
 void cg_InsertStmt(InsertNode *insert);
+void cg_InsertFromValues(char *tableInsertedInto, InsertNode *insert);
+void cg_ExplicitValues(LogicalQueryNode *src);
+void cg_InsertFromQuery(char *tableInsertedInto, InsertNode *insert);
+
 
 /* top level code generation */
 void cg_AQUERY2Q(TopLevelNode *node);

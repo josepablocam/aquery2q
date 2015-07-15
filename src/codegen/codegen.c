@@ -1135,7 +1135,9 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_flatten(node);
       break;
     case EXPLICIT_VALUES:
-      print_code("'\"nyi explicit values\"\n");
+      cg_ExplicitValues(node);
+      result_table = NULL; // no table name should be generated
+      //print_code("'\"nyi explicit values\"\n");
       break;
     case COL_NAMES:
       print_code("'\"nyi explicit COL NAMES\"\n");
@@ -1202,6 +1204,16 @@ void cg_FullQuery(FullQueryNode *full_query) {
   IN_QUERY = 0; // turn off our flag for query
 }
 
+// Full query, but should not create a top-level function, but is rather part of another
+// expression
+char *cg_FullQuery_Embedded(FullQueryNode *full_query) {
+  IN_QUERY = 1; // turn on our flag for query
+  cg_LocalQueries(full_query->local_queries); // any code for local queries
+  char *result_table = cg_queryPlan(full_query->query_plan); // generate main query
+  IN_QUERY = 0; // turn off our flag for query
+  return result_table;
+}
+
 /* creating tables or views */
 
 // TODO: create view....how do we do this? considering views in q...
@@ -1237,11 +1249,14 @@ void cg_Schema(SchemaNode *schema)
 
 }
 */
-/*
+
+//Insertions are coded as anonymous functions, to avoid calling multiple times
 void cg_InsertStmt(InsertNode *insert) {
   LogicalQueryNode *dest = insert->dest;
   LogicalQueryNode *curr = dest;
   char *tableInsertedInto = NULL;
+  char *srcnm = NULL;
+
 
   // find name of table we're inserting into...we want to make sure sorting etc
   // modifies it
@@ -1254,28 +1269,74 @@ void cg_InsertStmt(InsertNode *insert) {
     curr = curr->arg;
   }
 
+  print_code("{\n");
   //generate code for the destination of the insert
-  char *t1 = cg_LogicalQueryNode(insert->dest);
-  print_code(" %s:%s; //make insertion mod to original\n", tableInsertedInto, t1);
-  //generate code for the source of the data
-  if (insert->src->node_type) {
-    //explicit values, then insert directly
-    //and modifier means putting names as dictionary
-    // keys
+  if (dest->node_type != SIMPLE_TABLE) {
+    print_code(" // insertion destination\n");
+    //not a simple node, need to generate code to manipulate it
+    IN_QUERY = 1;
+    char *t1 = cg_LogicalQueryNode(insert->dest);
+    // make sure to rename columns, since cg_LogicalQueryNode renames things when necesary
+    print_code(" `%s set (cols %s) xcol %s; //make insertion mod to original\n",
+      tableInsertedInto, tableInsertedInto, t1);
+    free(t1);
+    IN_QUERY = 0;
+  }
+
+  if (insert->src->query_plan->node_type == EXPLICIT_VALUES) {
+    cg_InsertFromValues(tableInsertedInto, insert);
   }
   else
-  { //query, so generated query
-    char *srctablenm = cg_FullQuery(insert->src);
-    //generate modifiers as `c1`c2`c3#srctable
-
-
-    free(srctablenm);
+  {
+    cg_InsertFromQuery(tableInsertedInto, insert);
   }
-
+  print_code(" }[]\n"); // calll function to execute insertion
   free(tableInsertedInto);
-  free(t1);
 }
-*/
+
+void cg_InsertFromValues(char *tableInsertedInto, InsertNode *insert) {
+  print_code(" `%s set %s upsert ", tableInsertedInto, tableInsertedInto);
+
+  if(insert->modifier != NULL)
+  {
+    cg_colList(insert->modifier);
+    print_code("!");
+  }
+  cg_ExplicitValues(insert->src->query_plan);
+  print_code("\n");
+}
+
+void cg_InsertFromQuery(char *tableInsertedInto, InsertNode *insert) {
+   //reinitalize data structures, since we don't need to carry around
+   // info for both, and keeping it can cause issues for this bit below
+   print_code("// reinitalizing aquery runtime data structures to avoid issues in insertion\n");
+   init_dc();
+
+    // generate code for insertion values
+    print_code("// insertion source\n");
+    char *srcnm = cg_FullQuery_Embedded(insert->src);
+
+    //upsert values, modifying original
+    print_code("// actual upsertion\n");
+    print_code(" `%s set %s upsert ", tableInsertedInto, tableInsertedInto);
+    // modifier means rename columns to given order
+    if(insert->modifier != NULL) {
+      print_code("(");
+      cg_colList(insert->modifier);
+      print_code(")");
+    }
+    else
+    { //otherwise rename in order of destination table
+      print_code("(cols %s)", tableInsertedInto);
+    }
+    print_code(" xcol %s\n", srcnm);
+}
+
+void cg_ExplicitValues(LogicalQueryNode *src) {
+  ExprNode *values = src->params.exprs;
+  print_code("eval ");
+  cg_ExprList(values);
+}
 
 void cg_TopLevel(TopLevelNode *node) {
   if (node != NULL) {
@@ -1287,7 +1348,7 @@ void cg_TopLevel(TopLevelNode *node) {
       cg_UDFDefNode(node->elem.udf);
       break;
     case INSERT_STMT:
-      //cg_InsertStmt(node->elem.insert);
+      cg_InsertStmt(node->elem.insert);
       break;
     case UPDATE_DELETE_STMT:
       print_code("'\"nyi update/delete statements\"\n");

@@ -12,7 +12,7 @@
 
 
 
-/********************************************************** 
+/**********************************************************
 ***********Examples from aquery thesis*********************/
 
 /* UNCHANGED */
@@ -43,7 +43,7 @@ GROUP BY src, dest, sums(deltas(timestamp) > (120 * 1000000000))
 /* MODIFIED:
     - note that since we decided that aquery should treat selections as a sequence
      (as order of selections matters given the semantics of inter-row dependence produced by column-wise aggregates), I've modified this example to use & rather than AND, as & does break up our selection into a sequence, but rather tells aquery to treat it as 1 expression (similar to & vs , in q where clauses)
-    - I explicitly included timestamp in the projections for the temp table (averages), since i haven't yet implemented a way to add the group-bys automatically to the projections 
+    - I explicitly included timestamp in the projections for the temp table (averages), since i haven't yet implemented a way to add the group-bys automatically to the projections
      */
 /* pg 30, example 3.4 */
 WITH
@@ -52,15 +52,15 @@ WITH
       avgs(5, price) FROM Ticks
         ASSUMING ASC ID, ASC timestamp
      GROUP BY ID)
- SELECT ID, date 
+ SELECT ID, date
  FROM FLATTEN(averages)
     ASSUMING ASC ID, ASC timestamp
  WHERE a21 > a5 &
        prev(a21) <= prev(a5) &
        prev(ID) = ID
 
-/* MODIFIED: 
-    1 - changed Ticks t, Portfolio p to Ticks t INNER JOIN Portfolio p USING ID 
+/* MODIFIED:
+    1 - changed Ticks t, Portfolio p to Ticks t INNER JOIN Portfolio p USING ID
 */
 /* pg 32, example 3.5 */
 SELECT t.ID, last(10, price)
@@ -68,11 +68,11 @@ FROM Ticks t INNER JOIN Portfolio p USING ID
     ASSUMING ASC timestamp
 GROUP BY t.ID
 
-/* MODIFIED: 
+/* MODIFIED:
  1 - added explicit names to the projections in the
- temporary table 
+ temporary table
  2 - replaced count(*) with count(ID), ROWID is translated to i, and i when grouped is just 1 per group...need to fix this
- 3 - add first to ID to avoid vector after group by 
+ 3 - add first to ID to avoid vector after group by
 */
 /* pg 33, example 3.6 */
 WITH
@@ -81,7 +81,7 @@ WITH
      FROM Ticks
         ASSUMING ASC timestamp
      WHERE date = '05/11/2003')
- SELECT ID, count(ID) 
+ SELECT ID, count(ID)
  FROM OneDay
     ASSUMING ASC timestamp
     WHERE ROWID < 1000
@@ -94,14 +94,14 @@ WITH
 //    ASSUMING ASC src, DESC dest, ASC timestamp
 //GROUP BY src, dest, sums(deltas(timestamp) > 120)
 
-/********************************************************** 
+/**********************************************************
 ***********Examples from aquery presentation notes*********
 **********************************************************/
 
 /* UNCHANGED */
 /* moving average over arrables*/
-SELECT month, avgs(3, sales) 
-FROM Sales 
+SELECT month, avgs(3, sales)
+FROM Sales
 ASSUMING ASC month
 
 /* REPEATED */
@@ -122,7 +122,7 @@ ASSUMING ASC month
 
 
 /* Interchange sorting + order preserving operators */
-//SELECT ts.ID, avgs(10, hq.ClosePrice) 
+//SELECT ts.ID, avgs(10, hq.ClosePrice)
 //FROM TradedStocks AS ts INNER JOIN
 //    HistoricQuotes AS hq
 //	ON ts.ID=hq.ID AND ts.TradeDate=hq.date note use of ON given differing col names
@@ -136,10 +136,10 @@ ASSUMING ASC month
  - the original query is found above (commented-out)
 */
 
-SELECT ID, avgs(10, hq.ClosePrice) 
+SELECT ID, avgs(10, hq.ClosePrice)
 FROM TradedStocks AS ts INNER JOIN
     HistoricQuotes AS hq
-	USING (ID, date) 
+	USING (ID, date)
 ASSUMING ASC date
 GROUP BY ID //can use ID since both ts and hq have it and joined using (ts.ID = hq.ID = ID)
 
@@ -152,7 +152,7 @@ FROM Ticks t INNER JOIN base b USING ID
     ASSUMING ASC name, ASC timestamp
 WHERE name = "x"
 
-/********************************************************** 
+/**********************************************************
 ***********Miscellaneous Aquery Examples**********
 **********************************************************/
 
@@ -172,4 +172,7 @@ FUNCTION pythag(x, y) {
 // Testing push filters (TicksWithAttr.ID has attribute, and we test a non-equality selection)
 SELECT * from TicksWithAttr t INNER JOIN Portfolio p USING ID WHERE t.ixCol < 1000
 
-	
+//INSERTIONS
+INSERT INTO t1 assuming asc c1 select * from t2
+INSERT INTO t1(c2, c1) VALUES(-1, -2)
+

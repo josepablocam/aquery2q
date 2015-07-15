@@ -1,7 +1,4 @@
-
-
-
-//	Section 5: Tests from Alberto Lerner's thesis and presentation on aquery. 
+//	Section 5: Tests from Alberto Lerner's thesis and presentation on aquery.
 //	Please see the .pdf file accompanying this implementation for references to both
 //	We assume the existence of tables: Ticks, Portfolio, Packets, Sales, TradedStocks, HistoricQuotes as per references in both documents
 
@@ -60,6 +57,20 @@ q8:{select last price from `name`timestamp xasc ej[`ID;base;Ticks] where name=`x
 // testing push filters
 q9:{select from ej[`ID;TicksWithAttr;Portfolio] where ixCol < 1000}
 
+resetInsertionTables:{
+  `t1 set ([]c1:1 2 3; c2:10 20 30);
+  `ot1 set t1;
+  `t2 set ([]c1:100 200 300; c2:1000 2000 3000);
+  `ot2 set t2;
+ }
+
+verifyInsertions:{
+    show "--->verifying insertion tests";
+    ins1:(`c1 xasc ot1) upsert ot2;
+    ins2:ins1 upsert `c2`c1!-1 -2;
+    show t1 ~ ins2;
+ }
+
 //Performance comparison
 nruns:10;
 time:{.Q.gc[]; (system ssr/["ts do[%n;%f[]]";("%n";"%f");(string x;y)])%x}
@@ -86,14 +97,19 @@ verify:{
 	show qr~cols[qr] xcol aq;
  }
 
+resetInsertionTables[]
 \l generated.q
 show "****Running unoptimized aquery compilation"
 verify each string tests
+verifyInsertions[]
 runtest each string tests
 
+
+resetInsertionTables[]
 \l generated_optimized.q
 show "****Running optimized aquery compilation"
 verify each string tests
+verifyInsertions[]
 runtest each string tests
 exit 0
 
