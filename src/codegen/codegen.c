@@ -905,7 +905,7 @@ char *cg_concatenate(LogicalQueryNode *node) {
     }
   }
   free_IDListNode(node->params.cols);
-  print_code(")\n");
+  print_code(");\n");
   return t1;
 }
 

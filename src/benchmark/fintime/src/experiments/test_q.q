@@ -18,7 +18,7 @@ start6Mo:get `:start6Mo
 \
 
 data:select from price where Id in stock10, TradeDate >= startYear10, TradeDate < startYear10 + 365 * 10
-result:(upsert/){[x;y] 0!select minPx:min ClosePrice, maxPx:max ClosePrice, avgPx:avg ClosePrice by Id, bucket:floor (TradeDate - startYear10)%x, bucketName:y from data}'[7 31 365;`weekly`monthly`yearly]
+result:`Id`name`bucket xasc (upsert/){[x;y] 0!select low:min ClosePrice, high:max ClosePrice, mean:avg ClosePrice by Id, bucket:floor (TradeDate - startYear10)%x, name:y from data}'[7 31 365;`weekly`monthly`yearly]
 
 /
 Adjust all prices and volumes (prices are multiplied by the split factor and volumes are divided by the split factor) for a set of 1000 stocks to reflect the split events during a specified 300 day period, assuming that events occur before the first trade of the split date. These are called split-adjusted prices and volumes.

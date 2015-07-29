@@ -1595,9 +1595,16 @@ LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj,
 
 // TODO: modify to handle more complicated froms....
 char *get_table_name(LogicalQueryNode *from) {
-  if (from->node_type == SIMPLE_TABLE) {
+  if (from == NULL)
+  {
+    return NULL;
+  }
+  else if (from->node_type == SIMPLE_TABLE)
+  {
     return from->params.name;
-  } else {
+  }
+  else
+  {
     return get_table_name(from->arg);
   }
 }
@@ -1618,7 +1625,8 @@ LogicalQueryNode *assemble_opt1(LogicalQueryNode *proj, LogicalQueryNode *from,
   // TODO: look up order in a way that accounts for complicated from
   if (order !=
       NULL) { // try to remove order clause first as a result of existing order
-    Symentry *entry = lookup_sym(env, get_table_name(from));
+    char *tablenm = get_table_name(from);
+    Symentry *entry = (tablenm == NULL) ? NULL : lookup_sym(env, tablenm);
     OrderNode *want_order = order->params.order;
     OrderNode *have_order = (entry == NULL) ? NULL : entry->order_spec;
 

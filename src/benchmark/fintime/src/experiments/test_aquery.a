@@ -24,37 +24,39 @@ Get the closing price of a set of 10 stocks for a 10-year period and group into 
 //query 1
 WITH
  // our main source of information, localized, avoiding rerunning for each aggregation
- Target  as (select * 
+ Target(Id, TradeDate, ClosePrice)  AS (select 
+ Id, TradeDate,ClosePrice
  FROM price
- where Id in stock10 and TradeDate >= startYear10 and TradeDate < startYear10 + 365 * 10
+ where Id in stock10 and TradeDate >= startYear10 and TradeDate < startYear10 + 365 * 10)
 
-  weekly(Id, bucket, name, low, high, mean) as (select 
+  weekly(Id, bucket, name, low, high, mean) AS (select 
     Id,
-    first(mod(TradeDate - startYear10, 7)),
-    'weekly',
+    first(floor((TradeDate - startYear10)/7)),
+    "weekly",
     min(ClosePrice), 
 	 	max(ClosePrice), avg(ClosePrice)
-  	from Target group by Id, mod(TradeDate - startYear10, 7)
+  	from Target group by Id, floor((TradeDate - startYear10)/7))
 	
-  monthly(Id, bucket, name, low, high, mean) as (select
+  monthly(Id, bucket, name, low, high, mean) AS (select
     Id,
-    first(mod(TradeDate - startYear10, 31)),
-    'monthly,
+    first(floor((TradeDate - startYear10)/31)),
+    "monthly",
      min(ClosePrice), 
 	 	 max(ClosePrice), 
-     avg(ClosePrice),
-  	 from Target group by Id, mod(TradeDate - startYear10, 31)
+     avg(ClosePrice)
+  	 from Target group by Id, floor((TradeDate - startYear10)/31))
 	
-  yearly(Id, bucket, name, mean) as (select
-    first(mod(TradeDate - startYear10, 31)),
-    'monthly,
+  yearly(Id, bucket, name, low, high, mean) AS (select
+    Id,
+    first(floor((TradeDate - startYear10)/365)),
+    "yearly",
      min(ClosePrice), 
 	 	 max(ClosePrice), 
-     avg(ClosePrice),
-  	 from Target group by Id, mod(TradeDate - startYear10, 31)
+     avg(ClosePrice)
+  	 from Target group by Id, floor((TradeDate - startYear10)/365))
 		
-		select * from CONCATENATE(weekly, monthly, yearly) assuming asc Id, asc name, asc bucket
-END
+select * from CONCATENATE(weekly, monthly, yearly) assuming asc Id, asc name, asc bucket
+
 
 /*
 Adjust all prices and volumes (prices are multiplied by the split factor and volumes are divided by the split factor) for a set of 1000 stocks to reflect the split events during a specified 300 day period, assuming that events occur before the first trade of the split date. These are called split-adjusted prices and volumes.
