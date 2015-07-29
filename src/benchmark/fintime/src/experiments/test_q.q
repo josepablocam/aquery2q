@@ -17,7 +17,7 @@ start6Mo:get `:start6Mo
 	Get the closing price of a set of 10 stocks for a 10-year period and group into weekly, monthly and yearly aggregates. For each aggregate period determine the low, high and average closing price value. The output should be sorted by id and trade date.
 \
 
-data:select from price where Id in stock10, TradeDate >= startYear10, TradeDate < startYear10 + 365 * 10
+data:select Id, TradeDate, ClosePrice from price where Id in stock10, TradeDate >= startYear10, TradeDate < startYear10 + 365 * 10
 result:`Id`name`bucket xasc (upsert/){[x;y] 0!select low:min ClosePrice, high:max ClosePrice, mean:avg ClosePrice by Id, bucket:floor (TradeDate - startYear10)%x, name:y from data}'[7 31 365;`weekly`monthly`yearly]
 
 /

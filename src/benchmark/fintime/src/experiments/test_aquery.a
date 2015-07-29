@@ -63,9 +63,25 @@ Adjust all prices and volumes (prices are multiplied by the split factor and vol
 */
 
 WITH
-  pxdata as (select * from price where Id in stock1000 and TradeDate >= start300Days and TradeDate < start300Days + 300)
-  splitdata as (select from split where Id in stock1000 and SplitDate >= start300Days, SplitDate < start300Days + 300)
-result:select HighPrice:first HighPrice*prd 1%SplitFactor,LowPrice:first LowPrice*prd 1%SplitFactor,ClosePrice:first ClosePrice*prd 1%SplitFactor,OpenPrice:first OpenPrice*prd 1%SplitFactor,Volume:first Volume*prd SplitFactor by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
+  pxdata(Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume)
+  AS (select Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume
+   from price where Id in stock1000 and TradeDate >= start300Days and TradeDate < start300Days + 300)
+   
+  splitdata(Id, SplitDate, SplitFactor) 
+  AS (select Id, SplitDate, SplitFactor from split where Id in stock1000 and SplitDate >= start300Days and  SplitDate < start300Days + 300)
+  
+  
+  select
+  Id as Id, TradeDate as TradeDate,
+  first(HighPrice * prd(1 / SplitFactor)) as HighPrice,
+  first(LowPrice * prd(1 / SplitFactor)) as LowPrice,
+  first(ClosePrice * prd(1 / SplitFactor)) as ClosePrice,
+  first(OpenPrice * prd(1 / SplitFactor)) as OpenPrice,
+  first(Volume * prd(SplitFactor)) as Volume
+  from
+  pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
+  group by Id, TradeDate
+
 
 
 
