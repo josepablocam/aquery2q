@@ -1,16 +1,17 @@
-\l base
-\l price
-\l split
+path:hsym`$"/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/src/experiments"
+base:get ` sv path,`base
+price:get ` sv path,`price
+split:get ` sv path,`split
 
 // Retrieve randomly created lists
-stock10:get `:stock10
-startYear10:get `:startYear10
-stock1000:get `:stock1000
-start300Days:get `:start300Days
-startPeriod:get `:startPeriod
-endPeriod:get `:endPeriod
-SP500:get `:SP500
-start6Mo:get `:start6Mo
+stock10:get ` sv path,`stock10
+startYear10:get ` sv path,`startYear10
+stock1000:get ` sv path,`stock1000
+start300Days:get ` sv path,`start300Days
+startPeriod:get ` sv path,`startPeriod
+endPeriod:get ` sv path,`endPeriod
+SP500:get ` sv path,`SP500
+start6Mo:get ` sv path,`start6Mo
 
 
 /
@@ -52,32 +53,33 @@ data:select  ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate from
 results:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc data;
 
 /
-(Based on the previous query) Find the points (specific days) when the 5-month moving average intersects the 21-day moving average for these stocks. The output is to be sorted by id and date.
+(Based on the previous query) 
+Modified: For now, just doing moving average not with respect to last query,
+as A2Q has not yet implemented creating a table from a query, which is needed to store
+the prior queries result (without repeating the query again). Performing on all stock instead
+
+Find the points (specific days) when the 5-month moving average intersects the 21-day moving average for these stocks. The output is to be sorted by id and date.
 \
-select from `Id`TradeDate xasc results where Id=prev Id,((m21 > m5) & prev[m21] <= prev m5) | ((m21 < m5) & prev[m21] >= prev m5)
+pricedata:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc price
+result:select Id, CrossDate:TradeDate, ClosePrice from pricedata where Id=prev Id, ((prev[m5] < prev m21) & m5 >= m21)|((prev[m5] > prev m21) & m5 <= m21)
 
 
 /
 Determine the value of $100,000 now if 1 year ago it was invested equally in 10 specified stocks (i.e. allocation for each stock is $10,000). The trading strategy is: When the 20-day moving average crosses over the 5-month moving average the complete allocation for that stock is invested and when the 20-day moving average crosses below the 5-month moving average the entire position is sold. The trades happen on the closing price of the trading day.
 \
-pricedata:select from price where Id in stock10, TradeDate >= -365 + max TradeDate
-pricedata:update m20:20 mavg price, m5:5 mavg price from `Id`TradeDate xasc pricedata
-pricedata:update sell:(m21 < m5) & prev[m21] >= prev m5, 
-	 							 buy: (m21 > m5) & prev[m21] <= prev m5 from pricedata where Id=prev Id;
 
 // TODO
-
-
 
 
 /
 Find the pair-wise coefficients of correlation in a set of 10 securities for a 2 year period. Sort the securities by the coefficient of correlation, indicating the pair of securities corresponding to that row. [Note: coefficient of correlation defined in appendix]
 \
-pricedata:select from price where Id in stock10, TradeDate >= startYear10, TradeDate < startYear10 + 365 * 2;
-corrdata:(select Id1:Id, ClosePrice1:ClosePrice from pricedata) cross select Id2:Id, ClosePrice2:ClosePrice from pricedata
-corrdata:select from corrdata where Id1<>Id2
+pricedata:select from `Id`TradeDate xasc price where Id in stock10, TradeDate >= startYear10, TradeDate < startYear10 + 365 * 2;
+pair1:select ClosePrice1:ClosePrice by Id1:Id from pricedata;
+pair2:`Id2`ClosePrice2 xcol pair1;
 // full matrix, not just lower/upper triangular
-results:select cor[ClosePrice1;ClosePrice2] by Id1,Id2 from corrdata
+corrdata:pair1 cross pair2;
+results:select Id1, Id2, corrCoeff:cor'[ClosePrice1;ClosePrice2] from corrdata where Id1<>Id2
 
 
 /
@@ -86,6 +88,8 @@ Determine the yearly dividends and annual yield (dividends/average closing price
 No dividend file provided, so skipping for now.
 \
 
+
+// TODO
 
 
 

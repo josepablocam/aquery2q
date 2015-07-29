@@ -89,8 +89,10 @@ void init_aq_helpers() {
 
   print_code(".aq.scbix:{[v] m[`c] iasc `s`p`g`u?(m:0!meta v)`a}; //sort "
              "column names by attribute\n"
-             ".aq.swix:{[v;w] w iasc .aq.scbix[v]?w@'where each type[`]=(type "
+             "// swix below not yet implemented due to bugs occurring\n"
+             "//.aq.swix:{[v;w] w iasc .aq.scbix[v]?w@'where each type[`]=(type "
              "each) each w} //sort where clause by attributes of cols used\n"
+             ".aq.swix:{[v;w] w}\n"
              ".aq.negsublist:{[x;y] neg[x] sublist y}\n"
              ".aq.chkattr:{[x;t] any (.aq.cd where any each flip .aq.cd like/: "
              "\"*\",/:string (),x) in exec c from meta t where not null a}\n"

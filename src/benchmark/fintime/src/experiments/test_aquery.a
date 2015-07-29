@@ -116,51 +116,66 @@ select sum(ClosePrice*Volume)/(8.9 ^ 9) from price where TradeDate = startPeriod
 Find the 21-day and 5-day moving average price for a specified list of 1000 stocks during a 6-month period. (Use split adjusted prices)
 */
 WITH
-avgInfo as (select 
-  avgs(21, ClosePrice) as ma21,
-	avgs(5, ClosePrice) as m5
-	from prices assuming asc TradeDate 
-	where Id in stocks group by Id
+avgInfo(Id, TradeDate, ma21, m5) AS (select 
+  Id, TradeDate,
+  avgs(21, ClosePrice),
+	avgs(5, ClosePrice) 
+	from price assuming asc TradeDate 
+	where Id in stock1000 group by Id)
 	
-select * from FLATTEN(avgInfo)
-END
+select 
+Id as Id, TradeDate as TradeDate, ma21 as ma21, m5 as m5
+from FLATTEN(avgInfo)
 
 
 /*
-	
-(Based on the previous query) Find the points (specific days) when the 5-month moving average intersects the 21-day moving average for these stocks. The output is to be sorted by id and date.
+(Based on the previous query) 
+Modified: For now, just doing moving average not with respect to last query,
+as A2Q has not yet implemented creating a table from a query, which is needed to store
+the prior queries result (without repeating the query again). Performing on all stock instead
+
+Find the points (specific days) when the 5-month moving average intersects the 21-day moving average for these stocks. The output is to be sorted by id and date.
 */
 WITH
-avgInfo as (select 
-  avgs(21, ClosePrice) as ma21,
-	avgs(5, ClosePrice) as m5
-	from prices assuming asc TradeDate 
-	where Id in stocks group by Id
+avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS 
+  (select 
+  Id, TradeDate, ClosePrice,
+  avgs(21, ClosePrice),
+	avgs(5, ClosePrice)
+	from price assuming asc Id, asc TradeDate 
+	group by Id)
 	
-crossing as (select * 
+  
+  select Id as Id, TradeDate as CrossDate, ClosePrice as ClosePrice
 	from FLATTEN(avgInfo)
 	where Id = prev(Id) and 
-	(prev(ma5) < prev(ma21) and
-	 ma5 >= ma21) or 
-	(prev(ma5) > prev(ma21) and
-	ma5 <= m121
-	))
-	
-	select * from crossing assuming asc Id, asc TradeDate	
-END
+  // cross from over
+	(prev(m5) < prev(m21) & m5 >= m21)  
+  or 
+  // cross under
+	(prev(m5) > prev(m21) & m5 <= m21)
+
 
 /*
 Find the pair-wise coefficients of correlation in a set of 10 securities for a 2 year period. Sort the securities by the coefficient of correlation, indicating the pair of securities corresponding to that row. [Note: coefficient of correlation defined in appendix]
 */
-<q>stock10:til 10</q>
-corr
+// We don't expose use of adverbs in aquery, so we need to write this
+// verbatim q
+<q> pairCorr:{[x;y] cor'[x;y]} </q>
+
 WITH
-  subset as (select * from price where Id in stock10)
-	pairs as (select * from subset as s1,subset as s2 where s1.Id <> s2.Id)
-	
-	select corr(s1.ClosePrice, s2.ClosePrice) as correlation
-	from  pairs groupby s1.Id, s2.Id
-END
+  stocks(Id, ClosePrice) AS (select Id, ClosePrice 
+  from price assuming asc Id, asc TradeDate
+  where Id in stock10 and 
+  TradeDate >= startYear10 and
+  TradeDate < startYear10 + 365 * 2 
+  group by Id)
+
+  select pair1.Id as Id1, pair2.Id as Id2, 
+  pairCorr(pair1.ClosePrice, pair2.ClosePrice) as corrCoeff
+  from stocks AS pair1, stocks AS pair2 
+  where pair1.Id != pair2.Id
+  
 
 
 

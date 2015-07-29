@@ -616,7 +616,7 @@ built_in_fun: ABS 				{ $$ = make_builtInFunNode(env, $1); }
 	| REV 	                    { $$ = make_builtInFunNode(env, $1); }
 	| SUM 	                    { $$ = make_builtInFunNode(env, $1); }
 	| SUMS 		                { $$ = make_builtInFunNode(env, $1); }
-    | SQRT 		                { $$ = make_builtInFunNode(env, $1); }
+  | SQRT 		                { $$ = make_builtInFunNode(env, $1); }
 	| STDDEV 	                { $$ = make_builtInFunNode(env, $1); }
 	| MAKENULL	                { $$ = make_builtInFunNode(env, $1); }
 	;
