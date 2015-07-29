@@ -83,6 +83,20 @@ WITH
   group by Id, TradeDate
 
 
+/*
+For each stock in a specified list of 1000 stocks, find the differences between the daily high and daily low on the day of each split event during a specified period.
+*/
+
+WITH
+ pxdata(Id, TradeDate, HighPrice, LowPrice) AS
+   (select Id, TradeDate, HighPrice, LowPrice from price where Id in stock1000)
+   
+ splitdata(Id, TradeDate, SplitFactor) AS 
+ (select Id, SplitDate, SplitFactor from split
+   where Id in stock1000 and SplitDate between startPeriod and endPeriod)
+ 
+ select Id as Id, TradeDate as TradeDate, HighPrice - LowPrice as MaxDiff from
+ pxdata INNER JOIN splitdata USING (Id, TradeDate) assuming asc Id, asc TradeDate
 
 
 
@@ -91,22 +105,11 @@ WITH
 Calculate the value of the S&P500 and Russell 2000 index for a specified day using unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on the specified day
 TODO
 */
+// SP 500
+select sum(ClosePrice*Volume)/(8.9 ^ 9) as index from price where Id in SP500 and TradeDate = startPeriod
+// use all for russell 2000
+select sum(ClosePrice*Volume)/(8.9 ^ 9) from price where TradeDate = startPeriod
 
-
-/*
-For each stock in a specified list of 1000 stocks, find the differences between the daily high and daily low on the day of each split event during a specified period.
-*/
-<q>stocks:til 1000</q>
-<q>dates:.....</q>
-
-With
- stockPrices as (SELECT * from prices where Id in stocks)
- splitInfo(Id, TradeDate) as (SELECT Id, SplitDate from splits where SplitDate in dates)
- 
- select HighPrice - lowPrice
- stockPrices inner join splitInfo on (Id, TradeDate)
- group by Id, TradeDate
-END
 
 
 /*

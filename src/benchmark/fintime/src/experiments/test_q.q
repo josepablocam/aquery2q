@@ -30,9 +30,9 @@ result:select HighPrice:first HighPrice*prd 1%SplitFactor,LowPrice:first LowPric
 /
 For each stock in a specified list of 1000 stocks, find the differences between the daily high and daily low on the day of each split event during a specified period.
 \
-pxdata:select from price where Id in stock1000, TradeDate within (startPeriod;endPeriod)
-splitdata:update TradeDate:SplitDate from select from split where Id in stock1000, SplitDate within (startPeriod;endPeriod)
-result:select Id, SplitDate, diff:HighPrice - LowPrice from pxdata ij `Id`TradeDate xkey splitdata 
+pxdata:select Id, TradeDate, HighPrice, LowPrice from price where Id in stock1000, TradeDate within (startPeriod;endPeriod)
+splitdata:select Id, TradeDate:SplitDate, SplitFactor from split where Id in stock1000, SplitDate within (startPeriod;endPeriod)
+result:select Id, TradeDate, MaxDiff:HighPrice - LowPrice from `Id`TradeDate xasc pxdata ij `Id`TradeDate xkey splitdata 
 
 /
 Calculate the value of the S&P500 and Russell 2000 index for a specified day using unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on the specified day
