@@ -155,7 +155,8 @@ typedef enum LogicalQueryNodeType {
   SORT_COLS,
   SORT_EACH_COLS,
   EQUI_JOIN_ON,
-  POSS_PUSH_FILTER
+  POSS_PUSH_FILTER,
+  CONCATENATE_FUN,
 } LogicalQueryNodeType;
 
 typedef struct LogicalQueryNode {
@@ -191,6 +192,7 @@ LogicalQueryNode *make_PossPushFilter(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_groupby(LogicalQueryNode *t, ExprNode *exprs);
 LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_flatten(LogicalQueryNode *t);
+LogicalQueryNode *make_concatenate(IDListNode *nms);
 LogicalQueryNode *make_project(LogicalQueryNodeType proj_type,
                                LogicalQueryNode *t, NamedExprNode *namedexprs);
 LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols);

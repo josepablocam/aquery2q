@@ -1379,7 +1379,8 @@ GenList *choose_next_join(GenList *tables, ExprNode **join_filters_ptr,
 }
 
 int is_simple_from(LogicalQueryNode *node) {
-  return node->node_type == SIMPLE_TABLE || node->node_type == ALIAS;
+  return node->node_type == SIMPLE_TABLE || node->node_type == ALIAS ||
+    node->node_type == CONCATENATE_FUN || node->node_type == FLATTEN_FUN;
 }
 
 void optim_from(LogicalQueryNode **from, LogicalQueryNode **where) {

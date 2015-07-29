@@ -891,6 +891,24 @@ char *cg_flatten(LogicalQueryNode *node) {
   return t2;
 }
 
+char *cg_concatenate(LogicalQueryNode *node) {
+  char *t1 = gen_table_nm();
+  print_code(" %s:(upsert/)", t1);
+  print_code("(");
+  IDListNode *tablenms = node->params.cols;
+
+  while (tablenms != NULL) {
+    print_code("%s", tablenms->name);
+    tablenms = tablenms->next_sibling;
+    if (tablenms != NULL) {
+      print_code(";");
+    }
+  }
+  free_IDListNode(node->params.cols);
+  print_code(")\n");
+  return t1;
+}
+
 char *cg_queryPlan(LogicalQueryNode *node) {
   init_dc(); // initialize our dictionary that keeps track of column names
   return cg_LogicalQueryNode(node); // generate query plan and return table name
@@ -1156,6 +1174,8 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
     case POSS_PUSH_FILTER:
       result_table = cg_PossPushFilter(node);
       break;
+    case CONCATENATE_FUN:
+      result_table = cg_concatenate(node);
     }
   }
 

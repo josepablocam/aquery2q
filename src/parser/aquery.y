@@ -63,7 +63,7 @@ int silence_warnings = 0;
 %token ROWID ODD EVEN EVERY
 
  /* SQL: table operations */
-%token FLATTEN
+%token FLATTEN CONCATENATE
 
  /* SQL: joins */
 %token JOIN INNER OUTER FULL ON USING 
@@ -416,6 +416,7 @@ using_clause: USING '(' comma_identifier_list ')' 				{ $$ = $3; }
 	
 table_expression: table_expression_main							{ $$ = $1;               } 
 	| FLATTEN '(' table_expression_main ')'						{ $$ = make_flatten($3); }
+	| CONCATENATE '('  comma_identifier_list  ')'     { $$ = make_concatenate($3); }
 	;
 		
 table_expression_main: ID ID 									{ $$ = make_alias(make_table($1), $2); }

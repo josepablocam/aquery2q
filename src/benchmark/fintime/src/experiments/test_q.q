@@ -48,8 +48,8 @@ Find the 21-day and 5-day moving average price for a specified list of 1000 stoc
 \
 pxdata:select from price where Id in stock1000, TradeDate >= start6Mo, TradeDate < start6Mo + 31 * 6;
 splitdata:select from split where Id in stock1000, SplitDate >= start6Mo, SplitDate < start6Mo + 31 * 6;
-data:select HighPrice:first HighPrice*prd 1%SplitFactor,LowPrice:first LowPrice*prd 1%SplitFactor,ClosePrice:first ClosePrice*prd 1%SplitFactor,OpenPrice:first OpenPrice*prd 1%SplitFactor,Volume:first Volume*prd SplitFactor by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
-results:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from data;
+data:select  ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
+results:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc data;
 
 /
 (Based on the previous query) Find the points (specific days) when the 5-month moving average intersects the 21-day moving average for these stocks. The output is to be sorted by id and date.
@@ -65,13 +65,9 @@ pricedata:update m20:20 mavg price, m5:5 mavg price from `Id`TradeDate xasc pric
 pricedata:update sell:(m21 < m5) & prev[m21] >= prev m5, 
 	 							 buy: (m21 > m5) & prev[m21] <= prev m5 from pricedata where Id=prev Id;
 
-
-
-/
-Determine the value of $100,000 now if 1 year ago it was invested equally in 10 specified stocks (i.e. allocation for each stock is $10,000). The trading strategy is: When the 20-day moving average crosses over the 5-month moving average the complete allocation for that stock is invested and when the 20-day moving average crosses below the 5-month moving average the entire position is sold. The trades happen on the closing price of the trading day.
-\
-
 // TODO
+
+
 
 
 /

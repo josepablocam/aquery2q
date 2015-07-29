@@ -1,47 +1,71 @@
+// Loading in data and tables using verbatim q
+<q>
+path:hsym`$"/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/src/experiments"
+base:get ` sv path,`base
+price:get ` sv path,`price
+split:get ` sv path,`split
+
+// Retrieve randomly created lists
+stock10:get ` sv path,`stock10
+startYear10:get ` sv path,`startYear10
+stock1000:get ` sv path,`stock1000
+start300Days:get ` sv path,`start300Days
+startPeriod:get ` sv path,`startPeriod
+endPeriod:get ` sv path,`endPeriod
+SP500:get ` sv path,`SP500
+start6Mo:get ` sv path,`start6Mo
+</q>
+
+
 /*
 Get the closing price of a set of 10 stocks for a 10-year period and group into weekly, monthly and yearly aggregates. For each aggregate period determine the low, high and average closing price value. The output should be sorted by id and trade date.
 */
-
-function week(x){ x % 7  }
-function month(x){ x % 30 }
-function year(x){ x % 356 }
-
-// Data preparation
-// groups of stock etc
-
-
 
 //query 1
 WITH
  // our main source of information, localized, avoiding rerunning for each aggregation
  Target  as (select * 
- FROM price ASSUMING asc TradeDate
- where Id in ('Security_0', 'Security_1', 'Security_2', 
-'Security_3', 'Security_4', 'Security_5', 'Security_6', 'Security_7', 'Security_8',
-'Security_9') and date > '2005/08/30')
+ FROM price
+ where Id in stock10 and TradeDate >= startYear10 and TradeDate < startYear10 + 365 * 10
 
-  weekly(low, high, mean) as (select min(ClosePrice), 
-	 		 max(ClosePrice), avg(ClosePrice),
-			 'weekly' as level
-  		 from Target group by week(TradeDate))
+  weekly(Id, bucket, name, low, high, mean) as (select 
+    Id,
+    first(mod(TradeDate - startYear10, 7)),
+    'weekly',
+    min(ClosePrice), 
+	 	max(ClosePrice), avg(ClosePrice)
+  	from Target group by Id, mod(TradeDate - startYear10, 7)
 	
-  monthly(low, high, mean) as (select min(ClosePrice), 
-	 		 max(ClosePrice), avg(ClosePrice),
-			 'monthly' as level
-  		 from Target group by month(TradeDate))
+  monthly(Id, bucket, name, low, high, mean) as (select
+    Id,
+    first(mod(TradeDate - startYear10, 31)),
+    'monthly,
+     min(ClosePrice), 
+	 	 max(ClosePrice), 
+     avg(ClosePrice),
+  	 from Target group by Id, mod(TradeDate - startYear10, 31)
 	
-  yearly(low, high, mean) as (select min(ClosePrice), 
-	 		 max(ClosePrice), avg(ClosePrice),
-			 'yearly' as level
-  		 from target group by week(TradeDate))
+  yearly(Id, bucket, name, mean) as (select
+    first(mod(TradeDate - startYear10, 31)),
+    'monthly,
+     min(ClosePrice), 
+	 	 max(ClosePrice), 
+     avg(ClosePrice),
+  	 from Target group by Id, mod(TradeDate - startYear10, 31)
 		
-		select * from CONCATENATE(weekly, monthly, yearly)
+		select * from CONCATENATE(weekly, monthly, yearly) assuming asc Id, asc name, asc bucket
 END
 
 /*
 Adjust all prices and volumes (prices are multiplied by the split factor and volumes are divided by the split factor) for a set of 1000 stocks to reflect the split events during a specified 300 day period, assuming that events occur before the first trade of the split date. These are called split-adjusted prices and volumes.
 */
-select 
+
+WITH
+  pxdata as (select * from price where Id in stock1000 and TradeDate >= start300Days and TradeDate < start300Days + 300)
+  splitdata as (select from split where Id in stock1000 and SplitDate >= start300Days, SplitDate < start300Days + 300)
+result:select HighPrice:first HighPrice*prd 1%SplitFactor,LowPrice:first LowPrice*prd 1%SplitFactor,ClosePrice:first ClosePrice*prd 1%SplitFactor,OpenPrice:first OpenPrice*prd 1%SplitFactor,Volume:first Volume*prd SplitFactor by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
+
+
 
 
 

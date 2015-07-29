@@ -29,6 +29,7 @@ void print_table(LogicalQueryNode *table, int parent_id, int *id);
 void print_alias(LogicalQueryNode *alias, int parent_id, int *id);
 void print_sort(LogicalQueryNode *sort, int parent_id, int *id);
 void print_flatten(LogicalQueryNode *flat, int parent_id, int *id);
+void print_concatenate(LogicalQueryNode *concat, int parent_id, int *id);
 void print_values(LogicalQueryNode *vals, int parent_id, int *id);
 void print_expr(ExprNode *expr, int parent_id, int *id);
 void print_named_expr(NamedExprNode *nexpr, int parent_id, int *id);

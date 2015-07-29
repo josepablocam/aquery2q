@@ -48,6 +48,7 @@ void consume_verbatim_q();
 
  /* SQL: table operations */
 "FLATTEN"		{ count(); yylval.str = strdup(yytext); return FLATTEN;	 }
+"CONCATENATE" { count(); yylval.str = strdup(yytext); return CONCATENATE;	 }
 
  /* SQL: joins */
 "JOIN"			{ count(); return JOIN;     }

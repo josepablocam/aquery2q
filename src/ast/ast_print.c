@@ -179,6 +179,8 @@ void print_logical_query(LogicalQueryNode *step, int parent_id, int *id) {
     case SORT_EACH_COLS:
       print_sort_cols(step, parent_id, id);
       break;
+    case CONCATENATE_FUN:
+      print_concatenate(step, parent_id, id);
     }
   }
 }
@@ -265,6 +267,12 @@ void print_flatten(LogicalQueryNode *flat, int parent_id, int *id) {
   int self_id =
       print_self(parent_id, id, LogicalQueryNodeTypeName[flat->node_type]);
   print_logical_query(flat->arg, self_id, id);
+}
+
+void print_concatenate(LogicalQueryNode *concat, int parent_id, int *id) {
+  int self_id =
+      print_self(parent_id, id, LogicalQueryNodeTypeName[concat->node_type]);
+  print_id_list(concat->params.cols, self_id, id);
 }
 
 void print_values(LogicalQueryNode *vals, int parent_id, int *id) {

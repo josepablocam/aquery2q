@@ -668,6 +668,13 @@ LogicalQueryNode *make_flatten(LogicalQueryNode *t) {
   return app;
 }
 
+LogicalQueryNode *make_concatenate(IDListNode *nms) {
+  LogicalQueryNode *app = make_EmptyLogicalQueryNode(CONCATENATE_FUN);
+  // TODO: CHANGE THIS. We shouldn't be abusing the struct like this...., this shouldn't be in cols
+  app->params.cols = nms;
+  return app;
+}
+
 LogicalQueryNode *make_project(LogicalQueryNodeType proj_type,
                                LogicalQueryNode *t, NamedExprNode *namedexprs) {
   LogicalQueryNode *proj = make_EmptyLogicalQueryNode(proj_type);
