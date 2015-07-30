@@ -1,0 +1,191 @@
+// Loading in data and tables using verbatim q
+<q>
+path:hsym`$"/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/src/experiments"
+base:get ` sv path,`base
+price:get ` sv path,`price
+split:get ` sv path,`split
+
+// Retrieve randomly created lists
+stock10:get ` sv path,`stock10
+startYear10:get ` sv path,`startYear10
+stock1000:get ` sv path,`stock1000
+start300Days:get ` sv path,`start300Days
+startPeriod:get ` sv path,`startPeriod
+endPeriod:get ` sv path,`endPeriod
+SP500:get ` sv path,`SP500
+start6Mo:get ` sv path,`start6Mo
+</q>
+
+
+/*
+Get the closing price of a set of 10 stocks for a 10-year period and group into weekly, monthly and yearly aggregates. For each aggregate period determine the low, high and average closing price value. The output should be sorted by id and trade date.
+*/
+
+//query 1
+WITH
+ // our main source of information, localized, avoiding rerunning for each aggregation
+ Target(Id, TradeDate, ClosePrice)  AS (select 
+ Id, TradeDate,ClosePrice
+ FROM price
+ where Id in stock10 and TradeDate >= startYear10 and TradeDate < startYear10 + 365 * 10)
+
+  weekly(Id, bucket, name, low, high, mean) AS (select 
+    Id,
+    first(floor((TradeDate - startYear10)/7)),
+    "weekly",
+    min(ClosePrice), 
+	 	max(ClosePrice), avg(ClosePrice)
+  	from Target group by Id, floor((TradeDate - startYear10)/7))
+	
+  monthly(Id, bucket, name, low, high, mean) AS (select
+    Id,
+    first(floor((TradeDate - startYear10)/31)),
+    "monthly",
+     min(ClosePrice), 
+	 	 max(ClosePrice), 
+     avg(ClosePrice)
+  	 from Target group by Id, floor((TradeDate - startYear10)/31))
+	
+  yearly(Id, bucket, name, low, high, mean) AS (select
+    Id,
+    first(floor((TradeDate - startYear10)/365)),
+    "yearly",
+     min(ClosePrice), 
+	 	 max(ClosePrice), 
+     avg(ClosePrice)
+  	 from Target group by Id, floor((TradeDate - startYear10)/365))
+		
+select * from CONCATENATE(weekly, monthly, yearly) assuming asc Id, asc name, asc bucket
+
+
+/*
+Adjust all prices and volumes (prices are multiplied by the split factor and volumes are divided by the split factor) for a set of 1000 stocks to reflect the split events during a specified 300 day period, assuming that events occur before the first trade of the split date. These are called split-adjusted prices and volumes.
+*/
+
+WITH
+  pxdata(Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume)
+  AS (select Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume
+   from price where Id in stock1000 and TradeDate >= start300Days and TradeDate < start300Days + 300)
+   
+  splitdata(Id, SplitDate, SplitFactor) 
+  AS (select Id, SplitDate, SplitFactor from split where Id in stock1000 and SplitDate >= start300Days and  SplitDate < start300Days + 300)
+  
+  
+  select
+  Id as Id, TradeDate as TradeDate,
+  first(HighPrice * prd(1 / SplitFactor)) as HighPrice,
+  first(LowPrice * prd(1 / SplitFactor)) as LowPrice,
+  first(ClosePrice * prd(1 / SplitFactor)) as ClosePrice,
+  first(OpenPrice * prd(1 / SplitFactor)) as OpenPrice,
+  first(Volume * prd(SplitFactor)) as Volume
+  from
+  pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
+  group by Id, TradeDate
+
+
+/*
+For each stock in a specified list of 1000 stocks, find the differences between the daily high and daily low on the day of each split event during a specified period.
+*/
+
+WITH
+ pxdata(Id, TradeDate, HighPrice, LowPrice) AS
+   (select Id, TradeDate, HighPrice, LowPrice from price where Id in stock1000)
+   
+ splitdata(Id, TradeDate, SplitFactor) AS 
+ (select Id, SplitDate, SplitFactor from split
+   where Id in stock1000 and SplitDate between startPeriod and endPeriod)
+ 
+ select Id as Id, TradeDate as TradeDate, HighPrice - LowPrice as MaxDiff from
+ pxdata INNER JOIN splitdata USING (Id, TradeDate) assuming asc Id, asc TradeDate
+
+
+
+
+/*
+Calculate the value of the S&P500 and Russell 2000 index for a specified day using unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on the specified day
+TODO
+*/
+// SP 500
+select sum(ClosePrice*Volume)/(8.9 ^ 9) as index from price where Id in SP500 and TradeDate = startPeriod
+// use all for russell 2000
+select sum(ClosePrice*Volume)/(8.9 ^ 9) from price where TradeDate = startPeriod
+
+
+
+/*
+Find the 21-day and 5-day moving average price for a specified list of 1000 stocks during a 6-month period. (Use split adjusted prices)
+*/
+WITH
+avgInfo(Id, TradeDate, ma21, m5) AS (select 
+  Id, TradeDate,
+  avgs(21, ClosePrice),
+	avgs(5, ClosePrice) 
+	from price assuming asc TradeDate 
+	where Id in stock1000 group by Id)
+	
+select 
+Id as Id, TradeDate as TradeDate, ma21 as ma21, m5 as m5
+from FLATTEN(avgInfo)
+
+
+/*
+(Based on the previous query) 
+Modified: For now, just doing moving average not with respect to last query,
+as A2Q has not yet implemented creating a table from a query, which is needed to store
+the prior queries result (without repeating the query again). Performing on all stock instead
+
+Find the points (specific days) when the 5-month moving average intersects the 21-day moving average for these stocks. The output is to be sorted by id and date.
+*/
+WITH
+avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS 
+  (select 
+  Id, TradeDate, ClosePrice,
+  avgs(21, ClosePrice),
+	avgs(5, ClosePrice)
+	from price assuming asc Id, asc TradeDate 
+	group by Id)
+	
+  
+  select Id as Id, TradeDate as CrossDate, ClosePrice as ClosePrice
+	from FLATTEN(avgInfo)
+	where Id = prev(Id) and 
+  // cross from over
+	(prev(m5) < prev(m21) & m5 >= m21)  
+  or 
+  // cross under
+	(prev(m5) > prev(m21) & m5 <= m21)
+
+
+/*
+Find the pair-wise coefficients of correlation in a set of 10 securities for a 2 year period. Sort the securities by the coefficient of correlation, indicating the pair of securities corresponding to that row. [Note: coefficient of correlation defined in appendix]
+*/
+// We don't expose use of adverbs in aquery, so we need to write this
+// verbatim q
+<q>pairCorr:{[x;y] cor'[x;y]} </q>
+
+WITH
+  stocks(Id, ClosePrice) AS (select Id, ClosePrice 
+  from price assuming asc Id, asc TradeDate
+  where Id in stock10 and 
+  TradeDate >= startYear10 and
+  TradeDate < startYear10 + 365 * 2 
+  group by Id)
+
+  select pair1.Id as Id1, pair2.Id as Id2, 
+  pairCorr(pair1.ClosePrice, pair2.ClosePrice) as corrCoeff
+  from stocks AS pair1, stocks AS pair2 
+  where pair1.Id != pair2.Id
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
