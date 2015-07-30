@@ -12,7 +12,7 @@ startPeriod:get ` sv path,`startPeriod
 endPeriod:get ` sv path,`endPeriod
 SP500:get ` sv path,`SP500
 start6Mo:get ` sv path,`start6Mo
-
+Russell2000:get ` sv path,`Russell2000
 
 /
 	Get the closing price of a set of 10 stocks for a 10-year period and group into weekly, monthly and yearly aggregates. For each aggregate period determine the low, high and average closing price value. The output should be sorted by id and trade date.
@@ -63,12 +63,11 @@ Calculate the value of the S&P500 and Russell 2000 index for a specified day usi
 Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
 \
 .qtest.q3:{
-	select index:sum[ClosePrice*Volume]%8.9e9 from price where Id in SP500,TradeDate = startPeriod
+	select index:sum[ClosePrice*Volume]%8.9e9 from price where Id in SP500, TradeDate = startPeriod
  }
 
-// we have only 2000 stocks here, so take all 
 .qtest.q4:{
-	select index:sum[ClosePrice*Volume]%8.9e9 from price where TradeDate = startPeriod
+	select index:sum[ClosePrice*Volume]%8.9e9 from price where Id in Russell2000, TradeDate = startPeriod
  }
 
 /

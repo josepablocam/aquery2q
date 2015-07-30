@@ -1,0 +1,16 @@
+Preliminary results from the fintime benchmarking process (modified currently)
+
+To reproduce, create the historical data necessary using the code at http://cs.nyu.edu/shasha/fintime.d/gen.html
+Steps
+1 - call `make` in the directory with the C++ code available above
+2 - call `./histgen 5000` to generate a history of 5000 securities, with the default 4000 days
+3 - move the files generated to this folder
+
+To create the databases (the files above are pipe delimited)
+run
+`q make_dbs.q`
+
+Finally, you can run the experiments with
+`./run_benchmark.sh`, which performs aquery compilation and runs the 2 examples. The first set of results correspond to equivalence verification (are the aquery and q results equal?), the second set are aquery run times, and the final are q runtimes.
+
+

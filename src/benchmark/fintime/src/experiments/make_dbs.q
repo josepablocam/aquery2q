@@ -105,6 +105,7 @@ startPeriod:first 1?exec asc distinct TradeDate from price;
 endPeriod:first 1?exec distinct TradeDate from price where TradeDate > startPeriod;
 SP500:neg[500]?base`Id;
 start6Mo:first 1?exec distinct TradeDate from price where TradeDate.month <= -6 + max TradeDate.month;
+Russell2000:neg[2000]?base`Id;
 
 save `:stock10
 save `:startYear10
@@ -114,7 +115,7 @@ save `:startPeriod
 save `:endPeriod
 save `:SP500
 save `:start6Mo
-
+save `:Russell2000
 
 
 

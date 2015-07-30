@@ -13,6 +13,7 @@ start300Days:get ` sv path,`start300Days
 startPeriod:get ` sv path,`startPeriod
 endPeriod:get ` sv path,`endPeriod
 SP500:get ` sv path,`SP500
+Russell2000:get ` sv path,`Russell2000
 start6Mo:get ` sv path,`start6Mo
 </q>
 
@@ -108,8 +109,8 @@ TODO
 // SP 500
 select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where Id in SP500 and TradeDate = startPeriod
 
-// use all for russell 2000
-select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where TradeDate = startPeriod
+// russell 2000
+select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where Id in Russell2000 and TradeDate = startPeriod
 
 
 
