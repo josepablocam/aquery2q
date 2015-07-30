@@ -21,7 +21,6 @@ start6Mo:get ` sv path,`start6Mo
 Get the closing price of a set of 10 stocks for a 10-year period and group into weekly, monthly and yearly aggregates. For each aggregate period determine the low, high and average closing price value. The output should be sorted by id and trade date.
 */
 
-//query 1
 WITH
  // our main source of information, localized, avoiding rerunning for each aggregation
  Target(Id, TradeDate, ClosePrice)  AS (select 
@@ -89,7 +88,8 @@ For each stock in a specified list of 1000 stocks, find the differences between 
 
 WITH
  pxdata(Id, TradeDate, HighPrice, LowPrice) AS
-   (select Id, TradeDate, HighPrice, LowPrice from price where Id in stock1000)
+   (select Id, TradeDate, HighPrice, LowPrice from price where Id in stock1000 and
+   TradeDate between startPeriod and endPeriod)
    
  splitdata(Id, TradeDate, SplitFactor) AS 
  (select Id, SplitDate, SplitFactor from split
@@ -106,9 +106,10 @@ Calculate the value of the S&P500 and Russell 2000 index for a specified day usi
 TODO
 */
 // SP 500
-select sum(ClosePrice*Volume)/(8.9 ^ 9) as index from price where Id in SP500 and TradeDate = startPeriod
+select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where Id in SP500 and TradeDate = startPeriod
+
 // use all for russell 2000
-select sum(ClosePrice*Volume)/(8.9 ^ 9) from price where TradeDate = startPeriod
+select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where TradeDate = startPeriod
 
 
 
@@ -116,16 +117,34 @@ select sum(ClosePrice*Volume)/(8.9 ^ 9) from price where TradeDate = startPeriod
 Find the 21-day and 5-day moving average price for a specified list of 1000 stocks during a 6-month period. (Use split adjusted prices)
 */
 WITH
-avgInfo(Id, TradeDate, ma21, m5) AS (select 
-  Id, TradeDate,
-  avgs(21, ClosePrice),
-	avgs(5, ClosePrice) 
-	from price assuming asc TradeDate 
-	where Id in stock1000 group by Id)
+  // Price data for the period
+ pxdata(Id, TradeDate, ClosePrice) AS
+   (select Id, TradeDate, ClosePrice from price 
+   where Id in stock1000 and TradeDate >= start6Mo and TradeDate < start6Mo + 31 * 6)
+ 
+ // splits that happened  
+ splitdata(Id, SplitDate, SplitFactor) AS 
+ (select Id, SplitDate, SplitFactor from split
+   where Id in stock1000 and SplitDate >= start6Mo and SplitDate < start6Mo + 31 * 6)
+  
+ // prices after adjusting for splits
+ splitadj(Id, TradeDate, ClosePrice) AS
+   (select Id, TradeDate, first(ClosePrice * prd(1 / SplitFactor))
+    from 
+    pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
+    group by Id, TradeDate)
+  
+  // moving averages
+  avgInfo(Id, TradeDate, m21, m5) AS (select 
+    Id, TradeDate,
+    avgs(21, ClosePrice),
+  	avgs(5, ClosePrice) 
+  	from splitadj assuming asc Id, asc TradeDate 
+    group by Id)
 	
-select 
-Id as Id, TradeDate as TradeDate, ma21 as ma21, m5 as m5
-from FLATTEN(avgInfo)
+  select Id as Id, TradeDate as TradeDate, m21 as m21, m5 as m5
+  from FLATTEN(avgInfo)
+   
 
 
 /*

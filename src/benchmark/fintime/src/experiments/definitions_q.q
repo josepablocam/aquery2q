@@ -75,13 +75,14 @@ Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
 Find the 21-day and 5-day moving average price for a specified list of 1000 stocks during a 6-month period. (Use split adjusted prices)
 \
 .qtest.q5:{
-	pxdata:select from price where Id in stock1000, TradeDate >= start6Mo,
+	pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, TradeDate >= start6Mo,
 	 TradeDate < start6Mo + 31 * 6;
-	splitdata:select from split where Id in stock1000, SplitDate >= start6Mo, 
-		SplitDate < start6Mo + 31 * 6;
-	data:select  ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate 
+	splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
+    SplitDate >= start6Mo, SplitDate < start6Mo + 31 * 6;
+	data:select ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate 
 		from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
-	0!update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc data
+  avgdata:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc data;
+  select Id, TradeDate, m21, m5 from avgdata
  }
  
 /

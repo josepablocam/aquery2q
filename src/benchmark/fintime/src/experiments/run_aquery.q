@@ -1,6 +1,6 @@
 // Compile aquery, with silenced warnings (since we're performing a cross in benchmark)
-a2qPath:"/Users/josecambronero/MS/S15/aquery/src/a2q"
-system a2qPath," -c -s -a 1 -o compiled.q definitions_aquery.a"
+// make sure you have a2q in your path before running
+system "a2q -c -s -a 1 -o compiled.q definitions_aquery.a"
 
 \l compiled.q
 queries:`$"q",/:string til 8
