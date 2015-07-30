@@ -34,7 +34,7 @@ WITH
     first(floor((TradeDate - startYear10)/7)),
     "weekly",
     min(ClosePrice), 
-	 	max(ClosePrice), avg(ClosePrice)
+	max(ClosePrice), avg(ClosePrice)
   	from Target group by Id, floor((TradeDate - startYear10)/7))
 	
   monthly(Id, bucket, name, low, high, mean) AS (select
@@ -42,7 +42,7 @@ WITH
     first(floor((TradeDate - startYear10)/31)),
     "monthly",
      min(ClosePrice), 
-	 	 max(ClosePrice), 
+	 max(ClosePrice), 
      avg(ClosePrice)
   	 from Target group by Id, floor((TradeDate - startYear10)/31))
 	
@@ -51,7 +51,7 @@ WITH
     first(floor((TradeDate - startYear10)/365)),
     "yearly",
      min(ClosePrice), 
-	 	 max(ClosePrice), 
+	 max(ClosePrice), 
      avg(ClosePrice)
   	 from Target group by Id, floor((TradeDate - startYear10)/365))
 		
@@ -63,12 +63,16 @@ Adjust all prices and volumes (prices are multiplied by the split factor and vol
 */
 
 WITH
-  pxdata(Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume)
-  AS (select Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume
-   from price where Id in stock1000 and TradeDate >= start300Days and TradeDate < start300Days + 300)
+  pxdata(Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume) AS 
+    (select Id, TradeDate, HighPrice, LowPrice, 
+      ClosePrice, OpenPrice, Volume
+      from price where Id in stock1000 and TradeDate >= start300Days 
+      and TradeDate < start300Days + 300)
    
-  splitdata(Id, SplitDate, SplitFactor) 
-  AS (select Id, SplitDate, SplitFactor from split where Id in stock1000 and SplitDate >= start300Days and  SplitDate < start300Days + 300)
+  splitdata(Id, SplitDate, SplitFactor) AS 
+    (select Id, SplitDate, SplitFactor 
+      from split where Id in stock1000 and SplitDate >= start300Days 
+      and SplitDate < start300Days + 300)
   
   
   select
@@ -89,12 +93,14 @@ For each stock in a specified list of 1000 stocks, find the differences between 
 
 WITH
  pxdata(Id, TradeDate, HighPrice, LowPrice) AS
-   (select Id, TradeDate, HighPrice, LowPrice from price where Id in stock1000 and
-   TradeDate between startPeriod and endPeriod)
+   (select Id, TradeDate, HighPrice, LowPrice 
+    from price where Id in stock1000 and
+    TradeDate between startPeriod and endPeriod)
    
  splitdata(Id, TradeDate, SplitFactor) AS 
- (select Id, SplitDate, SplitFactor from split
-   where Id in stock1000 and SplitDate between startPeriod and endPeriod)
+   (select Id, SplitDate, SplitFactor 
+    from split where Id in stock1000 and 
+    SplitDate between startPeriod and endPeriod)
  
  select Id as Id, TradeDate as TradeDate, HighPrice - LowPrice as MaxDiff from
  pxdata INNER JOIN splitdata USING (Id, TradeDate) assuming asc Id, asc TradeDate
@@ -104,7 +110,6 @@ WITH
 
 /*
 Calculate the value of the S&P500 and Russell 2000 index for a specified day using unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on the specified day
-TODO
 */
 // SP 500
 select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where Id in SP500 and TradeDate = startPeriod
@@ -158,10 +163,8 @@ Find the points (specific days) when the 5-month moving average intersects the 2
 */
 WITH
 avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS 
-  (select 
-  Id, TradeDate, ClosePrice,
-  avgs(21, ClosePrice),
-	avgs(5, ClosePrice)
+  (select Id, TradeDate, ClosePrice,
+    avgs(21, ClosePrice),avgs(5, ClosePrice)
 	from price assuming asc Id, asc TradeDate 
 	group by Id)
 	
@@ -169,7 +172,7 @@ avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS
   select Id as Id, TradeDate as CrossDate, ClosePrice as ClosePrice
 	from FLATTEN(avgInfo)
 	where Id = prev(Id) and 
-  // cross from over
+  // cross over
 	(prev(m5) < prev(m21) & m5 >= m21)  
   or 
   // cross under
