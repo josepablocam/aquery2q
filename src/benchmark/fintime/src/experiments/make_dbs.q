@@ -55,6 +55,14 @@ split:adjFloatCols[split];
 .influx.address:"http://",.influx.HOST,":",.influx.PORT;
 .influx.createdb:{ system "curl -G ",.influx.address,"/query --data-urlencode \"q=CREATE DATABASE ",string[x],"\""};
 .influx.write:{[db;msg] strmsg:"\n" sv string (),msg; system "curl -i -XPOST '",.influx.address,"/write?db=",string[db],"' --data-binary '",strmsg,"'"};
+COUNTER:0
+SLEEP:15 // seconds
+.influx.writeAndSleep{[ct;db;msg]
+  // when we hit limit, sleep, and then reset
+  if[COUNTER=ct;system "sleep ",string SLEEP;`COUNTER set 0];
+  .influx.write[db;msg];
+  `COUNTER set COUNTER+1
+ }
 .influx.mkpairs:{[t;c] ","sv/:flip ("=" sv/:) each string c,/:'t c,:()};
 
 // default precision in influxdb is nanoseconds
@@ -71,7 +79,8 @@ basetimestamps:string exec .influx.nanosecs CreateDate from base;
 // influxdb requires at least one "field-value" pair, so insert a dummy one
 basefields:count[base]#enlist "DummyValue=1"
 basemsg:`$'"base,",/:" "sv/:flip (basetags;basefields;basetimestamps);
-.influx.write[`benchmarking; ] each 1000 cut basemsg;
+//.influx.write[`benchmarking; ] each 1000 cut basemsg;
+.influx.writeAndSleep[100;`benchmarking;] each 1000 cut basemsg;
 
 // price
 // we'll pretend the date is the time at the start of the day
@@ -80,7 +89,8 @@ pricefields:.influx.mkpairs[price;(cols price) except `Id`TradeDate];
 // we'll create a timestamp based off of the Tradedate
 pricetimestamps:string exec .influx.nanosecs TradeDate from price;
 pricemsg:`$'"price,",/:" "sv/:flip (pricetags;pricefields;pricetimestamps);
-.influx.write[`benchmarking; ] each 1000 cut pricemsg;
+//.influx.write[`benchmarking; ] each 1000 cut pricemsg;
+.influx.writeAndSleep[100;`benchmarking;] each 1000 cut pricemsg;
 
 
 // split
@@ -90,8 +100,8 @@ splitfields:.influx.mkpairs[split;`SplitFactor];
 // we;ll use the entry date as a timestamp
 splittimestamp:string exec .influx.nanosecs SplitDate from split
 splitmsg:`$'"split,",/:" "sv/:flip (splittags;splitfields;splittimestamp)
-.influx.write[`benchmarking; ] each 1000 cut splitmsg;
-
+//.influx.write[`benchmarking; ] each 1000 cut splitmsg;
+.influx.writeAndSleep[100;`benchmarking;] each 1000 cut splitmsg;
 
 /////////////////////////////////
 //                             //
