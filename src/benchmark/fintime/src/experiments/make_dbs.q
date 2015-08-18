@@ -57,11 +57,12 @@ split:adjFloatCols[split];
 .influx.write:{[db;msg] strmsg:"\n" sv string (),msg; system "curl -i -XPOST '",.influx.address,"/write?db=",string[db],"' --data-binary '",strmsg,"'"};
 COUNTER:0
 SLEEP:15 // seconds
-.influx.writeAndSleep{[ct;db;msg]
+.influx.writeAndSleep:{[ct;db;msg]
   // when we hit limit, sleep, and then reset
   if[COUNTER=ct;system "sleep ",string SLEEP;`COUNTER set 0];
-  .influx.write[db;msg];
-  `COUNTER set COUNTER+1
+  response:.influx.write[db;msg];
+  `COUNTER set COUNTER+1;
+  response
  }
 .influx.mkpairs:{[t;c] ","sv/:flip ("=" sv/:) each string c,/:'t c,:()};
 
