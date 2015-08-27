@@ -168,8 +168,8 @@ typedef struct LogicalQueryNode {
   IDListNode *tables_involved; // used in optimizer
   union {
     char *name; // table name or alias
-    NamedExprNode *namedexprs; // c1 * 2 as c2, c1 * 2 (nil)
-    ExprNode *exprs; // on, search conditions, grouping
+    NamedExprNode *namedexprs; // c1 * 2 as c2, c1 * 2 (nil), grouping
+    ExprNode *exprs; // on, search conditions
     IDListNode *cols; // using
     OrderNode *order; // sorting
   } params;
@@ -189,7 +189,7 @@ LogicalQueryNode *make_joinUsing(LogicalQueryNodeType jointype,
 LogicalQueryNode *make_cross(LogicalQueryNode *t1, LogicalQueryNode *t2);
 LogicalQueryNode *make_filterWhere(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_PossPushFilter(LogicalQueryNode *t, ExprNode *conds);
-LogicalQueryNode *make_groupby(LogicalQueryNode *t, ExprNode *exprs);
+LogicalQueryNode *make_groupby(LogicalQueryNode *t, NamedExprNode *exprs);
 LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_flatten(LogicalQueryNode *t);
 LogicalQueryNode *make_concatenate(IDListNode *nms);

@@ -691,11 +691,11 @@ LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols) {
   return del;
 }
 
-LogicalQueryNode *make_groupby(LogicalQueryNode *t, ExprNode *exprs) {
+LogicalQueryNode *make_groupby(LogicalQueryNode *t, NamedExprNode *namedexprs) {
   LogicalQueryNode *group = make_EmptyLogicalQueryNode(GROUP_BY);
   group->arg = t;
-  group->params.exprs = exprs;
-  group->order_dep = SAFE_ORDER_DEP(exprs);
+  group->params.namedexprs = namedexprs;
+  group->order_dep = SAFE_ORDER_DEP(namedexprs);
   return group;
 }
 

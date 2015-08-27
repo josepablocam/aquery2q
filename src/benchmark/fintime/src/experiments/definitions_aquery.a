@@ -34,7 +34,7 @@ WITH
     first(floor((TradeDate - startYear10)/7)),
     "weekly",
     min(ClosePrice), 
-	max(ClosePrice), avg(ClosePrice)
+	  max(ClosePrice), avg(ClosePrice)
   	from Target group by Id, floor((TradeDate - startYear10)/7))
 	
   monthly(Id, bucket, name, low, high, mean) AS (select
@@ -42,7 +42,7 @@ WITH
     first(floor((TradeDate - startYear10)/31)),
     "monthly",
      min(ClosePrice), 
-	 max(ClosePrice), 
+	   max(ClosePrice), 
      avg(ClosePrice)
   	 from Target group by Id, floor((TradeDate - startYear10)/31))
 	
@@ -51,7 +51,7 @@ WITH
     first(floor((TradeDate - startYear10)/365)),
     "yearly",
      min(ClosePrice), 
-	 max(ClosePrice), 
+	   max(ClosePrice), 
      avg(ClosePrice)
   	 from Target group by Id, floor((TradeDate - startYear10)/365))
 		

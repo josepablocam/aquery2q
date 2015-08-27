@@ -142,7 +142,7 @@ int silence_warnings = 0;
 %type <plan> base_query
 %type <order> order_spec order_specs order_specs_tail
 
-%type <namedexpr> select_elem select_clause_tail
+%type <namedexpr> select_elem select_clause_tail groupby_elem groupby_tail
 %type <exprnode> column_name
 
 
@@ -305,10 +305,22 @@ where_clause: WHERE and_search_condition 		{ $$ = make_filterWhere(NULL, $2); }
 	| /* epsilon */							    { $$ = NULL; }	;
 
 	
-groupby_clause: GROUP BY comma_value_expression_list having_clause	{ $$ = pushdown_logical($4, make_groupby(NULL, $3));   }
-	| /* epsilon */													{ $$ = NULL; }
-	;
-	
+//groupby_clause: GROUP BY comma_value_expression_list having_clause	{ $$ = pushdown_logical($4, make_groupby(NULL, $3));   }
+//	| /* epsilon */													{ $$ = NULL; }
+//	;
+
+groupby_clause: GROUP BY groupby_elem groupby_tail having_clause     { $3->next_sibling = $4; $$ = pushdown_logical($5, make_groupby(NULL, $3)); }
+  ;
+groupby_tail: ',' groupby_elem groupby_tail                { $2->next_sibling = $3; $$ = $2; }
+  | /* epsilon */                                          { $$ = NULL; }
+  ;
+
+// An option of anonymous group bys, that if included in selection results
+// in re-computation of groups
+groupby_elem: value_expression LC_AS ID  { $$ = make_NamedExprNode($3, $1); }
+  |	value_expression				{ $$ = make_NamedExprNode(NULL, $1); }
+  ;
+
 having_clause: HAVING and_search_condition 						    { annotate_groupedExpr($2); $$ = make_filterHaving(NULL, $2); }
 	| /* epsilon */													{ $$ =  NULL; }
 	;

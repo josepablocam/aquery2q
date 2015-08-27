@@ -238,7 +238,7 @@ void print_groupBy(LogicalQueryNode *groupBy, int parent_id, int *id) {
   int self_id =
       print_self(parent_id, id, LogicalQueryNodeTypeName[groupBy->node_type]);
   int groups_id = print_self(self_id, id, "group_exprs");
-  print_expr(groupBy->params.exprs, groups_id, id);
+  print_named_expr(groupBy->params.namedexprs, groups_id, id);
   print_logical_query(groupBy->arg, self_id, id);
 }
 
