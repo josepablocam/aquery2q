@@ -160,7 +160,6 @@ LogicalQueryNode *deepcopy_LogicalQueryNode(LogicalQueryNode *node) {
     case FULL_OUTER_JOIN_ON: // intentional fall through
     case FILTER_WHERE: // intentional fall through
     case FILTER_HAVING: // intentional fall through
-    case GROUP_BY: // intentional fall through
     case EXPLICIT_VALUES: // intentional fall through
       copy->params.exprs = deepcopy_ExprNode(node->params.exprs);
       break;
@@ -172,6 +171,7 @@ LogicalQueryNode *deepcopy_LogicalQueryNode(LogicalQueryNode *node) {
       break;
     case PROJECT_SELECT: // intentional fall through
     case PROJECT_UPDATE: // intentional fall through
+    case GROUP_BY: // intentional fall through
       copy->params.namedexprs = deepcopy_NamedExprNode(node->params.namedexprs);
       break;
     case SORT: // intentional fall through
@@ -669,15 +669,19 @@ IDListNode *collect_AllColsProj(LogicalQueryNode *node) {
   return result;
 }
 
-// Collects all columns referenced in a group-by/having clause
+
 IDListNode *collect_AllColsGroupby(LogicalQueryNode *groupby) {
-  if (groupby == NULL) {
-    return NULL;
-  } else {
-    return unionIDList(collect_AllCols(groupby->params.exprs),
-                       collect_AllColsGroupby(groupby->arg));
+  OPTIM_PRINT_DEBUG("collecting all col refs in named expr for group by ");
+  IDListNode *result = NULL;
+  NamedExprNode *curr = groupby->params.namedexprs;
+
+  while (curr != NULL) {
+    result = unionIDList(result, collect_AllCols(curr->expr));
+    curr = curr->next_sibling;
   }
+  return result;
 }
+
 
 // Add element add to end of list, expression order might matter, so this
 // maintains

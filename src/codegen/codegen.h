@@ -54,6 +54,7 @@ char *gc_ProjectSelect(LogicalQueryNode *proj);
 void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr,
                        int id_ctr); // dictionary
 char *cg_groupBy(LogicalQueryNode *node);
+void groupby_shadow_cols(NamedExprNode *groups);
 NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs);
 char *cg_flatten(LogicalQueryNode *node);
 char *cg_LogicalQueryNode(LogicalQueryNode *node);

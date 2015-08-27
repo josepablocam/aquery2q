@@ -696,6 +696,13 @@ LogicalQueryNode *make_groupby(LogicalQueryNode *t, NamedExprNode *namedexprs) {
   group->arg = t;
   group->params.namedexprs = namedexprs;
   group->order_dep = SAFE_ORDER_DEP(namedexprs);
+  // Note that for group by, we tag the whole thing as OD if there are any
+  // components in it that are OD, so we traverse the named expressions for any named expr that
+  // because sorting I group means sorting everything used for that grouping clause
+  NamedExprNode *curr = NULL;
+  for (curr = namedexprs; curr != NULL && !group->order_dep; curr = curr->next_sibling) {
+      group->order_dep = SAFE_ORDER_DEP(curr);
+    }
   return group;
 }
 

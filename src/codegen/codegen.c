@@ -153,18 +153,10 @@ void add_to_dt(char *alias, char *tbl) {
 void sort_where_clause_by_ix(char *tbl) { print_code(" .aq.swix[%s;] ", tbl); }
 
 // account for pre-computed group expressions when projecting
-// e.g. if you calculated 2 + c1 as a group by, and then your projection has an
-// element
-// 2 + c1 as ..., then you should not compute 2 + c1 again, but just taking the
-// value of the grouped
-// column. This solves having to apply first to get it in atom form. Matches up
-// with mysql semantics
-// and avoid unnecessary recomputing. This is done by explicitly checking the
-// value in a dictionary
-// used for projection with equality with the value in a dictionary used for
-// grouping. So x + 2 is
-// different from 2 + x
-void acct_for_computed_groupBys() {
+// Only used for simple groups (just a column reference, or simple calc
+// with just operators). Everything else, you should
+// reference by using a group by with a name to avoid recomputing
+void acct_for_simple_groupBys() {
   print_code(" .aq.acctgrps[ ; %s]",
              AQ_GROUPED_EXPR); // done as projected q function
 }
@@ -691,7 +683,7 @@ char *cg_ProjectSelect(LogicalQueryNode *proj) {
   char *t2 = gen_table_nm();
   print_code(" %s:?[%s;();0b;", t2, t1);
   if (proj->params.namedexprs->expr->is_grouped) {
-    acct_for_computed_groupBys();
+    acct_for_simple_groupBys();
   }
   cg_NameExprTuples(t1, proj->params.namedexprs, 0);
   print_code("];\n");
@@ -833,18 +825,30 @@ void cg_SortIx(OrderNode *ordnode) {
 char *cg_groupBy(LogicalQueryNode *node) {
   char *t1 = cg_LogicalQueryNode(node->arg);
   char *t2 = gen_table_nm();
-  NamedExprNode *named_groups = groupExpr_to_NamedGroupExpr(
-      node->params.exprs->first_child); // expressions are in list container, so
-                                        // take out with ->first_child
   print_code(" %s:?[%s;();", t2, t1);
   print_code("%s:", AQ_GROUPED_EXPR); // store the group by expression info
-  cg_NameExprTuples(t1, named_groups, 0);
+  cg_NameExprTuples(t1, node->params.namedexprs, 0);
   print_code(";");
   cg_allCols(t1); // generate dict of all column names
   print_code("];\n");
+  // we drop all names used by the group by
+  // from the column dictionary, as now these names shadow those available in the table
+  // you can still use the original ones by using the correlation name as a clarifier
+  groupby_shadow_cols(node->params.namedexprs);
   free(t1);
-  free_NamedExprNode(named_groups);
   return t2;
+}
+
+void groupby_shadow_cols(NamedExprNode *groups) {
+  print_code(" // shadowing columns used as named groups, if want original, use correlation name\n");
+  print_code(" %s:(", AQ_COL_DICT);
+  NamedExprNode *curr = NULL;
+  for(curr = groups; curr != NULL; curr = curr->next_sibling) {
+    if (curr->name != NULL) {
+      print_code("`%s", curr->name);
+    }
+  }
+  print_code(") _ %s;\n", AQ_COL_DICT);
 }
 
 NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs) {

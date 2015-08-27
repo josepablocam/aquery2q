@@ -304,12 +304,9 @@ order_specs_tail: ',' order_spec order_specs_tail 		{ $2->next = $3; $$ = $2; }
 where_clause: WHERE and_search_condition 		{ $$ = make_filterWhere(NULL, $2); }
 	| /* epsilon */							    { $$ = NULL; }	;
 
-	
-//groupby_clause: GROUP BY comma_value_expression_list having_clause	{ $$ = pushdown_logical($4, make_groupby(NULL, $3));   }
-//	| /* epsilon */													{ $$ = NULL; }
-//	;
 
 groupby_clause: GROUP BY groupby_elem groupby_tail having_clause     { $3->next_sibling = $4; $$ = pushdown_logical($5, make_groupby(NULL, $3)); }
+  | /* epsilon */                           { $$ = NULL; }
   ;
 groupby_tail: ',' groupby_elem groupby_tail                { $2->next_sibling = $3; $$ = $2; }
   | /* epsilon */                                          { $$ = NULL; }

@@ -50,6 +50,7 @@ split:adjFloatCols[split];
 //                             //
 /////////////////////////////////
 // influx related functions
+
 .influx.PORT:"8086";
 .influx.HOST:"localhost";
 .influx.address:"http://",.influx.HOST,":",.influx.PORT;
@@ -103,6 +104,7 @@ splittimestamp:string exec .influx.nanosecs SplitDate from split
 splitmsg:`$'"split,",/:" "sv/:flip (splittags;splitfields;splittimestamp)
 //.influx.write[`benchmarking; ] each 1000 cut splitmsg;
 .influx.writeAndSleep[100;`benchmarking;] each 1000 cut splitmsg;
+
 
 /////////////////////////////////
 //                             //
