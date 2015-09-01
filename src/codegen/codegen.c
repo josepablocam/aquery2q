@@ -66,6 +66,7 @@ char *AQ_JOIN_USING_INFO = ".aq.jui";
 char *AQ_CHECK_ATTR = ".aq.chkattr";
 char *AQ_GROUPED_EXPR = ".aq.grpexpr"; // keep track of what the group by has,
                                        // to avoid recalc in projection
+char *AQ_INDICES = ".aq.ix"; // indices that can be used for various purposes (e.g. updates/deletes)
 
 // generate some aquery functions into the file
 void init_aq_helpers() {
@@ -663,18 +664,21 @@ void cg_FilterWhere0(ExprNode *selection, char *from) {
   int n_conds = ct_exprs(selection);
 
   print_code("?[%s;", from);
-
-  if (n_conds == 1) { // clauses of 1 element need to be enlisted
-    print_code("enlist ");
-    cg_ExprNode(selection);
-  } else {
-    sort_where_clause_by_ix(from);
-    print_code("(");
-    cg_ExprNode(selection);
-    print_code(")");
-  }
-
+  cg_FilterWhereExpressions(selection, from);
   print_code(";0b;()]");
+}
+
+void cg_FilterWhereExpressions(ExprNode *selection, char *from) {
+  int n_conds = ct_exprs(selection);
+   if (n_conds == 1) { // clauses of 1 element need to be enlisted
+      print_code("enlist ");
+      cg_ExprNode(selection);
+    } else {
+      sort_where_clause_by_ix(from);
+      print_code("(");
+      cg_ExprNode(selection);
+      print_code(")");
+    }
 }
 
 // TODO: need to account for grouping!!!
@@ -1117,7 +1121,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_ProjectSelect(node);
       break;
     case PROJECT_UPDATE:
-      print_code("'\"nyi update\"\n");
+      print_code("'\"bug...this node should not be reachable\"");
       break;
     case DELETION:
       print_code("'\"nyi deletion\"\n");
@@ -1182,6 +1186,21 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       break;
     case CONCATENATE_FUN:
       result_table = cg_concatenate(node);
+     case FLATTENED_QUERY:
+     {
+        switch (node->params.flat->project->node_type)
+        {
+            case PROJECT_UPDATE:
+              cg_Update(node->params.flat);
+              // TODO: note that we don't return a name for updates
+              // Should we ?
+              break;
+            default:
+              print_code("'\"woopsie...bug\"");
+
+          }
+     }
+     break;
     }
   }
 
@@ -1275,6 +1294,92 @@ void cg_Schema(SchemaNode *schema)
 
 }
 */
+
+// Update statements
+void cg_Update(FlatQuery *update) {
+  init_dc();
+  IN_QUERY=1;
+  char *origTable = update->table->params.name;
+  // we create a new sorted table if necessary
+  if (update->order != NULL) {
+      char *sortedTable = gen_table_nm();
+      print_code(" %s:", sortedTable);
+      cg_SimpleOrder(update->order->params.order);
+      print_code("%s;\n", origTable);
+      origTable = sortedTable;
+  }
+
+  if (update->having != NULL) {
+    // create indices that account for where clause, and having filters
+    cg_flatIndices(update, origTable);
+    print_code(" ![%s;enlist(in;`i;%s)", origTable, AQ_INDICES);
+    print_code(";");
+    // we still group, in case the update depends on grouped values
+    cg_flatGroupBy(update->groupby, origTable);
+    print_code(";");
+    cg_NameExprTuples(origTable, update->project->params.namedexprs, 0);
+    print_code("];\n");
+  }
+  else
+  { //create 1 query
+    print_code(" ![%s;", origTable);
+    // where statement
+    cg_flatWhere(update->where, origTable);
+    print_code(";");
+    cg_flatGroupBy(update->groupby, origTable);
+    print_code(";");
+    // projections (updates)
+    cg_NameExprTuples(origTable, update->project->params.namedexprs, 0);
+    print_code("];\n");
+  }
+  IN_QUERY = 0;
+}
+
+void cg_flatWhere(LogicalQueryNode *where, char *from) {
+  if (where != NULL)
+  {
+    cg_FilterWhereExpressions(where->params.exprs, from);
+  }
+  else
+  {
+    print_code("()");
+  }
+}
+
+void cg_flatGroupBy(LogicalQueryNode *groupby, char *from) {
+  if (groupby != NULL)
+  {
+    cg_NameExprTuples(from, groupby->params.namedexprs, 0);
+  }
+  else
+  {
+    print_code("0b");
+  }
+}
+
+void cg_flatIndices(FlatQuery *query, char *source) {
+  // where clause indices
+  print_code(" %s:?[%s;", AQ_INDICES, source);
+  cg_flatWhere(query->where, source);
+  print_code(";");
+  cg_flatGroupBy(query->groupby, source);
+  print_code("({x!x}cols %s),enlist[`$\"aq__ix__\"]!enlist`i];\n", source);
+
+  if (query->having != NULL) {
+    print_code(" %s:?[0!%s;", AQ_INDICES, AQ_INDICES);
+    cg_FilterWhereExpressions(query->having->params.exprs, source);
+    print_code(";0b;()]`$\"aq__ix__\";\n");
+  }
+  else if (query->groupby != NULL)
+  {
+    print_code(" %s:exec aq__ix__ from ungroup %s;\n", AQ_INDICES, AQ_INDICES);
+  }
+  else
+  {
+    print_code(" %s:%s`ix;\n", AQ_INDICES, AQ_INDICES);
+  }
+}
+
 
 //Insertions are coded as anonymous functions, to avoid calling multiple times
 void cg_InsertStmt(InsertNode *insert) {
@@ -1377,7 +1482,7 @@ void cg_TopLevel(TopLevelNode *node) {
       cg_InsertStmt(node->elem.insert);
       break;
     case UPDATE_DELETE_STMT:
-      print_code("'\"nyi update/delete statements\"\n");
+      cg_LogicalQueryNode(node->elem.updatedelete);
       break;
     case CREATE_STMT:
       print_code("'\"nyi create statements\"\n");
