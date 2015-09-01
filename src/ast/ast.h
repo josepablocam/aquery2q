@@ -157,7 +157,17 @@ typedef enum LogicalQueryNodeType {
   EQUI_JOIN_ON,
   POSS_PUSH_FILTER,
   CONCATENATE_FUN,
+  FLATTENED_QUERY
 } LogicalQueryNodeType;
+
+typedef struct FlatQuery {
+  struct LogicalQueryNode *project;
+  struct LogicalQueryNode *table;
+  struct LogicalQueryNode *where;
+  struct LogicalQueryNode *groupby;
+  struct LogicalQueryNode *having;
+  struct LogicalQueryNode *order;
+} FlatQuery;
 
 typedef struct LogicalQueryNode {
   LogicalQueryNodeType node_type;
@@ -172,6 +182,7 @@ typedef struct LogicalQueryNode {
     ExprNode *exprs; // on, search conditions
     IDListNode *cols; // using
     OrderNode *order; // sorting
+    FlatQuery *flat; // used for flattened queries, rather than the nested, rel. algebra style notation
   } params;
 } LogicalQueryNode;
 
@@ -204,6 +215,10 @@ LogicalQueryNode *make_values(ExprNode *exprs);
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs,
                                    LogicalQueryNode *rhs);
 LogicalQueryNode *assemble_base(LogicalQueryNode *proj, LogicalQueryNode *from,
+                                LogicalQueryNode *order,
+                                LogicalQueryNode *where,
+                                LogicalQueryNode *grouphaving);
+LogicalQueryNode *assemble_flat(LogicalQueryNode *proj, LogicalQueryNode *from,
                                 LogicalQueryNode *order,
                                 LogicalQueryNode *where,
                                 LogicalQueryNode *grouphaving);

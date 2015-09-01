@@ -753,6 +753,40 @@ LogicalQueryNode *assemble_base(LogicalQueryNode *proj, LogicalQueryNode *from,
   return plan;
 }
 
+// Creating a flat query node, only used for updates/deletes where we don't optimize and thus don't
+// have to search the AST in any real manner
+LogicalQueryNode *assemble_flat(LogicalQueryNode *proj, LogicalQueryNode *from,
+                                LogicalQueryNode *order,
+                                LogicalQueryNode *where,
+                                LogicalQueryNode *grouphaving) {
+  LogicalQueryNode *query = make_EmptyLogicalQueryNode(FLATTENED_QUERY);
+  FlatQuery *flat = malloc(sizeof(FlatQuery));
+  query->params.flat = flat;
+  flat->project = proj;
+  flat->table = from;
+  flat->order = order;
+  flat->where = where;
+  flat->groupby = NULL;
+  flat->having = NULL;
+
+  if (grouphaving == NULL)
+  {
+    return query;
+  }
+  else if (grouphaving->node_type == FILTER_HAVING)
+  { // having comes first, attach that and group by to flat query and null out
+    flat->having = grouphaving;
+    flat->groupby = grouphaving->arg;
+    grouphaving->arg = NULL;
+    return query;
+  }
+  else
+  {
+    flat->groupby = grouphaving;
+    return query;
+  }
+}
+
 /******* 2.2: Local and global queries *******/
 LocalQueryNode *make_LocalQueryNode(char *name, IDListNode *colnames,
                                     LogicalQueryNode *plan) {
