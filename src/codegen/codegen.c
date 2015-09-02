@@ -1300,39 +1300,45 @@ void cg_Update(FlatQuery *update) {
   init_dc();
   IN_QUERY=1;
   char *origTable = update->table->params.name;
+  // call them the same until something changes
+  char *updatedTable = origTable;
   // we create a new sorted table if necessary
   if (update->order != NULL) {
-      char *sortedTable = gen_table_nm();
-      print_code(" %s:", sortedTable);
+      updatedTable = gen_table_nm();
+      print_code(" %s:", updatedTable);
       cg_SimpleOrder(update->order->params.order);
       print_code("%s;\n", origTable);
-      origTable = sortedTable;
   }
 
   if (update->having != NULL) {
     // create indices that account for where clause, and having filters
-    cg_flatIndices(update, origTable);
-    print_code(" ![%s;enlist(in;`i;%s)", origTable, AQ_INDICES);
-    print_code(";");
+    cg_flatBooleanVector(update, updatedTable);
+    print_code(" `%s set ![%s;enlist %s;", origTable, updatedTable, AQ_INDICES);
     // we still group, in case the update depends on grouped values
-    cg_flatGroupBy(update->groupby, origTable);
+    cg_flatGroupBy(update->groupby, updatedTable);
     print_code(";");
-    cg_NameExprTuples(origTable, update->project->params.namedexprs, 0);
-    print_code("];\n");
+    // remove need for adverbs, since doing as a single query
+    remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
+    cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
+    print_code("]\n");
   }
   else
   { //create 1 query
-    print_code(" ![%s;", origTable);
+    print_code(" `%s set ![%s;", origTable, updatedTable);
     // where statement
-    cg_flatWhere(update->where, origTable);
+    cg_flatWhere(update->where, updatedTable);
     print_code(";");
-    cg_flatGroupBy(update->groupby, origTable);
+    cg_flatGroupBy(update->groupby, updatedTable);
     print_code(";");
     // projections (updates)
-    cg_NameExprTuples(origTable, update->project->params.namedexprs, 0);
-    print_code("];\n");
+    // remove need for adverbs, since doing as a single query
+    remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
+    cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
+    print_code("]\n");
   }
   IN_QUERY = 0;
+  free(origTable);
+  if (update->order != NULL) free(updatedTable);
 }
 
 void cg_flatWhere(LogicalQueryNode *where, char *from) {
@@ -1357,18 +1363,19 @@ void cg_flatGroupBy(LogicalQueryNode *groupby, char *from) {
   }
 }
 
-void cg_flatIndices(FlatQuery *query, char *source) {
+void cg_flatBooleanVector(FlatQuery *query, char *source) {
   // where clause indices
   print_code(" %s:?[%s;", AQ_INDICES, source);
   cg_flatWhere(query->where, source);
   print_code(";");
   cg_flatGroupBy(query->groupby, source);
+  print_code(";");
   print_code("({x!x}cols %s),enlist[`$\"aq__ix__\"]!enlist`i];\n", source);
 
   if (query->having != NULL) {
     print_code(" %s:?[0!%s;", AQ_INDICES, AQ_INDICES);
-    cg_FilterWhereExpressions(query->having->params.exprs, source);
-    print_code(";0b;()]`$\"aq__ix__\";\n");
+    cg_flatWhere(query->having, AQ_INDICES);
+    print_code(";();`aq__ix__];\n");
   }
   else if (query->groupby != NULL)
   {
@@ -1376,7 +1383,27 @@ void cg_flatIndices(FlatQuery *query, char *source) {
   }
   else
   {
-    print_code(" %s:%s`ix;\n", AQ_INDICES, AQ_INDICES);
+    print_code(" %s:exec aq__ix__ from %s;\n", AQ_INDICES, AQ_INDICES);
+  }
+  // now create a vector of booleans with true at the appropriate locations
+  print_code(" %s:@[(count %s)#0b;%s;:;1b];\n", AQ_INDICES, source, AQ_INDICES);
+}
+
+// the attribute is not needed in flattened queries
+// since the grouping is done "on the fly". Adverb only needed
+// if the groups were preexisting before expression is calculated
+void remove_is_grouped_attr_expr(ExprNode *node) {
+  if (node != NULL) {
+    node->is_grouped = 0;
+    remove_is_grouped_attr_expr(node->next_sibling);
+    remove_is_grouped_attr_expr(node->first_child);
+  }
+}
+
+void remove_is_grouped_attr_namedExpr(NamedExprNode *node) {
+  if (node != NULL) {
+    remove_is_grouped_attr_expr(node->expr);
+    remove_is_grouped_attr_namedExpr(node->next_sibling);
   }
 }
 

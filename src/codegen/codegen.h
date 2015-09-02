@@ -102,7 +102,9 @@ void cg_InsertFromQuery(char *tableInsertedInto, InsertNode *insert);
 void cg_Update(FlatQuery *update);
 void cg_flatWhere(LogicalQueryNode *where, char *source);
 void cg_flatGroupBy(LogicalQueryNode *groupby, char *source);
-void cg_flatIndices(FlatQuery *query, char *source);
+void cg_flatBooleanVector(FlatQuery *query, char *source);
+void remove_is_grouped_attr_expr(ExprNode *node);
+void remove_is_grouped_attr_namedExpr(NamedExprNode *node);
 
 /* top level code generation */
 void cg_AQUERY2Q(TopLevelNode *node);
