@@ -1297,6 +1297,7 @@ void cg_Schema(SchemaNode *schema)
 
 // Update statements
 void cg_Update(FlatQuery *update) {
+  print_code(" // beginning update statement");
   init_dc();
   IN_QUERY=1;
   char *origTable = update->table->params.name;
@@ -1320,7 +1321,7 @@ void cg_Update(FlatQuery *update) {
     // remove need for adverbs, since doing as a single query
     remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
     cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
-    print_code("]\n");
+    print_code("];\n");
   }
   else
   { //create 1 query
@@ -1334,7 +1335,7 @@ void cg_Update(FlatQuery *update) {
     // remove need for adverbs, since doing as a single query
     remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
     cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
-    print_code("]\n");
+    print_code("];\n");
   }
   IN_QUERY = 0;
   free(origTable);
