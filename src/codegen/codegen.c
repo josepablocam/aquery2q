@@ -1375,7 +1375,7 @@ void cg_Delete(FlatQuery *delete) {
   }
   else
   { // we're deleting specific columns
-    print_code(" `%s set ![%s;();0b;", origTable, updatedTable);
+    print_code(" `%s set ![%s;();0b;(),", origTable, updatedTable);
     cg_colList(delete->project->params.cols);
     print_code("]\n");
   }
