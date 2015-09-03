@@ -1200,8 +1200,11 @@ char *cg_FlattenedQuery(FlatQuery *flat) {
     case PROJECT_UPDATE:
       cg_Update(flat);
         break;
+    case DELETION:
+      cg_Delete(flat);
+      break;
     default:
-      print_code("'\"bug: unhandled flat query, please report\"");
+      print_code("'\"bug: unhandled flat query, please report\"\n");
     }
   // for now we return a null char pointer, just for consistency
   return NULL;
@@ -1341,6 +1344,47 @@ void cg_Update(FlatQuery *update) {
   IN_QUERY = 0;
   free(origTable);
   if (update->order != NULL) free(updatedTable);
+}
+
+void cg_Delete(FlatQuery *delete) {
+  print_code(" // beginning delete statement\n{\n");
+  init_dc();
+  IN_QUERY=1;
+  char *origTable = delete->table->params.name;
+  // call them the same until something changes
+  char *updatedTable = origTable;
+  // we create a new sorted table if necessary
+  if (delete->order != NULL) {
+    updatedTable = gen_table_nm();
+    print_code(" %s:", updatedTable);
+    cg_SimpleOrder(delete->order->params.order);
+    print_code("%s;\n", origTable);
+  }
+
+  if (delete->having != NULL) {
+    // create indices that account for where clause, and having filters
+    cg_flatBooleanVector(delete, updatedTable);
+    print_code(" `%s set ![%s;enlist %s;0b;`symbol$()]\n", origTable, updatedTable, AQ_INDICES);
+  }
+  else if(delete->where != NULL)
+  { //create 1 query
+    print_code(" `%s set ![%s;", origTable, updatedTable);
+    // where statement
+    cg_flatWhere(delete->where, updatedTable);
+    print_code(";0b;`symbol$()]\n");
+  }
+  else
+  { // we're deleting specific columns
+    print_code(" `%s set ![%s;();0b;(),", origTable, updatedTable);
+    cg_colList(delete->project->params.cols);
+    print_code("]\n");
+  }
+
+  print_code(" }[]\n");
+  IN_QUERY = 0;
+  free(origTable);
+  if (delete->order != NULL) free(updatedTable);
+
 }
 
 void cg_flatWhere(LogicalQueryNode *where, char *from) {

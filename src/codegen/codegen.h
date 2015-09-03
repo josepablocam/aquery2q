@@ -101,6 +101,7 @@ void cg_InsertFromQuery(char *tableInsertedInto, InsertNode *insert);
 
 /* updates/deletes */
 void cg_Update(FlatQuery *update);
+void cg_Delete(FlatQuery *delete);
 void cg_flatWhere(LogicalQueryNode *where, char *source);
 void cg_flatGroupBy(LogicalQueryNode *groupby, char *source);
 void cg_flatBooleanVector(FlatQuery *query, char *source);

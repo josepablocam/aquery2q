@@ -181,3 +181,6 @@ UPDATE tu1 SET c3 = last(sums(c2)) ASSUMING ASC c2 WHERE c1 < 3 GROUP BY c1, c2 
 
 UPDATE tu2 SET c3 = max(c2) WHERE c1 > 0
 
+//DELETES
+DELETE FROM td1 ASSUMING ASC c2 where c1 < 3 group by c1 having count(c2) > 1
+DELETE c2 FROM td2

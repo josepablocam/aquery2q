@@ -200,8 +200,17 @@ void print_project(LogicalQueryNode *proj, int parent_id, int *id) {
 void print_delete(LogicalQueryNode *del, int parent_id, int *id) {
   int self_id =
       print_self(parent_id, id, LogicalQueryNodeTypeName[del->node_type]);
-  int cols_id = print_self(self_id, id, "cols");
-  print_id_list(del->params.cols, cols_id, id);
+
+  if (del->params.cols != NULL)
+  {
+    int cols_id = print_self(self_id, id, "cols");
+    print_id_list(del->params.cols, cols_id, id);
+  }
+  else
+  {
+    print_self(self_id, id, "rows");
+  }
+
   print_logical_query(del->arg, self_id, id);
 }
 
