@@ -1295,9 +1295,9 @@ void cg_Schema(SchemaNode *schema)
 }
 */
 
-// Update statements
+// Update statements, wrapped in an anonymous function
 void cg_Update(FlatQuery *update) {
-  print_code(" // beginning update statement");
+  print_code(" // beginning update statement\n{\n");
   init_dc();
   IN_QUERY=1;
   char *origTable = update->table->params.name;
@@ -1321,7 +1321,7 @@ void cg_Update(FlatQuery *update) {
     // remove need for adverbs, since doing as a single query
     remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
     cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
-    print_code("];\n");
+    print_code("]\n");
   }
   else
   { //create 1 query
@@ -1335,8 +1335,9 @@ void cg_Update(FlatQuery *update) {
     // remove need for adverbs, since doing as a single query
     remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
     cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
-    print_code("];\n");
+    print_code("]\n");
   }
+  print_code(" }[]\n");
   IN_QUERY = 0;
   free(origTable);
   if (update->order != NULL) free(updatedTable);
@@ -1429,11 +1430,14 @@ void cg_InsertStmt(InsertNode *insert) {
   }
 
   print_code("{\n");
+  // initialize
   //generate code for the destination of the insert
   if (dest->node_type != SIMPLE_TABLE) {
     print_code(" // insertion destination\n");
     //not a simple node, need to generate code to manipulate it
     IN_QUERY = 1;
+    // initialize structures for aquery to handle manipulation of destination
+    init_dc();
     char *t1 = cg_LogicalQueryNode(insert->dest);
     // make sure to rename columns, since cg_LogicalQueryNode renames things when necesary
     print_code(" `%s set (cols %s) xcol %s; //make insertion mod to original\n",
@@ -1468,15 +1472,15 @@ void cg_InsertFromValues(char *tableInsertedInto, InsertNode *insert) {
 void cg_InsertFromQuery(char *tableInsertedInto, InsertNode *insert) {
    //reinitalize data structures, since we don't need to carry around
    // info for both, and keeping it can cause issues for this bit below
-   print_code("// reinitalizing aquery runtime data structures to avoid issues in insertion\n");
+   print_code(" // reinitalizing aquery runtime data structures to avoid issues in insertion\n");
    init_dc();
 
     // generate code for insertion values
-    print_code("// insertion source\n");
+    print_code(" // insertion source\n");
     char *srcnm = cg_FullQuery_Embedded(insert->src);
 
     //upsert values, modifying original
-    print_code("// actual upsertion\n");
+    print_code(" // actual upsertion\n");
     print_code(" `%s set %s upsert ", tableInsertedInto, tableInsertedInto);
     // modifier means rename columns to given order
     if(insert->modifier != NULL) {
