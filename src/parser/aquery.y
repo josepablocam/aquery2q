@@ -138,7 +138,8 @@ int silence_warnings = 0;
 %type <exprnode> on_clause
 %type <idlist> comma_identifier_list comma_identifier_list_tail
 
-%type <plan> groupby_clause having_clause from_clause select_clause where_clause order_clause
+%type <plan> from_clause select_clause where_clause order_clause
+%type <plan> groupby_clause having_clause groupby_with_having groupby_ex_having
 %type <plan> base_query
 %type <order> order_spec order_specs order_specs_tail
 
@@ -305,9 +306,20 @@ where_clause: WHERE and_search_condition 		{ $$ = make_filterWhere(NULL, $2); }
 	| /* epsilon */							    { $$ = NULL; }	;
 
 
-groupby_clause: GROUP BY groupby_elem groupby_tail having_clause     { $3->next_sibling = $4; $$ = pushdown_logical($5, make_groupby(NULL, $3)); }
-  | /* epsilon */                           { $$ = NULL; }
+groupby_clause: groupby_with_having { $$ = $1;   }
+  | groupby_ex_having               { $$ = $1;   }
+  | /*  epsilon */                  { $$ = NULL; }
   ;
+
+// we break out groupbys into those that use having and those that don't
+// as it allows us to easily include group-by-having into delete statements. group-by withou having would not be allowed
+// as it doesn't make any semantic sense
+groupby_with_having: GROUP BY groupby_elem groupby_tail having_clause     { $3->next_sibling = $4; $$ = pushdown_logical($5, make_groupby(NULL, $3)); }
+  ;
+
+groupby_ex_having: GROUP BY groupby_elem groupby_tail     { $3->next_sibling = $4; $$ = make_groupby(NULL, $3); }
+  ;
+
 groupby_tail: ',' groupby_elem groupby_tail                { $2->next_sibling = $3; $$ = $2; }
   | /* epsilon */                                          { $$ = NULL; }
   ;
@@ -319,7 +331,6 @@ groupby_elem: value_expression LC_AS ID  { $$ = make_NamedExprNode($3, $1); }
   ;
 
 having_clause: HAVING and_search_condition 						    { annotate_groupedExpr($2); $$ = make_filterHaving(NULL, $2); }
-	| /* epsilon */													{ $$ =  NULL; }
 	;
 
 
