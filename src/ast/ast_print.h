@@ -36,6 +36,7 @@ void print_named_expr(NamedExprNode *nexpr, int parent_id, int *id);
 void print_order(OrderNode *order, int parent_id, int *id);
 void print_col_spec(LogicalQueryNode *cols, int parent_id, int *id);
 void print_sort_cols(LogicalQueryNode *sort, int parent_id, int *id);
+void print_flat_query(LogicalQueryNode *query, int parent_id, int *id);
 
 // optimized queries
 void print_compute_sortix(LogicalQueryNode *comp, int parent_id, int *id);

@@ -50,6 +50,7 @@ char *cg_SimpleTable(LogicalQueryNode *node);
 char *cg_Alias(LogicalQueryNode *a);
 char *cg_FilterWhere(LogicalQueryNode *where);
 void cg_FilterWhere0(ExprNode *selection, char *from);
+void cg_FilterWhereExpressions(ExprNode *selection, char *from);
 char *gc_ProjectSelect(LogicalQueryNode *proj);
 void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr,
                        int id_ctr); // dictionary
@@ -58,6 +59,7 @@ void groupby_shadow_cols(NamedExprNode *groups);
 NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs);
 char *cg_flatten(LogicalQueryNode *node);
 char *cg_LogicalQueryNode(LogicalQueryNode *node);
+char *cg_FlattenedQuery(FlatQuery *flat);
 char *cg_queryPlan(LogicalQueryNode *node);
 
 /* local and full queries */
@@ -97,6 +99,13 @@ void cg_InsertFromValues(char *tableInsertedInto, InsertNode *insert);
 void cg_ExplicitValues(LogicalQueryNode *src);
 void cg_InsertFromQuery(char *tableInsertedInto, InsertNode *insert);
 
+/* updates/deletes */
+void cg_Update(FlatQuery *update);
+void cg_flatWhere(LogicalQueryNode *where, char *source);
+void cg_flatGroupBy(LogicalQueryNode *groupby, char *source);
+void cg_flatBooleanVector(FlatQuery *query, char *source);
+void remove_is_grouped_attr_expr(ExprNode *node);
+void remove_is_grouped_attr_namedExpr(NamedExprNode *node);
 
 /* top level code generation */
 void cg_AQUERY2Q(TopLevelNode *node);

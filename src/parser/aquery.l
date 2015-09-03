@@ -64,8 +64,8 @@ void consume_verbatim_q();
 "VIEW"		{ count(); return VIEW;     }
 
  /* SQL: update/insert/delete statements */
-"UPDATE"	{ count(); return UPDATE;   }
-"SET"		{ count(); return SET;      }
+("UPDATE")|("update")	{ count(); return UPDATE;   }
+("SET")|("set")		    { count(); return SET;      }
 "INSERT"	{ count(); return INSERT;   }
 "INTO"		{ count(); return INTO;     }
 "VALUES"	{ count(); return VALUES;   }

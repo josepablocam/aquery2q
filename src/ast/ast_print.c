@@ -19,7 +19,8 @@ const char *LogicalQueryNodeTypeName[] = {
     "filter_having", "cartesian_prod", "inner_join_on", "full_outer_join_on",
     "inner_join_using", "full_outer_join_using", "group_by", "simple_table",
     "alias", "sort", "flatten", "values", "col_names", "sort", "sort-each",
-    "equi_join_on", "possible_push_filters"};
+    "equi_join_on", "possible_push_filters", "concatenate",
+    "flattened query"};
 
 const char *CreateNodeTypeName[] = {"create_table", "create_view"};
 
@@ -136,6 +137,9 @@ void print_logical_query(LogicalQueryNode *step, int parent_id, int *id) {
       break;
     case DELETION:
       print_delete(step, parent_id, id);
+      break;
+    case FLATTENED_QUERY:
+      print_flat_query(step, parent_id, id);
       break;
     case FILTER_WHERE:
     case FILTER_HAVING:
@@ -432,6 +436,18 @@ void print_verbatim_q(char *code, int parent_id, int *id) {
   int self_id = print_self(parent_id, id, code);
 }
 
+// print out a flat query, by printing each member in the struct
+void print_flat_query(LogicalQueryNode *query, int parent_id, int *id) {
+  int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[query->node_type]);
+  FlatQuery *flat = query->params.flat;
+
+  print_logical_query(flat->project, self_id, id);
+  print_logical_query(flat->table, self_id, id);
+  print_logical_query(flat->where, self_id, id);
+  print_logical_query(flat->groupby, self_id, id);
+  print_logical_query(flat->having, self_id, id);
+  print_logical_query(flat->order, self_id, id);
+}
 //#ifdef STAND_ALONE
 //	int main()
 //	{

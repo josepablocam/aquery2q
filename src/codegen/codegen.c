@@ -66,6 +66,7 @@ char *AQ_JOIN_USING_INFO = ".aq.jui";
 char *AQ_CHECK_ATTR = ".aq.chkattr";
 char *AQ_GROUPED_EXPR = ".aq.grpexpr"; // keep track of what the group by has,
                                        // to avoid recalc in projection
+char *AQ_INDICES = ".aq.ix"; // indices that can be used for various purposes (e.g. updates/deletes)
 
 // generate some aquery functions into the file
 void init_aq_helpers() {
@@ -663,18 +664,21 @@ void cg_FilterWhere0(ExprNode *selection, char *from) {
   int n_conds = ct_exprs(selection);
 
   print_code("?[%s;", from);
-
-  if (n_conds == 1) { // clauses of 1 element need to be enlisted
-    print_code("enlist ");
-    cg_ExprNode(selection);
-  } else {
-    sort_where_clause_by_ix(from);
-    print_code("(");
-    cg_ExprNode(selection);
-    print_code(")");
-  }
-
+  cg_FilterWhereExpressions(selection, from);
   print_code(";0b;()]");
+}
+
+void cg_FilterWhereExpressions(ExprNode *selection, char *from) {
+  int n_conds = ct_exprs(selection);
+   if (n_conds == 1) { // clauses of 1 element need to be enlisted
+      print_code("enlist ");
+      cg_ExprNode(selection);
+    } else {
+      sort_where_clause_by_ix(from);
+      print_code("(");
+      cg_ExprNode(selection);
+      print_code(")");
+    }
 }
 
 // TODO: need to account for grouping!!!
@@ -1117,7 +1121,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_ProjectSelect(node);
       break;
     case PROJECT_UPDATE:
-      print_code("'\"nyi update\"\n");
+      print_code("'\"bug: this node should not be reachable, please report\"");
       break;
     case DELETION:
       print_code("'\"nyi deletion\"\n");
@@ -1170,7 +1174,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_SortCols(node);
       break;
     case SORT_EACH_COLS:
-      print_code("'\"nyi sort each cols\"\n");
+      print_code("'\"bug: this node should not be reachable, please report\"");
       // we did away with this, since performance tests
       // showed it was better to sort before grouping
       break;
@@ -1182,10 +1186,25 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       break;
     case CONCATENATE_FUN:
       result_table = cg_concatenate(node);
+     case FLATTENED_QUERY:
+      result_table =  cg_FlattenedQuery(node->params.flat);
+     break;
     }
   }
-
   return result_table;
+}
+
+char *cg_FlattenedQuery(FlatQuery *flat) {
+  switch (flat->project->node_type)
+  {
+    case PROJECT_UPDATE:
+      cg_Update(flat);
+        break;
+    default:
+      print_code("'\"bug: unhandled flat query, please report\"");
+    }
+  // for now we return a null char pointer, just for consistency
+  return NULL;
 }
 
 /* local queries */
@@ -1276,6 +1295,121 @@ void cg_Schema(SchemaNode *schema)
 }
 */
 
+// Update statements, wrapped in an anonymous function
+void cg_Update(FlatQuery *update) {
+  print_code(" // beginning update statement\n{\n");
+  init_dc();
+  IN_QUERY=1;
+  char *origTable = update->table->params.name;
+  // call them the same until something changes
+  char *updatedTable = origTable;
+  // we create a new sorted table if necessary
+  if (update->order != NULL) {
+      updatedTable = gen_table_nm();
+      print_code(" %s:", updatedTable);
+      cg_SimpleOrder(update->order->params.order);
+      print_code("%s;\n", origTable);
+  }
+
+  if (update->having != NULL) {
+    // create indices that account for where clause, and having filters
+    cg_flatBooleanVector(update, updatedTable);
+    print_code(" `%s set ![%s;enlist %s;", origTable, updatedTable, AQ_INDICES);
+    // we still group, in case the update depends on grouped values
+    cg_flatGroupBy(update->groupby, updatedTable);
+    print_code(";");
+    // remove need for adverbs, since doing as a single query
+    remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
+    cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
+    print_code("]\n");
+  }
+  else
+  { //create 1 query
+    print_code(" `%s set ![%s;", origTable, updatedTable);
+    // where statement
+    cg_flatWhere(update->where, updatedTable);
+    print_code(";");
+    cg_flatGroupBy(update->groupby, updatedTable);
+    print_code(";");
+    // projections (updates)
+    // remove need for adverbs, since doing as a single query
+    remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
+    cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
+    print_code("]\n");
+  }
+  print_code(" }[]\n");
+  IN_QUERY = 0;
+  free(origTable);
+  if (update->order != NULL) free(updatedTable);
+}
+
+void cg_flatWhere(LogicalQueryNode *where, char *from) {
+  if (where != NULL)
+  {
+    cg_FilterWhereExpressions(where->params.exprs, from);
+  }
+  else
+  {
+    print_code("()");
+  }
+}
+
+void cg_flatGroupBy(LogicalQueryNode *groupby, char *from) {
+  if (groupby != NULL)
+  {
+    cg_NameExprTuples(from, groupby->params.namedexprs, 0);
+  }
+  else
+  {
+    print_code("0b");
+  }
+}
+
+void cg_flatBooleanVector(FlatQuery *query, char *source) {
+  // where clause indices
+  print_code(" %s:?[%s;", AQ_INDICES, source);
+  cg_flatWhere(query->where, source);
+  print_code(";");
+  cg_flatGroupBy(query->groupby, source);
+  print_code(";");
+  print_code("({x!x}cols %s),enlist[`$\"aq__ix__\"]!enlist`i];\n", source);
+
+  if (query->having != NULL) {
+    print_code(" %s:?[0!%s;", AQ_INDICES, AQ_INDICES);
+    cg_flatWhere(query->having, AQ_INDICES);
+    print_code(";();`aq__ix__];\n");
+  }
+  else if (query->groupby != NULL)
+  {
+    print_code(" %s:exec aq__ix__ from ungroup %s;\n", AQ_INDICES, AQ_INDICES);
+  }
+  else
+  {
+    print_code(" %s:exec aq__ix__ from %s;\n", AQ_INDICES, AQ_INDICES);
+  }
+  // now create a vector of booleans with true at the appropriate locations
+  print_code(" %s:@[(count %s)#0b;%s;:;1b];\n", AQ_INDICES, source, AQ_INDICES);
+}
+
+// the attribute is not needed in flattened queries
+// since the grouping is done "on the fly". Adverb only needed
+// if the groups were preexisting before expression is calculated
+void remove_is_grouped_attr_expr(ExprNode *node) {
+  if (node != NULL) {
+    node->is_grouped = 0;
+    remove_is_grouped_attr_expr(node->next_sibling);
+    remove_is_grouped_attr_expr(node->first_child);
+  }
+}
+
+void remove_is_grouped_attr_namedExpr(NamedExprNode *node) {
+  if (node != NULL) {
+    remove_is_grouped_attr_expr(node->expr);
+    remove_is_grouped_attr_namedExpr(node->next_sibling);
+  }
+}
+
+
 //Insertions are coded as anonymous functions, to avoid calling multiple times
 void cg_InsertStmt(InsertNode *insert) {
   LogicalQueryNode *dest = insert->dest;
@@ -1296,11 +1430,14 @@ void cg_InsertStmt(InsertNode *insert) {
   }
 
   print_code("{\n");
+  // initialize
   //generate code for the destination of the insert
   if (dest->node_type != SIMPLE_TABLE) {
     print_code(" // insertion destination\n");
     //not a simple node, need to generate code to manipulate it
     IN_QUERY = 1;
+    // initialize structures for aquery to handle manipulation of destination
+    init_dc();
     char *t1 = cg_LogicalQueryNode(insert->dest);
     // make sure to rename columns, since cg_LogicalQueryNode renames things when necesary
     print_code(" `%s set (cols %s) xcol %s; //make insertion mod to original\n",
@@ -1335,15 +1472,15 @@ void cg_InsertFromValues(char *tableInsertedInto, InsertNode *insert) {
 void cg_InsertFromQuery(char *tableInsertedInto, InsertNode *insert) {
    //reinitalize data structures, since we don't need to carry around
    // info for both, and keeping it can cause issues for this bit below
-   print_code("// reinitalizing aquery runtime data structures to avoid issues in insertion\n");
+   print_code(" // reinitalizing aquery runtime data structures to avoid issues in insertion\n");
    init_dc();
 
     // generate code for insertion values
-    print_code("// insertion source\n");
+    print_code(" // insertion source\n");
     char *srcnm = cg_FullQuery_Embedded(insert->src);
 
     //upsert values, modifying original
-    print_code("// actual upsertion\n");
+    print_code(" // actual upsertion\n");
     print_code(" `%s set %s upsert ", tableInsertedInto, tableInsertedInto);
     // modifier means rename columns to given order
     if(insert->modifier != NULL) {
@@ -1377,17 +1514,16 @@ void cg_TopLevel(TopLevelNode *node) {
       cg_InsertStmt(node->elem.insert);
       break;
     case UPDATE_DELETE_STMT:
-      print_code("'\"nyi update/delete statements\"\n");
+      cg_LogicalQueryNode(node->elem.updatedelete);
       break;
     case CREATE_STMT:
       print_code("'\"nyi create statements\"\n");
       break;
     case VERBATIM_Q:
-      print_code("//verbatim q code\n");
+      print_code("// verbatim q code\n");
       print_code("%s\n", node->elem.verbatimQ);
       break;
     }
-
     cg_TopLevel(node->next_sibling);
   }
 }

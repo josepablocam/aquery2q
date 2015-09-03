@@ -472,8 +472,10 @@ type_name: TYPE_INT 	{$$ = $1; }
 
 
 /******* 2.6: update, insert, delete statements *******/
-update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause { if($7 != NULL){ annotate_groupedNamedExpr($4); } 
-                                                              $$  = assemble_base(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7); }
+update_statement: UPDATE ID SET set_clauses order_clause where_clause groupby_clause {
+																									if($7 != NULL){ annotate_groupedNamedExpr($4); }
+                                                  $$  = assemble_flat(make_project(PROJECT_UPDATE, NULL, $4), make_table($2), $5, $6, $7);
+                                                  }
 	;
 
 set_clauses: set_clause set_clauses_tail { $1->next_sibling = $2; $$ = $1; }

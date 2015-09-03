@@ -71,6 +71,23 @@ verifyInsertions:{
     show t1 ~ ins2;
  }
 
+resetUpdateTables:{
+  `tu1 set ([]c1:1 1 1 2 2 3; c2:10 10 30 40 50 60);
+  `otu1 set tu1;
+  `tu2 set ([]c1:100 -100 200 300; c2:20 30 10 40);
+  `otu2 set tu2;
+ };
+
+verifyUpdates:{
+  show "--->verifying update tests";
+  // equivalent to update tu1 set c3 = last(sums(c2)) assuming asc c2 where c1 < 3 group by c1, c2
+  // having count(c2) >= 2
+  upd1:update c3:last sums c2 from `c2 xasc otu1 where c1 < 3, 2 <=(count;i) fby ([]c1;c2);
+  show upd1 ~ tu1;
+  upd2:update c3:max c2 from otu2 where c1 > 0;
+  show upd2 ~ tu2;
+ };
+
 //Performance comparison
 nruns:10;
 time:{.Q.gc[]; (system ssr/["ts do[%n;%f[]]";("%n";"%f");(string x;y)])%x}
@@ -98,18 +115,22 @@ verify:{
  }
 
 resetInsertionTables[]
+resetUpdateTables[]
 \l generated.q
 show "****Running unoptimized aquery compilation"
 verify each string tests
 verifyInsertions[]
+verifyUpdates[]
 runtest each string tests
 
 
 resetInsertionTables[]
+resetUpdateTables[]
 \l generated_optimized.q
 show "****Running optimized aquery compilation"
 verify each string tests
 verifyInsertions[]
+verifyUpdates[]
 runtest each string tests
 exit 0
 
