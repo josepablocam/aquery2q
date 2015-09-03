@@ -511,6 +511,7 @@ insert_source: full_query								{ $$ = $1; }
 	;
 	
 delete_statement: DELETE FROM ID order_clause where_clause					{ $$ = assemble_base(make_delete(NULL, NULL), make_table($3), $4, $5, NULL);   }
+  | DELETE FROM ID order_clause where_clause groupby_with_having    {$$ = assemble_base(make_delete(NULL, NULL), make_table($3), $4, $5, $6);    }
 	| DELETE comma_identifier_list FROM ID 									{ $$ = assemble_base(make_delete(NULL, $2), make_table($4), NULL, NULL, NULL); }
 	;
 
