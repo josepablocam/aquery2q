@@ -59,6 +59,7 @@ void groupby_shadow_cols(NamedExprNode *groups);
 NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs);
 char *cg_flatten(LogicalQueryNode *node);
 char *cg_LogicalQueryNode(LogicalQueryNode *node);
+char *cg_FlattenedQuery(FlatQuery *flat);
 char *cg_queryPlan(LogicalQueryNode *node);
 
 /* local and full queries */

@@ -1121,7 +1121,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_ProjectSelect(node);
       break;
     case PROJECT_UPDATE:
-      print_code("'\"bug...this node should not be reachable\"");
+      print_code("'\"bug: this node should not be reachable, please report\"");
       break;
     case DELETION:
       print_code("'\"nyi deletion\"\n");
@@ -1174,7 +1174,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_SortCols(node);
       break;
     case SORT_EACH_COLS:
-      print_code("'\"nyi sort each cols\"\n");
+      print_code("'\"bug: this node should not be reachable, please report\"");
       // we did away with this, since performance tests
       // showed it was better to sort before grouping
       break;
@@ -1187,24 +1187,24 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
     case CONCATENATE_FUN:
       result_table = cg_concatenate(node);
      case FLATTENED_QUERY:
-     {
-        switch (node->params.flat->project->node_type)
-        {
-            case PROJECT_UPDATE:
-              cg_Update(node->params.flat);
-              // TODO: note that we don't return a name for updates
-              // Should we ?
-              break;
-            default:
-              print_code("'\"woopsie...bug\"");
-
-          }
-     }
+      result_table =  cg_FlattenedQuery(node->params.flat);
      break;
     }
   }
-
   return result_table;
+}
+
+char *cg_FlattenedQuery(FlatQuery *flat) {
+  switch (flat->project->node_type)
+  {
+    case PROJECT_UPDATE:
+      cg_Update(flat);
+        break;
+    default:
+      print_code("'\"bug: unhandled flat query, please report\"");
+    }
+  // for now we return a null char pointer, just for consistency
+  return NULL;
 }
 
 /* local queries */
@@ -1520,11 +1520,10 @@ void cg_TopLevel(TopLevelNode *node) {
       print_code("'\"nyi create statements\"\n");
       break;
     case VERBATIM_Q:
-      print_code("//verbatim q code\n");
+      print_code("// verbatim q code\n");
       print_code("%s\n", node->elem.verbatimQ);
       break;
     }
-
     cg_TopLevel(node->next_sibling);
   }
 }
