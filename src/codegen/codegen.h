@@ -99,6 +99,14 @@ void cg_InsertFromValues(char *tableInsertedInto, InsertNode *insert);
 void cg_ExplicitValues(LogicalQueryNode *src);
 void cg_InsertFromQuery(char *tableInsertedInto, InsertNode *insert);
 
+/* create statements */
+void cg_CreateStatement(CreateNode *create);
+void cg_CreateTable(CreateNode *create);
+void cg_CreateTableFromQuery(CreateNode *create);
+void cg_CreateTableFromSchema(CreateNode *create);
+void cg_CreateSchema(SchemaNode *schema);
+char get_SchemaTypeCode(char *typename);
+
 /* updates/deletes */
 void cg_Update(FlatQuery *update);
 void cg_Delete(FlatQuery *delete);

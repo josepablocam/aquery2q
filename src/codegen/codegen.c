@@ -1262,42 +1262,6 @@ char *cg_FullQuery_Embedded(FullQueryNode *full_query) {
   return result_table;
 }
 
-/* creating tables or views */
-
-// TODO: create view....how do we do this? considering views in q...
-// Think about this
-/*
-void cg_CreateTable(CreateNode* create)
-{
-    char *src_fun_nm = NULL;
-    CreateSourceNodeType src_type = create->src->node_type;
-
-    if(src_type == QUERY_SOURCE)
-    {
-        cg_FullQuery(create->src->load.query)
-        //TODO: might be better to have cg_FullQuery return the name of the
-function
-        //and it then only gets call when it needs to be
-        print_code("%s: %s%d[];\n", create->name, AQ_QUERY_NM, QUERY_CT - 1);
-    }
-    else
-    {
-        print_code("%s:");
-        cg_Schema(create->src->load.schema);
-    }
-}
-
-//TODO: complete schema
-void cg_Schema(SchemaNode *schema)
-{
-    //generate code for pairs, should be easy!
-}
-
-
-
-}
-*/
-
 // Update statements, wrapped in an anonymous function
 void cg_Update(FlatQuery *update) {
   print_code(" // beginning update statement\n{\n");
@@ -1545,6 +1509,97 @@ void cg_ExplicitValues(LogicalQueryNode *src) {
   cg_ExprList(values);
 }
 
+/* Create statements */
+void cg_CreateStatement(CreateNode *create) {
+  switch(create->node_type) {
+    case CREATE_TABLE:
+      cg_CreateTable(create);
+      break;
+    case CREATE_VIEW:
+      print_code("'\"nyi create view\"\n");
+      break;
+  }
+}
+
+void cg_CreateTable(CreateNode *create) {
+  // wrap create statement in an anonymous function
+  print_code("// create table statement\n");
+  print_code("{\n");
+  switch(create->src->node_type) {
+    case QUERY_SOURCE:
+      cg_CreateTableFromQuery(create);
+      break;
+    case SCHEMA_SOURCE:
+      cg_CreateTableFromSchema(create);
+      break;
+  }
+ // close out anonymous function and run it
+ print_code(" }[]\n");
+}
+
+void cg_CreateTableFromQuery(CreateNode *create) {
+  print_code(" // creation query\n");
+  char *srcnm = cg_FullQuery_Embedded(create->src->load.query);
+  print_code(" // actual creation\n");
+  print_code(" `%s set %s\n", create->name, srcnm);
+}
+
+void cg_CreateTableFromSchema(CreateNode *create) {
+  print_code(" `%s set ", create->name);
+  cg_CreateSchema(create->src->load.schema);
+  print_code("\n");
+}
+
+void cg_CreateSchema(SchemaNode *schema) {
+  SchemaNode *curr = NULL;
+  print_code("([]");
+  for(curr = schema; curr != NULL; curr = curr->next_sibling)
+  {
+    print_code("%s:", curr->fieldname);
+    print_code("\"%c\"$()", get_SchemaTypeCode(curr->typename));
+
+    if (curr->next_sibling != NULL)
+    {
+      print_code("; ");
+    }
+  }
+  print_code(")");
+}
+
+char get_SchemaTypeCode(char *typename) {
+  if (strcmp(typename, "INT") == 0)
+  {
+    return 'i';
+  }
+  else if (strcmp(typename, "FLOAT") == 0)
+  {
+    return 'f';
+  }
+  else if (strcmp(typename, "STRING") == 0)
+  {
+    // represented as symbols
+    return 's';
+  }
+  else if (strcmp(typename, "DATE") == 0)
+  {
+    return 'd';
+  }
+  else if (strcmp(typename, "BOOLEAN") == 0)
+  {
+    return 'b';
+  }
+  else if (strcmp(typename, "HEX") == 0)
+  {
+    return 'x';
+  }
+  else
+  {
+    print_code("'\"bug, please report\"\n");
+    return '0';
+  }
+}
+
+
 void cg_TopLevel(TopLevelNode *node) {
   if (node != NULL) {
     switch (node->node_type) {
@@ -1561,7 +1616,7 @@ void cg_TopLevel(TopLevelNode *node) {
       cg_LogicalQueryNode(node->elem.updatedelete);
       break;
     case CREATE_STMT:
-      print_code("'\"nyi create statements\"\n");
+      cg_CreateStatement(node->elem.create);
       break;
     case VERBATIM_Q:
       print_code("// verbatim q code\n");
