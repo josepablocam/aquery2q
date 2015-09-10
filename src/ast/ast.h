@@ -321,6 +321,15 @@ SchemaNode *make_schemaNode(char *fieldname, char *typename);
 CreateSourceNode *make_schemaSource(SchemaNode *schema);
 CreateSourceNode *make_querySource(FullQueryNode *query);
 
+typedef struct LoadNode {
+  char *file;
+  char *delim;
+  char *dest;
+} LoadNode;
+
+LoadNode *make_loadNode(char *file, char *delim, char *dest);
+
+
 /******* 2.1: Top level program definition *******/
 
 typedef enum TopLevelNodeType {
@@ -329,7 +338,8 @@ typedef enum TopLevelNodeType {
   INSERT_STMT,
   UPDATE_DELETE_STMT,
   CREATE_STMT,
-  VERBATIM_Q
+  VERBATIM_Q,
+  LOAD_STMT
 } TopLevelNodeType;
 
 typedef struct TopLevelNode {
@@ -340,6 +350,7 @@ typedef struct TopLevelNode {
     CreateNode *create; // create table/view
     InsertNode *insert; // insert statement
     LogicalQueryNode *updatedelete;
+    LoadNode *load; // data loading statement
     char *verbatimQ; // verbatim q code
   } elem;
   struct TopLevelNode *next_sibling;
@@ -352,5 +363,6 @@ TopLevelNode *make_Top_Create(CreateNode *create, TopLevelNode *next);
 TopLevelNode *make_Top_Insert(InsertNode *ins, TopLevelNode *next);
 TopLevelNode *make_Top_UpdateDelete(LogicalQueryNode *ud, TopLevelNode *next);
 TopLevelNode *make_Top_VerbatimQ(char *qcode, TopLevelNode *next);
+TopLevelNode *make_Top_Load(LoadNode *load, TopLevelNode *next);
 
 #endif

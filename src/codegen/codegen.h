@@ -116,6 +116,9 @@ void cg_flatBooleanVector(FlatQuery *query, char *source);
 void remove_is_grouped_attr_expr(ExprNode *node);
 void remove_is_grouped_attr_namedExpr(NamedExprNode *node);
 
+/* load data statement */
+void cg_LoadStatement(LoadNode *load);
+
 /* top level code generation */
 void cg_AQUERY2Q(TopLevelNode *node);
 void cg_TopLevel(TopLevelNode *node);
