@@ -233,6 +233,10 @@ void cg_Constant(ExprNode *c) {
     remove_quotes(&c->data.str);
     print_code("\"D\"$\"%s\"", c->data.str); // let q parse date
     break;
+  case TIMESTAMP_TYPE:
+    remove_quotes(&c->data.str);
+    print_code("\"P\"$\"%s\"", c->data.str); // let q parse timestamp
+    break;
   case STRING_TYPE: // become symbols, TODO: char lists?
     remove_quotes(&c->data.str);
     print_code("enlist `$\"%s\"", c->data.str);
@@ -1583,6 +1587,10 @@ char get_SchemaTypeCode(char *typename) {
   else if (strcmp(typename, "DATE") == 0)
   {
     return 'd';
+  }
+  else if (strcmp(typename, "TIMESTAMP") == 0)
+  {
+    return 'p';
   }
   else if (strcmp(typename, "BOOLEAN") == 0)
   {

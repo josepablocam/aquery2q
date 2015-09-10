@@ -94,6 +94,7 @@ void consume_verbatim_q();
 "FLOAT"		{ count(); yylval.str = strdup(yytext); return TYPE_FLOAT;   }
 "STRING"	{ count(); yylval.str = strdup(yytext); return TYPE_STRING;  }
 "DATE"		{ count(); yylval.str = strdup(yytext); return TYPE_DATE;    }
+"TIMESTAMP" { count(); yylval.str = strdup(yytext); return TYPE_TIMESTAMP;    }
 "BOOLEAN"	{ count(); yylval.str = strdup(yytext); return TYPE_BOOLEAN; }
 "HEX"		{ count(); yylval.str = strdup(yytext); return TYPE_HEX;     }
 
@@ -138,7 +139,8 @@ void consume_verbatim_q();
 [0-9]+                        { count(); yylval.intval = atoi(yytext); return INT;       }	
 [0-9]+\.[0-9]+                { count(); yylval.floatval = atof(yytext); return FLOAT;   } 
 \"(\\.|[^"])*\"                 { count(); yylval.str = strdup(yytext); return STRING;     } 
-\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'   { count(); yylval.str = strdup(yytext); return DATE; } 
+\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}\'   { count(); yylval.str = strdup(yytext); return DATE; }
+\'(([0][1-9])|([1][0-2]))\/(([0][1-9])|([1-2][0-9])|([3][0-1]))\/[0-9]{4}"D"(([0][0-9])|([1][0-9])|([2][0-3]))":"([0-5][0-9])":"([0-5][0-9])("."[0-9]+)?\'  { count(); yylval.str = strdup(yytext); return TIMESTAMP; }
 ("TRUE")|("true")               { count(); yylval.intval = 1; return TRUE;	   }
 ("FALSE")|("false")              { count(); yylval.intval = 0; return FALSE;   }
 "0x"[0-9a-fA-F]+                { count(); yylval.str = strdup(yytext); return HEX;	   }

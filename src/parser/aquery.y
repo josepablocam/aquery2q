@@ -82,7 +82,7 @@ int silence_warnings = 0;
 %token CASE END WHEN THEN ELSE
 
  /* SQL: type names */
-%token <str> TYPE_INT TYPE_FLOAT TYPE_STRING TYPE_DATE TYPE_BOOLEAN TYPE_HEX
+%token <str> TYPE_INT TYPE_FLOAT TYPE_STRING TYPE_DATE TYPE_TIMESTAMP TYPE_BOOLEAN TYPE_HEX
  
  /* SQL: user defined functions */
 %token FUNCTION LOCAL_ASSIGN
@@ -97,7 +97,7 @@ int silence_warnings = 0;
  /* literals and identifiers, and assocating storage in the yyval union */ 
 %token <floatval> FLOAT
 %token <intval> INT TRUE FALSE 
-%token <str> DATE HEX ID STRING
+%token <str> DATE TIMESTAMP HEX ID STRING
  
  /* Math operators */
 %token EXP_OP TIMES_OP DIV_OP PLUS_OP MINUS_OP LE_OP GE_OP L_OP G_OP EQ_OP NEQ_OP AND_OP OR_OP
@@ -477,6 +477,7 @@ type_name: TYPE_INT 	{$$ = $1; }
 	| TYPE_FLOAT 		{$$ = $1; }
 	| TYPE_STRING 		{$$ = $1; }
 	| TYPE_DATE 		{$$ = $1; }
+	| TYPE_TIMESTAMP 		{$$ = $1; }
 	| TYPE_BOOLEAN 		{$$ = $1; }
 	| TYPE_HEX 			{$$ = $1; }
 	;	
@@ -562,9 +563,10 @@ function_local_var_def: ID LOCAL_ASSIGN value_expression   { put_sym(env, $1, UN
 
 
 /******* 2.8: value expressions *******/
-constant: INT 				{ $$ = make_int($1);    }  
+constant: INT 				{ $$ = make_int($1);    }
 		| FLOAT 			{ $$ = make_float($1);  }
 		| DATE 				{ $$ = make_date($1);   }
+		| TIMESTAMP   { $$ = make_timestamp($1);   }
 		| STRING 			{ $$ = make_string($1); }
 		| HEX 				{ $$ = make_hex($1);    }
 		| truth_value 		{ $$ = $1;              }
