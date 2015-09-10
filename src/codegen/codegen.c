@@ -233,6 +233,10 @@ void cg_Constant(ExprNode *c) {
     remove_quotes(&c->data.str);
     print_code("\"D\"$\"%s\"", c->data.str); // let q parse date
     break;
+  case TIMESTAMP_TYPE:
+    remove_quotes(&c->data.str);
+    print_code("\"P\"$\"%s\"", c->data.str); // let q parse timestamp
+    break;
   case STRING_TYPE: // become symbols, TODO: char lists?
     remove_quotes(&c->data.str);
     print_code("enlist `$\"%s\"", c->data.str);
@@ -1186,6 +1190,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       break;
     case CONCATENATE_FUN:
       result_table = cg_concatenate(node);
+      break;
      case FLATTENED_QUERY:
       result_table =  cg_FlattenedQuery(node->params.flat);
      break;
@@ -1199,7 +1204,7 @@ char *cg_FlattenedQuery(FlatQuery *flat) {
   {
     case PROJECT_UPDATE:
       cg_Update(flat);
-        break;
+      break;
     case DELETION:
       cg_Delete(flat);
       break;
@@ -1583,6 +1588,10 @@ char get_SchemaTypeCode(char *typename) {
   else if (strcmp(typename, "DATE") == 0)
   {
     return 'd';
+  }
+  else if (strcmp(typename, "TIMESTAMP") == 0)
+  {
+    return 'p';
   }
   else if (strcmp(typename, "BOOLEAN") == 0)
   {

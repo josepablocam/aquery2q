@@ -17,6 +17,7 @@ typedef enum DataTypes {
                 // function calls etc)
   ERROR_TYPE, // we create a type error that we can use to point out issues
               // later on
+  TIMESTAMP_TYPE
 } DataType;
 
 // Type checking operations
@@ -26,6 +27,7 @@ int is_bool(DataType x);
 int is_numeric(DataType x);
 int is_error(DataType x);
 int is_fun(DataType x);
+int is_timestamp(DataType x);
 DataType unif_numeric(DataType x, DataType y);
 DataType unif_override(DataType poss, DataType override, DataType x,
                        DataType y);

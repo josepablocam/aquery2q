@@ -82,6 +82,7 @@ ExprNode *make_EmptyExprNode(ExprNodeType type);
 ExprNode *make_int(int i);
 ExprNode *make_float(float f);
 ExprNode *make_date(char *date);
+ExprNode *make_timestamp(char *timestamp);
 ExprNode *make_string(char *str);
 ExprNode *make_hex(char *hex);
 ExprNode *make_bool(int boolean);

@@ -78,6 +78,15 @@ ExprNode *make_date(char *date) {
   return node;
 }
 
+ExprNode *make_timestamp(char *timestamp) {
+  AST_PRINT_DEBUG("making timestamp node");
+  ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
+  node->data_type = TIMESTAMP_TYPE;
+  node->data.str = timestamp; // any memory necessary was already allocated by flex
+  node->is_odx = 1;
+  return node;
+}
+
 ExprNode *make_string(char *str) {
   AST_PRINT_DEBUG("making string node");
   ExprNode *node = make_EmptyExprNode(CONSTANT_EXPR);
