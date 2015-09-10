@@ -1190,6 +1190,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       break;
     case CONCATENATE_FUN:
       result_table = cg_concatenate(node);
+      break;
      case FLATTENED_QUERY:
       result_table =  cg_FlattenedQuery(node->params.flat);
      break;
@@ -1203,7 +1204,7 @@ char *cg_FlattenedQuery(FlatQuery *flat) {
   {
     case PROJECT_UPDATE:
       cg_Update(flat);
-        break;
+      break;
     case DELETION:
       cg_Delete(flat);
       break;
