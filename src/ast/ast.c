@@ -863,6 +863,14 @@ CreateSourceNode *make_querySource(FullQueryNode *query) {
   return src;
 }
 
+LoadNode *make_loadNode(char *file, char *delim, char *dest) {
+  LoadNode *load = malloc(sizeof(LoadNode));
+  load->file = file;
+  load->delim = delim;
+  load->dest = dest;
+  return load;
+}
+
 /******* 2.1: Top level program definition *******/
 TopLevelNode *make_EmptyTopLevelNode(TopLevelNodeType type) {
   TopLevelNode *node = malloc(sizeof(TopLevelNode));
@@ -909,6 +917,13 @@ TopLevelNode *make_Top_UpdateDelete(LogicalQueryNode *ud, TopLevelNode *next) {
 TopLevelNode *make_Top_VerbatimQ(char *qcode, TopLevelNode *next) {
   TopLevelNode *top = make_EmptyTopLevelNode(VERBATIM_Q);
   top->elem.verbatimQ = qcode;
+  top->next_sibling = next;
+  return top;
+}
+
+TopLevelNode *make_Top_Load(LoadNode *load, TopLevelNode *next) {
+  TopLevelNode *top = make_EmptyTopLevelNode(LOAD_STMT);
+  top->elem.load = load;
   top->next_sibling = next;
   return top;
 }

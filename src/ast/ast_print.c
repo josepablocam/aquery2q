@@ -25,7 +25,8 @@ const char *LogicalQueryNodeTypeName[] = {
 const char *CreateNodeTypeName[] = {"create_table", "create_view"};
 
 const char *TopLevelNodeTypeName[] = {"global query", "udf def", "insert stmt",
-                                      "update/delete stmt", "create stmt", "native q code"};
+                                      "update/delete stmt", "create stmt", "native q code",
+                                      "load stmt"};
 
 const char *OrderNodeTypeName[] = {"ascending", "descending"};
 
@@ -77,6 +78,9 @@ void print_top_level(TopLevelNode *top, int parent_id, int *id) {
     case UPDATE_DELETE_STMT:
       print_logical_query(top->elem.updatedelete, self_id, id);
       break;
+    case LOAD_STMT:
+      print_load(top->elem.load, self_id, id);
+      break;
     case VERBATIM_Q:
       print_verbatim_q(top->elem.verbatimQ, self_id, id);
     }
@@ -95,7 +99,7 @@ void print_full_query(FullQueryNode *full, int parent_id, int *id) {
       print_local_query(full->local_queries, local_queries_id, id);
     }
     // Print logical query plan for main query
-    int plan_id = print_self(main_id, id, "query_plan");
+    int plan_id = print_self(main_id, id, "main_query_plan");
     print_logical_query(full->query_plan, plan_id, id);
   }
 }
@@ -456,6 +460,13 @@ void print_flat_query(LogicalQueryNode *query, int parent_id, int *id) {
   print_logical_query(flat->groupby, self_id, id);
   print_logical_query(flat->having, self_id, id);
   print_logical_query(flat->order, self_id, id);
+}
+
+void print_load(LoadNode *load, int parent_id, int *id) {
+  int self_id = print_self(parent_id, id, "load");
+  print_self(self_id, id, load->file);
+  print_self(self_id, id, load->delim);
+  print_self(parent_id, id, load->dest);
 }
 //#ifdef STAND_ALONE
 //	int main()

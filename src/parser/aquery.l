@@ -71,6 +71,13 @@ void consume_verbatim_q();
 "VALUES"	{ count(); return VALUES;   }
 "DELETE"	{ count(); return DELETE;   }
 
+ /* SQL: load data */
+("LOAD")|("load") { count(); return LOAD;   }
+("DATA")|("data") { count(); return DATA;   }
+("FIELDS")|("fields") { count(); return FIELDS;   }
+("TERMINATED")|("terminated") { count(); return TERMINATED;   }
+("INFILE")|("infile") { count(); return INFILE;   }
+
  /* SQL: search conditions */
 ("AND")|("and")		      { count(); return AND;          }
 ("OR")|("or")		      { count(); return OR;           }

@@ -866,7 +866,7 @@ NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs) {
   NamedExprNode *named = NULL;
   NamedExprNode *prev = NULL;
   char *temp_name = NULL;
-  int temp_name_len = 0;
+  size_t temp_name_len = 0;
   int col_ct = 1;
 
   while (curr != NULL) {
@@ -1608,29 +1608,44 @@ char get_SchemaTypeCode(char *typename) {
   }
 }
 
+void cg_LoadStatement(LoadNode *load) {
+  print_code("// load data statement\n");
+  print_code("{\n");
+  // we upsert into the destination table and modify permanently
+  print_code(" `%s set %s upsert ", load->dest, load->dest);
+  // we use the types of the destination to read in the data
+  // and all data read in is assumed to have column headers
+  // note that we don't remove the quotes in either the delimiter or
+  print_code("(upper exec t from meta %s; enlist %s) 0:hsym `$%s\n", load->dest, load->delim, load->file );
+  print_code(" }[]\n");
+}
+
 
 void cg_TopLevel(TopLevelNode *node) {
   if (node != NULL) {
     switch (node->node_type) {
-    case GLOBAL_QUERY:
-      cg_FullQuery(node->elem.query);
-      break;
-    case UDF_DEF:
-      cg_UDFDefNode(node->elem.udf);
-      break;
-    case INSERT_STMT:
-      cg_InsertStmt(node->elem.insert);
-      break;
-    case UPDATE_DELETE_STMT:
-      cg_LogicalQueryNode(node->elem.updatedelete);
-      break;
-    case CREATE_STMT:
-      cg_CreateStatement(node->elem.create);
-      break;
-    case VERBATIM_Q:
-      print_code("// verbatim q code\n");
-      print_code("%s\n", node->elem.verbatimQ);
-      break;
+      case GLOBAL_QUERY:
+        cg_FullQuery(node->elem.query);
+        break;
+      case UDF_DEF:
+        cg_UDFDefNode(node->elem.udf);
+        break;
+      case INSERT_STMT:
+        cg_InsertStmt(node->elem.insert);
+        break;
+      case UPDATE_DELETE_STMT:
+        cg_LogicalQueryNode(node->elem.updatedelete);
+        break;
+      case CREATE_STMT:
+        cg_CreateStatement(node->elem.create);
+        break;
+      case VERBATIM_Q:
+        print_code("// verbatim q code\n");
+        print_code("%s\n", node->elem.verbatimQ);
+        break;
+      case LOAD_STMT:
+        cg_LoadStatement(node->elem.load);
+        break;
     }
     cg_TopLevel(node->next_sibling);
   }
