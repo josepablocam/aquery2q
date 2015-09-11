@@ -1543,7 +1543,7 @@ LogicalQueryNode *optim_sort_group_od(LogicalQueryNode *proj,
   return pushdown_logical(grouphaving, sort);
 }
 
-// Operations associated with a order-independenr group-by/having
+// Operations associated with a order-independent group-by/having
 LogicalQueryNode *optim_sort_group_oi(LogicalQueryNode *proj,
                                       LogicalQueryNode *from,
                                       LogicalQueryNode *order,
@@ -1556,17 +1556,30 @@ LogicalQueryNode *optim_sort_group_oi(LogicalQueryNode *proj,
   // applied
   IDListNode *proj_order_cols =
       collect_sortColsNamedExpr(proj->params.namedexprs);
-
+  IDListNode *all_cols_group = collect_AllColsGroupby(grouphaving);
+  IDListNode *all_cols_proj =  collect_AllColsProj(proj);
+  // create copy before unioning, since unioning makes original lists useless
+  IDListNode *all_cols_group_and_proj_order = unionIDList(all_cols_group, deepcopy_IDListNode(proj_order_cols));
+  IDListNode *all_cols = unionIDList(deepcopy_IDListNode(all_cols_group), deepcopy_IDListNode(all_cols_proj));
+  
   if (proj_order_cols == NULL) { // no order dependencies in projection
     return grouphaving;
   } else if (in_IDList("*", proj_order_cols)) { // referencing "all columns"
-                                                // results in a full sort
+    // results in a full sort
     sort = order;
+    return pushdown_logical(grouphaving, sort);
+  } else if (any_in_IDList(all_cols_group, proj_order_cols)) {
+    // if any of the columns used in grouping are order dependent in projection,
+    // given that we sort prior to grouping, we need to actually sort
+    // all columns used
+    sort = make_sortCols(order->params.order, all_cols);
     return pushdown_logical(grouphaving, sort);
   } else { // else sort dependent columns, then group (based on experimental
            // results found in aquery/test/groupsorting.q and
            // aquery/test/grp_viz.r)
-    sort = make_sortCols(order->params.order, proj_order_cols);
+    // Note that sorting dependent columns before in turn means
+    // that we also have to sort the columns used in the group-by clause
+    sort = make_sortCols(order->params.order, all_cols_group_and_proj_order);
     return pushdown_logical(grouphaving, sort);
   }
 
