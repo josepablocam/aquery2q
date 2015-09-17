@@ -1,11 +1,11 @@
 // Author: Jose Cambronero (jpc485@nyu.edu)
 // A prototype of hash join implementation for Aquery to q compiler
 
-// nested loop join (gets executed within hash join upon matches)
+// nested loop join
 // args: table 1, table 2, join predicate
 // algo:
-//    for each tuple i  in t2:
-//          horizontally concatenate i to t1 (akin to second loop)
+//    for each tuple i in t2:
+//          horizontally concatenate i to t1 (akin to second loop but much faster)
 //          and execute selection with join predicate
 nj:{[t1;t2;p] raze {?[x,'count[x]#enlist y;z;0b;()]}[t1;;p] each t2}
 
@@ -13,15 +13,15 @@ nj:{[t1;t2;p] raze {?[x,'count[x]#enlist y;z;0b;()]}[t1;;p] each t2}
 // args: table 1, table 2, equality attributes table 1, equality attributes table 2, all join
 // predicates
 // we don't explicitly hash keys but rather use q's lookup tables, which are efficiently hashed
-// behind the covers
+// behind the covers on their keys
 // algo: 
 //   create build table with smaller table, where keys are equality attributes
 //      create similar table for larger table, where keys are equality attributes
 //      intersect keys between the 2 tables to find matches
-//      if there are any non-equality predicates, performs nested join with each potential matched
-//      bucket, otherwise simply crosses within each bucket (since all tuples in bucket are 
+//      if there are any non-equality predicates, perform nested loop joins with each potential
+//      match bucket, otherwise simply crosses within each bucket (since all tuples in bucket are 
 //      guaranteed to satisfy the join predicate)
-hj:{[h;t1;t2;a1;a2;p]
+hj:{[t1;t2;a1;a2;p]
   // argument preparation
   a1,:();
   a2,:();
@@ -32,15 +32,14 @@ hj:{[h;t1;t2;a1;a2;p]
   b:targs 1;
   sa:targs 2;
   ba:targs 3;
-  // here the hash is identity of join attributes, extract index
+  // here the "hash function" is identity of join attributes, extract index
   bti:?[s;();sa!sa;`i];
-  // hash larger and find matches, drop no matches
-  gw:?[b;();ba!ba;`i];
-  matches:((sa xcol key gw) inter key bti)#bti;
+  // hash larger and drop no matches
+  bw:?[b;();ba!ba;`i];
+  matches:((sa xcol key bw) inter key bti)#bti;
   // perform nj for all matches using complete join predicate
-  // additional inequality etc predicates if has any predicate that is no equality based
-  // otherwise just cross
-  inner:b gw ba xcol key matches;
+  // if has any predicate that is not equality based otherwise just cross
+  inner:b bw ba xcol key matches;
   outer:s value matches;
   $[hasneq;
     raze nj'[inner;outer;(count matches)#enlist p];
@@ -49,6 +48,20 @@ hj:{[h;t1;t2;a1;a2;p]
  }    
   
 /
+Simple example usage
+
+q)n:`int$1e6
+q)t:([]c1:n?100;c2:n?100;c3:n?1000)
+q)ts:(`$"ts_",/:string cols t) xcol 10#t
+q)\l proto_hashjoin.q
+q)\ts r1:nj[t;ts;enlist (=;`c1;`ts_c1)]
+111 33425936
+q)\ts r2:hj[t;ts;`c1;`ts_c1;(=;`c1;`ts_c1)]
+31 31203712
+q)(`c1 xasc r1)~`c1 xasc r2
+1b
+
+
  work flow for select ... t1, t2 where ...
 1 - if join predicate and tables reveal this is foreign key join, then simply
   add columns to column dictionary so that we can access using q's pointers. No
