@@ -1115,6 +1115,45 @@ void cg_AttributeCheckPossPush(IDListNode *cols, char *table) {
 }
 
 
+// We currently do not permit the use of aggregates in a join predicate
+// as implementing the appropriate semantics is a bit hairy and use-cases are low
+// if this changes, we can revise. For now, we check to make sure these are not
+// used
+void validate_no_prohibited_joinpred(ExprNode *joinpred) {
+  // find the aggregate function and report
+  if (joinpred->uses_agg) {
+    char *prohibited_fun = find_first_prohibited_joinfun(joinpred);
+    print_code("'\"prohibited aggregate in join: %s\"\n", prohibited_fun);
+    print_code("'\"use an update column and then join as workaround\"\n");
+    print_code("'\"if expression not achievable for use-case or error please report\"\n");
+  }
+}
+
+char *find_first_prohibited_joinfun(ExprNode *expr) {
+  char *prohibited_function = NULL;
+  char *fun_nm = NULL;
+  Symentry *fun_info = NULL;
+  if (expr != NULL) {
+    if(expr->node_type == CALL_EXPR) {
+      fun_nm = expr->first_child->data.str;
+      fun_info = lookup_sym(env, fun_nm);
+      // assume uses aggregate if unknown function
+      prohibited_function = (fun_info == NULL || fun_info->uses_agg == 1) ? fun_nm : NULL;
+    }
+    // check child only if haven't found
+    if (prohibited_function == NULL) {
+      prohibited_function = find_first_prohibited_joinfun(expr->first_child);
+    }
+    // check sibling only if haven't found
+    if (prohibited_function == NULL) {
+      prohibited_function = find_first_prohibited_joinfun(expr->next_sibling);
+    }
+  }
+  return prohibited_function;
+}
+
+
+
 char *cg_LogicalQueryNode(LogicalQueryNode *node) {
 
   char *result_table = NULL;
@@ -1140,6 +1179,7 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_CartesianProd(node);
       break;
     case INNER_JOIN_ON:
+      validate_no_prohibited_joinpred(node->params.exprs);
       print_code("'\"nyi inner join on\"\n");
       break;
     case FULL_OUTER_JOIN_ON:
