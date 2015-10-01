@@ -93,6 +93,10 @@ cg_join_push pickJoinTypePossPush(LogicalQueryNode *join);
 void cg_AttributeCheckPossPush(IDListNode *cols, char *table);
 IDListNode *colsCheckPossPush(LogicalQueryNode *join);
 
+/* joins on */
+void validate_no_prohibited_joinpred(ExprNode *joinpred);
+char *find_first_prohibited_joinfun(ExprNode *expr);
+
 /* insertion */
 void cg_InsertStmt(InsertNode *insert);
 void cg_InsertFromValues(char *tableInsertedInto, InsertNode *insert);
