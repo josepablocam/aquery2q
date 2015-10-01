@@ -110,8 +110,26 @@ void init_aq_helpers() {
              "  mz:select from z where not i in iz; // records z not in equi join\n"
              "  ejr upsert/(my;mz) // add missing records\n"
              "  }\n"
-             "\n\n"
-             "// Start of code\n");
+             ".aq.nj:{[t1;t2;p] raze {?[x,'count[x]#enlist y;z;0b;()]}[t1; ;p] each t2}\n"
+        );
+  print_code(".aq.hj:{[t1;t2;a1;a2;p]\n"
+                 "  // argument preparation\n"
+                 "  a1,:();a2,:();p:$[0<>type first p;enlist p;p];hasneq:any not (=)~/:first each p;\n"
+                 "  targs:$[count[t2]>count t1;(t1;t2;a1;a2);(t2;t1;a2;a1)];\n"
+                 "  s:targs 0;b:targs 1;sa:targs 2;ba:targs 3;\n"
+                 "  // here the \"hash function\" is identity of join attributes, extract index\n"
+                 "  bti:?[s;();sa!sa;`i];\n"
+                 "  // hash larger and drop no matches\n"
+                 "  bw:?[b;();ba!ba;`i];\n"
+                 "  matches:((sa xcol key bw) inter key bti)#bti;\n"
+                 "  // perform nj for all matches using complete join predicate\n"
+                 "  // if has any predicate that is not equality based otherwise just cross (guaranteed matches)\n"
+                 "  inner:b bw ba xcol key matches;\n"
+                 "  outer:s value matches;\n"
+                 "  $[hasneq;raze nj'[inner;outer;(count matches)#enlist p];raze {x cross y}'[inner;outer]]\n"
+                 " }\n");
+
+   print_code("\n\n// Start of code\n");
 }
 
 // add to the column dictionary

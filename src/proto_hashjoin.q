@@ -50,7 +50,7 @@ q)\ts r1:nj[t;ts;enlist (=;`c1;`ts_c1)]
 111 33425936
 q)\ts r2:hj[t;ts;`c1;`ts_c1;(=;`c1;`ts_c1)]
 31 31203712
-q)(`c1 xasc r1)~`c1 xasc r2
+q)({cols[x] xasc x}r1)~{cols[x] xasc x}r2
 1b
 
 // Comparing performance of ej with hj, with and without indexing on join keys
