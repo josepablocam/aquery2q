@@ -50,17 +50,43 @@ hj:{[t1;t2;a1;a2;p]
   
 /
 Simple example usage
-
+q)\l proto_hashjoin.q
+q)\S 10
 q)n:`int$1e6
 q)t:([]c1:n?100;c2:n?100;c3:n?1000)
-q)ts:(`$"ts_",/:string cols t) xcol 10#t
-q)\l proto_hashjoin.q
+q)ts:(`$"ts_",/:string cols t) xcol 1000#t
 q)\ts r1:nj[t;ts;enlist (=;`c1;`ts_c1)]
 111 33425936
 q)\ts r2:hj[t;ts;`c1;`ts_c1;(=;`c1;`ts_c1)]
 31 31203712
 q)(`c1 xasc r1)~`c1 xasc r2
 1b
+
+// Comparing performance of ej with hj, with and without indexing on join keys
+q)//renamed columns
+q)tsr:`c1 xcol ts
+q)tix:@[`c1 xasc t;`c1;`p#]
+q)\ts:100 ej[`c1;tix;tsr]
+36608 809514144
+q)\ts:100 hj[tix;ts;`c1;`ts_c1;(=;`c1;`ts_c1)]
+30926 1568766912
+
+// Now assume we need to add in inequality constraints
+q)\ts:10 select from ej[`c1;tix;tsr] where c2 < ts_c2
+5745 1073742480
+q)\ts:10 hj[tix;ts;`c1;`ts_c1;((=;`c1;`ts_c1);(<;`c2;`ts_c2))]
+4951 803568368
+
+gold:select from ej[`c1;tix;tsr] where c2 < ts_c2
+test:hj[tix;ts;`c1;`ts_c1;((=;`c1;`ts_c1);(<;`c2;`ts_c2))]
+test:`c1`c2`c3`ts_c2`ts_c3 xasc delete ts_c1 from test
+gold:`c1`c2`c3`ts_c2`ts_c3 xasc gold
+gold~test
+
+
+
+
+
 
 
  work flow for select ... t1, t2 where ...
