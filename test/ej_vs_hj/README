@@ -1,0 +1,10 @@
+a series of experiments to explore the advantages of using ej vs my implementation
+of hash join (hj)
+
+
+Explores impact of:
+1 - different number of keys
+2 - different type of keys
+3 - attributes (vs no attributes)
+
+
