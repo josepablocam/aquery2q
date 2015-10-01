@@ -24,15 +24,9 @@ nj:{[t1;t2;p] raze {?[x,'count[x]#enlist y;z;0b;()]}[t1; ;p] each t2}
 //      guaranteed to satisfy the join predicate)
 hj:{[t1;t2;a1;a2;p]
   // argument preparation
-  a1,:();
-  a2,:();
-  p:$[0<>type first p;enlist p;p];
-  hasneq:any not (=)~/:first each p;
+  a1,:();a2,:();p:$[0<>type first p;enlist p;p];hasneq:any not (=)~/:first each p;
   targs:$[count[t2]>count t1;(t1;t2;a1;a2);(t2;t1;a2;a1)];
-  s:targs 0;
-  b:targs 1;
-  sa:targs 2;
-  ba:targs 3;
+  s:targs 0;b:targs 1;sa:targs 2;ba:targs 3;
   // here the "hash function" is identity of join attributes, extract index
   bti:?[s;();sa!sa;`i];
   // hash larger and drop no matches
@@ -42,10 +36,7 @@ hj:{[t1;t2;a1;a2;p]
   // if has any predicate that is not equality based otherwise just cross (guaranteed matches)
   inner:b bw ba xcol key matches;
   outer:s value matches;
-  $[hasneq;
-    raze nj'[inner;outer;(count matches)#enlist p];
-    raze {x cross y}'[inner;outer]
-    ]
+  $[hasneq;raze nj'[inner;outer;(count matches)#enlist p];raze {x cross y}'[inner;outer]]
  }    
   
 /
