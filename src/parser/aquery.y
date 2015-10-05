@@ -77,6 +77,9 @@ int silence_warnings = 0;
  /* SQL: load data from file */
 %token LOAD DATA INFILE FIELDS TERMINATED
 
+/* SQL: save data to file */
+%token OUTFILE
+
  /* SQL: search conditions */
 %token AND OR  
 %token <str> IS NOT BETWEEN IN LIKE NULL_KEYWORD OVERLAPS
@@ -158,6 +161,7 @@ int silence_warnings = 0;
 %type <insert> insert_statement
 %type <plan> delete_statement
 %type <load> load_statement
+%type <dump> dump_statement
 
 
 /* create statements */
@@ -197,6 +201,7 @@ int silence_warnings = 0;
   struct CreateSourceNode *createsrc;
   struct SchemaNode *schema;
   struct LoadNode *load;
+  struct DumpNode *dump;
   struct TopLevelNode *top;
 }
 
@@ -224,6 +229,7 @@ top_level: global_query top_level           { $$ = make_Top_GlobalQuery($1, $2);
 	|	update_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
 	|	delete_statement top_level          { $$ = make_Top_UpdateDelete($1, $2); }
 	| load_statement top_level            { $$ = make_Top_Load($1, $2); }
+	| dump_statement top_level            { $$ = make_Top_Dump($1, $2); }
 	|	user_function_definition top_level  { $$ = make_Top_UDF($1, $2); }
 	| VERBATIM_Q_CODE top_level           { $$ = make_Top_VerbatimQ($1, $2); }
 	| /* epsilon */	                      { $$ = NULL; }
@@ -524,6 +530,10 @@ delete_statement: DELETE FROM ID order_clause where_clause					{ $$ = assemble_f
 
 /****** Load statements ****////
 load_statement: LOAD DATA INFILE STRING INTO TABLE ID FIELDS TERMINATED BY STRING { $$ = make_loadNode($4, $11, $7); }
+
+/****** Dump statements ****////
+dump_statement: full_query INTO OUTFILE STRING FIELDS TERMINATED BY STRING { $$ = make_dumpNode($1, $8, $4); }
+
 
 /******* 2.7: user defined functions *******/
 //TODO: we need to infer the properties of the function based on the function_body

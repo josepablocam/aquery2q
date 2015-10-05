@@ -1345,6 +1345,7 @@ void cg_FullQuery(FullQueryNode *full_query) {
 char *cg_FullQuery_Embedded(FullQueryNode *full_query) {
   turn_on_query_global_flags();
   cg_LocalQueries(full_query->local_queries); // any code for local queries
+  turn_on_query_global_flags(); // turn on flags for main query
   char *result_table = cg_queryPlan(full_query->query_plan); // generate main query
   turn_off_query_global_flags();
   return result_table;
@@ -1703,6 +1704,13 @@ void cg_LoadStatement(LoadNode *load) {
   print_code(" }[]\n");
 }
 
+void cg_DumpStatement(DumpNode *dump) {
+  print_code("// query to write out\n");
+  print_code("{\n");
+  char *result = cg_FullQuery_Embedded(dump->query);
+  print_code(" (hsym `$%s) 0:%s 0:%s\n", dump->dest, dump->delim, result);
+  print_code(" }[]\n");
+}
 
 void cg_TopLevel(TopLevelNode *node) {
   if (node != NULL) {
@@ -1728,6 +1736,9 @@ void cg_TopLevel(TopLevelNode *node) {
         break;
       case LOAD_STMT:
         cg_LoadStatement(node->elem.load);
+        break;
+      case DUMP_STMT:
+        cg_DumpStatement(node->elem.dump);
         break;
     }
     cg_TopLevel(node->next_sibling);
