@@ -77,6 +77,7 @@ void consume_verbatim_q();
 ("FIELDS")|("fields") { count(); return FIELDS;   }
 ("TERMINATED")|("terminated") { count(); return TERMINATED;   }
 ("INFILE")|("infile") { count(); return INFILE;   }
+("OUTFILE")|("outfile") { count(); return OUTFILE;   }
 
  /* SQL: search conditions */
 ("AND")|("and")		      { count(); return AND;          }

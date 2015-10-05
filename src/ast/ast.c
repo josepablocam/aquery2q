@@ -871,6 +871,14 @@ LoadNode *make_loadNode(char *file, char *delim, char *dest) {
   return load;
 }
 
+DumpNode *make_dumpNode(FullQueryNode *query, char *delim, char *dest) {
+  DumpNode *dump = malloc(sizeof(DumpNode));
+  dump->query = query;
+  dump->delim = delim;
+  dump->dest = dest;
+  return dump;
+}
+
 /******* 2.1: Top level program definition *******/
 TopLevelNode *make_EmptyTopLevelNode(TopLevelNodeType type) {
   TopLevelNode *node = malloc(sizeof(TopLevelNode));
@@ -924,6 +932,13 @@ TopLevelNode *make_Top_VerbatimQ(char *qcode, TopLevelNode *next) {
 TopLevelNode *make_Top_Load(LoadNode *load, TopLevelNode *next) {
   TopLevelNode *top = make_EmptyTopLevelNode(LOAD_STMT);
   top->elem.load = load;
+  top->next_sibling = next;
+  return top;
+}
+
+TopLevelNode *make_Top_Dump(DumpNode *dump, TopLevelNode *next) {
+  TopLevelNode *top = make_EmptyTopLevelNode(DUMP_STMT);
+  top->elem.dump = dump;
   top->next_sibling = next;
   return top;
 }
