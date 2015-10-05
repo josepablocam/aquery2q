@@ -72,7 +72,7 @@ verifyInsertions:{
  }
 
 resetUpdateTables:{
-  `tu1 set ([]c1:1 1 1 2 2 3 4 4; c2:10 10 30 40 50 60 70 80);
+  `tu1 set ([]c1:1 1 1 2 2 3 4 4; c2:10 10 20 30 30 60 70 80);
   `otu1 set tu1;
   `tu2 set ([]c1:100 -100 200 300; c2:20 30 10 40);
   `otu2 set tu2;

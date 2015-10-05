@@ -711,28 +711,37 @@ char *cg_ProjectSelect(LogicalQueryNode *proj) {
   if (proj->params.namedexprs->expr->is_grouped) {
     acct_for_simple_groupBys();
   }
-  cg_NameExprTuples(t1, proj->params.namedexprs, 0);
+  cg_NamedExprTuples(t1, proj->params.namedexprs, 0, 1);
   print_code("];\n");
   free(t1);
   return t2;
 }
 
 // TODO: make name resolution better, imitate q's
-void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr) {
+void cg_NamedExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr, int infer_name) {
   NamedExprNode *next_nexpr = nexpr->next_sibling;
   char *col_nm = nexpr->name;
   ExprNode *expr = nexpr->expr;
+  ExprNodeType exprType = expr->node_type;
 
-  if (expr->node_type ==
-      ALLCOLS_EXPR) { // asterisk needs to be handled differently
+  if (exprType == ALLCOLS_EXPR) { // asterisk needs to be handled differently
     cg_allCols(tblnm);
   } else {
     print_code("(enlist[`");
+
     if (col_nm != NULL) {
       print_code("%s", col_nm);
+    } else if (infer_name && exprType == ID_EXPR) {
+      // for evident cases we should just use that
+      print_code("%s", expr->data.str);
+    } else if (infer_name && exprType == COLDOTACCESS_EXPR) {
+      // for dot column accesses (i.e. use of a correlation name), we return the "." replaced with an underscore
+      print_code("%s_%s", expr->first_child->data.str, expr->first_child->next_sibling->data.str);
     } else {
+      // otherwise go with a generic column name column
       print_code("x__%d", id_ctr++);
     }
+
     print_code("]!enlist ");
     cg_ExprNode(nexpr->expr);
     print_code(")");
@@ -740,7 +749,7 @@ void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr) {
 
   if (next_nexpr != NULL) {
     print_code(",");
-    cg_NameExprTuples(tblnm, next_nexpr, id_ctr);
+    cg_NamedExprTuples(tblnm, next_nexpr, id_ctr, infer_name);
   }
 }
 
@@ -853,7 +862,7 @@ char *cg_groupBy(LogicalQueryNode *node) {
   char *t2 = gen_table_nm();
   print_code(" %s:?[%s;();", t2, t1);
   print_code("%s:", AQ_GROUPED_EXPR); // store the group by expression info
-  cg_NameExprTuples(t1, node->params.namedexprs, 0);
+  cg_NamedExprTuples(t1, node->params.namedexprs, 0, 0);
   print_code(";");
   cg_allCols(t1); // generate dict of all column names
   print_code("];\n");
@@ -1350,7 +1359,7 @@ void cg_Update(FlatQuery *update) {
     print_code(";");
     // remove need for adverbs, since doing as a single query
     remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
-    cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
+    cg_NamedExprTuples(updatedTable, update->project->params.namedexprs, 0, 0);
     print_code("]\n");
   }
   else
@@ -1364,7 +1373,7 @@ void cg_Update(FlatQuery *update) {
     // projections (updates)
     // remove need for adverbs, since doing as a single query
     remove_is_grouped_attr_namedExpr(update->project->params.namedexprs);
-    cg_NameExprTuples(updatedTable, update->project->params.namedexprs, 0);
+    cg_NamedExprTuples(updatedTable, update->project->params.namedexprs, 0, 0);
     print_code("]\n");
   }
   print_code(" }[]\n");
@@ -1428,7 +1437,7 @@ void cg_flatWhere(LogicalQueryNode *where, char *from) {
 void cg_flatGroupBy(LogicalQueryNode *groupby, char *from) {
   if (groupby != NULL)
   {
-    cg_NameExprTuples(from, groupby->params.namedexprs, 0);
+    cg_NamedExprTuples(from, groupby->params.namedexprs, 0, 0);
   }
   else
   {
@@ -1456,7 +1465,7 @@ void cg_flatBooleanVector(FlatQuery *query, char *source) {
   }
   else
   {
-    print_code(" %s:exec aq__ix__ from %s;\n", AQ_INDICES, AQ_INDICES);
+    print_code(" %s:raze exec aq__ix__ from %s;\n", AQ_INDICES, AQ_INDICES);
   }
   // now create a vector of booleans with true at the appropriate locations
   print_code(" %s:@[(count %s)#0b;%s;:;1b];\n", AQ_INDICES, source, AQ_INDICES);
