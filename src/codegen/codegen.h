@@ -52,8 +52,7 @@ char *cg_FilterWhere(LogicalQueryNode *where);
 void cg_FilterWhere0(ExprNode *selection, char *from);
 void cg_FilterWhereExpressions(ExprNode *selection, char *from);
 char *gc_ProjectSelect(LogicalQueryNode *proj);
-void cg_NameExprTuples(char *tblnm, NamedExprNode *nexpr,
-                       int id_ctr); // dictionary
+void cg_NamedExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr, int infer_name);
 char *cg_groupBy(LogicalQueryNode *node);
 void groupby_shadow_cols(NamedExprNode *groups);
 NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs);
