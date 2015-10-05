@@ -30,6 +30,7 @@ int IN_QUERY = 0; // are we generating code within a query?
 int TABLE_CT = 1; // used to generate intermediate names for aquery tables,
                   // reset every function
 int QUERY_CT = 0; // used to name the functions that contain queries
+int IN_SIMPLE_QUERY = 1; // only 1 table in active context for query
 
 // Mapping q and aquery builtins and predicates
 char *aquery_builtins[] = {
@@ -76,8 +77,8 @@ void init_aq_helpers() {
   print_code("// ***** Aquery utilities ***** ///\n"
              "//table related\n");
   // generate column name dictionary
-  print_code(".aq.gencd:{[t;sn] ((`$(sn,\".\"),/:sc),c)!(2*count "
-             "c)#`$(sn,\"%s\"),/:sc:string c:cols t}\n",
+  print_code(".aq.gencd:{[t;sn;m] ((`$(sn,\".\"),/:sc),c)!(2*count "
+             "c)#`$($[m;sn,\"%s\";\"\"]),/:sc:string c:cols t}\n",
              AQ_COL_DELIM);
   // rename columns to aquery column name standard
   print_code(".aq.rcols:{[t;p] (`$(p,\"%s\"),/:string cols t) xcol t};\n",
@@ -132,11 +133,22 @@ void init_aq_helpers() {
    print_code("\n\n// Start of code\n");
 }
 
+// some simple flags that we use to generate code for various cases more easily
+void turn_on_query_global_flags() {
+  IN_SIMPLE_QUERY = 1;
+  IN_QUERY = 1;
+}
+
+void turn_off_query_global_flags() {
+  IN_SIMPLE_QUERY = 0;
+  IN_QUERY = 0;
+}
+
 // add to the column dictionary
-void add_to_dc(char *tbl, char *alias) {
-  print_code(" %s:{(key[y] inter %s) _ x,y}[%s;.aq.gencd[%s;\"%s\"]]; //drop "
+void add_to_dc(char *tbl, char *alias, int modify_cols) {
+  print_code(" %s:{(key[y] inter %s) _ x,y}[%s;.aq.gencd[%s;\"%s\";%db]]; //drop "
              "ambiguous cols from map\n",
-             AQ_COL_DICT, AQ_COL_LIST, AQ_COL_DICT, tbl, alias);
+             AQ_COL_DICT, AQ_COL_LIST, AQ_COL_DICT, tbl, alias, modify_cols);
   print_code(
       " %s:%s union cols %s; //store orig col names to avoid collisions\n",
       AQ_COL_LIST, AQ_COL_LIST, tbl); // store down table column
@@ -640,33 +652,26 @@ void cg_LocalVar(NamedExprNode *vardef) {
 /* Logical Query Plans */
 
 char *cg_SimpleTable(LogicalQueryNode *node) {
-  char *new_name = gen_table_nm();
   char *orig_name = node->params.name;
-  // add column mappings
-  add_to_dc(orig_name, orig_name);
-  // rename cols
-  cols_to_Aquery(new_name, orig_name, orig_name);
-  return new_name;
+  return cg_Table(orig_name, orig_name, !IN_SIMPLE_QUERY);
 }
-
-// char *cg_Alias(LogicalQueryNode *node)
-// {
-//     char *orig_name = node->arg->params.name;
-//     char *alias_name = node->params.name;
-//     add_to_dc(alias_name, orig_name);
-//     //print_code("%s:%s\n", alias_name, orig_name); do we need this?
-//     //free(orig_name);
-//     return orig_name;
-// }
 
 char *cg_Alias(LogicalQueryNode *node) {
   char *orig_name = node->arg->params.name;
   char *alias_name = node->params.name;
-  char *new_name = gen_table_nm();
-  // add column mappings
-  add_to_dc(orig_name, alias_name);
-  // rename cols
-  cols_to_Aquery(new_name, orig_name, alias_name);
+  return cg_Table(orig_name, alias_name, !IN_SIMPLE_QUERY);
+}
+
+char *cg_Table(char *orig_name, char *prefix, int modify_cols) {
+  // if we modify the table we need to assign a new name to it to avoid hitting the original with changes
+  char *new_name = orig_name;
+  if (modify_cols) {
+    new_name = gen_table_nm();
+    // create a new table with renamed columns
+    cols_to_Aquery(new_name, orig_name, prefix);
+  }
+  // add column mappings to dictionary
+  add_to_dc(orig_name, prefix, modify_cols);
   return new_name;
 }
 
@@ -1203,9 +1208,11 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       result_table = cg_FilterWhere(node);
       break;
     case CARTESIAN_PROD:
+      IN_SIMPLE_QUERY = 0;
       result_table = cg_CartesianProd(node);
       break;
     case INNER_JOIN_ON:
+      IN_SIMPLE_QUERY = 0;
       validate_no_prohibited_joinpred(node->params.exprs);
       print_code("'\"nyi inner join on\"\n");
       break;
@@ -1213,9 +1220,11 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       print_code("'\"nyi full outer join on\"\n");
       break;
     case INNER_JOIN_USING:
+      IN_SIMPLE_QUERY = 0;
       result_table = cg_IJUsing(node);
       break;
     case FULL_OUTER_JOIN_USING:
+      IN_SIMPLE_QUERY = 0;
       result_table = cg_FOJUsing(node);
       break;
     case GROUP_BY:
@@ -1250,9 +1259,11 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       // showed it was better to sort before grouping
       break;
     case EQUI_JOIN_ON:
+      IN_SIMPLE_QUERY = 0;
       print_code("'\"nyi equi join on\"\n");
       break;
     case POSS_PUSH_FILTER:
+      IN_SIMPLE_QUERY = 0;
       result_table = cg_PossPushFilter(node);
       break;
     case CONCATENATE_FUN:
@@ -1302,35 +1313,40 @@ void cg_colRename(IDListNode *names) {
 
 void cg_LocalQueries(LocalQueryNode *locals) {
   if (locals != NULL) {
+    turn_on_query_global_flags();
     cg_LocalQueryNode(locals);
+    turn_off_query_global_flags();
     cg_LocalQueries(locals->next_sibling);
   }
 }
 
 /* full query */
 void cg_FullQuery(FullQueryNode *full_query) {
-  IN_QUERY = 1; // turn on our flag for query
+  turn_on_query_global_flags();
   int query_id = QUERY_CT++;
   print_code("%s%d:", AQ_QUERY_NM, query_id); // query placed into named
                                               // function
   print_code("{[]\n");
   cg_LocalQueries(full_query->local_queries); // any code for local queries
+
+  // reset query flags before main clause
+  turn_on_query_global_flags();
   char *result_table =
       cg_queryPlan(full_query->query_plan); // generate main query
   print_code(" %s\n", result_table);
   print_code(" }\n"); // store function
   print_code("%s%d[]\n", AQ_QUERY_NM, query_id); // call function
   free(result_table);
-  IN_QUERY = 0; // turn off our flag for query
+  turn_off_query_global_flags();
 }
 
 // Full query, but should not create a top-level function, but is rather part of another
 // expression
 char *cg_FullQuery_Embedded(FullQueryNode *full_query) {
-  IN_QUERY = 1; // turn on our flag for query
+  turn_on_query_global_flags();
   cg_LocalQueries(full_query->local_queries); // any code for local queries
   char *result_table = cg_queryPlan(full_query->query_plan); // generate main query
-  IN_QUERY = 0; // turn off our flag for query
+  turn_off_query_global_flags();
   return result_table;
 }
 
@@ -1338,7 +1354,7 @@ char *cg_FullQuery_Embedded(FullQueryNode *full_query) {
 void cg_Update(FlatQuery *update) {
   print_code(" // beginning update statement\n{\n");
   init_dc();
-  IN_QUERY=1;
+  turn_on_query_global_flags();
   char *origTable = update->table->params.name;
   // call them the same until something changes
   char *updatedTable = origTable;
@@ -1377,7 +1393,7 @@ void cg_Update(FlatQuery *update) {
     print_code("]\n");
   }
   print_code(" }[]\n");
-  IN_QUERY = 0;
+  turn_off_query_global_flags();
   free(origTable);
   if (update->order != NULL) free(updatedTable);
 }
@@ -1385,7 +1401,7 @@ void cg_Update(FlatQuery *update) {
 void cg_Delete(FlatQuery *delete) {
   print_code(" // beginning delete statement\n{\n");
   init_dc();
-  IN_QUERY=1;
+  turn_on_query_global_flags();
   char *origTable = delete->table->params.name;
   // call them the same until something changes
   char *updatedTable = origTable;
@@ -1417,7 +1433,7 @@ void cg_Delete(FlatQuery *delete) {
   }
 
   print_code(" }[]\n");
-  IN_QUERY = 0;
+  turn_off_query_global_flags();
   free(origTable);
   if (delete->order != NULL) free(updatedTable);
 
@@ -1515,7 +1531,7 @@ void cg_InsertStmt(InsertNode *insert) {
   if (dest->node_type != SIMPLE_TABLE) {
     print_code(" // insertion destination\n");
     //not a simple node, need to generate code to manipulate it
-    IN_QUERY = 1;
+    turn_on_query_global_flags();
     // initialize structures for aquery to handle manipulation of destination
     init_dc();
     char *t1 = cg_LogicalQueryNode(insert->dest);
@@ -1523,7 +1539,7 @@ void cg_InsertStmt(InsertNode *insert) {
     print_code(" `%s set (cols %s) xcol %s; //make insertion mod to original\n",
       tableInsertedInto, tableInsertedInto, t1);
     free(t1);
-    IN_QUERY = 0;
+    turn_off_query_global_flags();
   }
 
   if (insert->src->query_plan->node_type == EXPLICIT_VALUES) {
