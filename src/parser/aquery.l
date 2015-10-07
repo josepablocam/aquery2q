@@ -138,6 +138,7 @@ void consume_verbatim_q();
 "sqrt"			{ count(); yylval.str = strdup(yytext); return SQRT;     }
 "stddev"		{ count(); yylval.str = strdup(yytext); return STDDEV;   }
 "make_null"		{ count(); yylval.str = strdup(yytext); return MAKENULL; }
+"ratios"      { count(); yylval.str = strdup(yytext); return RATIOS; }
 		
 
 

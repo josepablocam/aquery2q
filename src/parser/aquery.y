@@ -100,7 +100,7 @@ int silence_warnings = 0;
  /* non-moving variants */
 %token <str> ABS AVG COUNT DISTINCT DROP FILL FIRST LAST MAX MIN MOD NEXT PREV PRD REV SUM SQRT STDDEV 
  /* moving variants */
-%token <str> AVGS DELTAS MAXS MINS PRDS SUMS
+%token <str> AVGS DELTAS MAXS MINS PRDS SUMS RATIOS
 %token <str> MAKENULL
  
  /* literals and identifiers, and assocating storage in the yyval union */ 
@@ -669,6 +669,7 @@ built_in_fun: ABS 				{ $$ = make_builtInFunNode(env, $1); }
   | SQRT 		                { $$ = make_builtInFunNode(env, $1); }
 	| STDDEV 	                { $$ = make_builtInFunNode(env, $1); }
 	| MAKENULL	                { $$ = make_builtInFunNode(env, $1); }
+	| RATIOS                    { $$ = make_builtInFunNode(env, $1); }
 	;
 
 unary_neg: call { $$ = $1; }
