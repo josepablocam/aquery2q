@@ -758,6 +758,13 @@ void cg_NamedExprTuples(char *tblnm, NamedExprNode *nexpr, int id_ctr, int infer
   }
 }
 
+int can_infer_name(NamedExprNode *nexpr) {
+  ExprNodeType exprType = nexpr->expr->node_type;
+  return nexpr->name != NULL || exprType == ID_EXPR || exprType == COLDOTACCESS_EXPR;
+}
+
+
+
 // Sorting whole table, naive, and is only here in case people want to generated
 // code
 // without the optimizations, for comparison purposes, or readability
@@ -1184,6 +1191,33 @@ char *find_first_prohibited_joinfun(ExprNode *expr) {
   return prohibited_function;
 }
 
+void validate_exec_arrays(LogicalQueryNode *query) {
+  //find projection
+  LogicalQueryNode *curr = query;
+  while (curr != NULL && curr->node_type != PROJECT_SELECT) {
+    curr = curr->arg;
+  }
+
+  // validate projection for extracting arrays
+  NamedExprNode *nexprs = curr->params.namedexprs;
+  int valid = 1;
+
+  while(nexprs != NULL && valid) {
+    if(!can_infer_name(nexprs) || nexprs->expr->node_type == ALLCOLS_EXPR) {
+      print_code("'\"exec arrays requires explicitly named columns\"\n");
+      valid = 0;
+    }
+    nexprs = nexprs->next_sibling;
+  }
+}
+
+char *cg_execArrays(LogicalQueryNode *exec) {
+
+  char *table = cg_LogicalQueryNode(exec->arg);
+  validate_exec_arrays(exec->arg);
+  print_code(" show {key[x] set'value x}flip 0!%s;\n", table);
+  return table;
+}
 
 
 char *cg_LogicalQueryNode(LogicalQueryNode *node) {
@@ -1192,86 +1226,89 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
 
   if (node != NULL) {
     switch (node->node_type) {
-    case PROJECT_SELECT:
-      result_table = cg_ProjectSelect(node);
-      break;
-    case PROJECT_UPDATE:
-      print_code("'\"bug: this node should not be reachable, please report\"");
-      break;
-    case DELETION:
-      print_code("'\"nyi deletion\"\n");
-      break;
-    case FILTER_WHERE:
-      result_table = cg_FilterWhere(node);
-      break;
-    case FILTER_HAVING:
-      result_table = cg_FilterWhere(node);
-      break;
-    case CARTESIAN_PROD:
-      IN_SIMPLE_QUERY = 0;
-      result_table = cg_CartesianProd(node);
-      break;
-    case INNER_JOIN_ON:
-      IN_SIMPLE_QUERY = 0;
-      validate_no_prohibited_joinpred(node->params.exprs);
-      print_code("'\"nyi inner join on\"\n");
-      break;
-    case FULL_OUTER_JOIN_ON:
-      print_code("'\"nyi full outer join on\"\n");
-      break;
-    case INNER_JOIN_USING:
-      IN_SIMPLE_QUERY = 0;
-      result_table = cg_IJUsing(node);
-      break;
-    case FULL_OUTER_JOIN_USING:
-      IN_SIMPLE_QUERY = 0;
-      result_table = cg_FOJUsing(node);
-      break;
-    case GROUP_BY:
-      result_table = cg_groupBy(node);
-      break;
-    case SIMPLE_TABLE:
-      result_table = cg_SimpleTable(node);
-      break;
-    case ALIAS:
-      result_table = cg_Alias(node);
-      break;
-    case SORT:
-      result_table = cg_Sort(node);
-      break;
-    case FLATTEN_FUN:
-      result_table = cg_flatten(node);
-      break;
-    case EXPLICIT_VALUES:
-      cg_ExplicitValues(node);
-      result_table = NULL; // no table name should be generated
-      //print_code("'\"nyi explicit values\"\n");
-      break;
-    case COL_NAMES:
-      print_code("'\"nyi explicit COL NAMES\"\n");
-      break;
-    case SORT_COLS:
-      result_table = cg_SortCols(node);
-      break;
-    case SORT_EACH_COLS:
-      print_code("'\"bug: this node should not be reachable, please report\"");
-      // we did away with this, since performance tests
-      // showed it was better to sort before grouping
-      break;
-    case EQUI_JOIN_ON:
-      IN_SIMPLE_QUERY = 0;
-      print_code("'\"nyi equi join on\"\n");
-      break;
-    case POSS_PUSH_FILTER:
-      IN_SIMPLE_QUERY = 0;
-      result_table = cg_PossPushFilter(node);
-      break;
-    case CONCATENATE_FUN:
-      result_table = cg_concatenate(node);
-      break;
-     case FLATTENED_QUERY:
-      result_table =  cg_FlattenedQuery(node->params.flat);
-     break;
+      case PROJECT_SELECT:
+        result_table = cg_ProjectSelect(node);
+        break;
+      case PROJECT_UPDATE:
+        print_code("'\"bug: this node should not be reachable, please report\"");
+        break;
+      case DELETION:
+        print_code("'\"nyi deletion\"\n");
+        break;
+      case FILTER_WHERE:
+        result_table = cg_FilterWhere(node);
+        break;
+      case FILTER_HAVING:
+        result_table = cg_FilterWhere(node);
+        break;
+      case CARTESIAN_PROD:
+        IN_SIMPLE_QUERY = 0;
+        result_table = cg_CartesianProd(node);
+        break;
+      case INNER_JOIN_ON:
+        IN_SIMPLE_QUERY = 0;
+        validate_no_prohibited_joinpred(node->params.exprs);
+        print_code("'\"nyi inner join on\"\n");
+        break;
+      case FULL_OUTER_JOIN_ON:
+        print_code("'\"nyi full outer join on\"\n");
+        break;
+      case INNER_JOIN_USING:
+        IN_SIMPLE_QUERY = 0;
+        result_table = cg_IJUsing(node);
+        break;
+      case FULL_OUTER_JOIN_USING:
+        IN_SIMPLE_QUERY = 0;
+        result_table = cg_FOJUsing(node);
+        break;
+      case GROUP_BY:
+        result_table = cg_groupBy(node);
+        break;
+      case SIMPLE_TABLE:
+        result_table = cg_SimpleTable(node);
+        break;
+      case ALIAS:
+        result_table = cg_Alias(node);
+        break;
+      case SORT:
+        result_table = cg_Sort(node);
+        break;
+      case FLATTEN_FUN:
+        result_table = cg_flatten(node);
+        break;
+      case EXPLICIT_VALUES:
+        cg_ExplicitValues(node);
+        result_table = NULL; // no table name should be generated
+        //print_code("'\"nyi explicit values\"\n");
+        break;
+      case COL_NAMES:
+        print_code("'\"nyi explicit COL NAMES\"\n");
+        break;
+      case SORT_COLS:
+        result_table = cg_SortCols(node);
+        break;
+      case SORT_EACH_COLS:
+        print_code("'\"bug: this node should not be reachable, please report\"");
+        // we did away with this, since performance tests
+        // showed it was better to sort before grouping
+        break;
+      case EQUI_JOIN_ON:
+        IN_SIMPLE_QUERY = 0;
+        print_code("'\"nyi equi join on\"\n");
+        break;
+      case POSS_PUSH_FILTER:
+        IN_SIMPLE_QUERY = 0;
+        result_table = cg_PossPushFilter(node);
+        break;
+      case CONCATENATE_FUN:
+        result_table = cg_concatenate(node);
+        break;
+        case FLATTENED_QUERY:
+        result_table =  cg_FlattenedQuery(node->params.flat);
+        break;
+       case EXEC_ARRAYS:
+         result_table = cg_execArrays(node);
+         break;
     }
   }
   return result_table;

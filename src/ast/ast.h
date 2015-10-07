@@ -158,7 +158,8 @@ typedef enum LogicalQueryNodeType {
   EQUI_JOIN_ON,
   POSS_PUSH_FILTER,
   CONCATENATE_FUN,
-  FLATTENED_QUERY
+  FLATTENED_QUERY,
+  EXEC_ARRAYS
 } LogicalQueryNodeType;
 
 typedef struct FlatQuery {
@@ -212,6 +213,7 @@ OrderNode *make_OrderNode(OrderNodeType type, ExprNode *col);
 void free_OrderNode(OrderNode *order);
 LogicalQueryNode *make_sort(LogicalQueryNode *t, OrderNode *order);
 LogicalQueryNode *make_values(ExprNode *exprs);
+LogicalQueryNode *make_execArrays(LogicalQueryNode *query);
 
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs,
                                    LogicalQueryNode *rhs);

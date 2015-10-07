@@ -124,6 +124,10 @@ void cg_flatBooleanVector(FlatQuery *query, char *source);
 void remove_is_grouped_attr_expr(ExprNode *node);
 void remove_is_grouped_attr_namedExpr(NamedExprNode *node);
 
+/* exec arrays */
+void validate_exec_arrays(LogicalQueryNode *query);
+char *cg_execArrays(LogicalQueryNode *exec);
+
 /* load data statement */
 void cg_LoadStatement(LoadNode *load);
 
