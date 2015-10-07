@@ -77,6 +77,9 @@ int silence_warnings = 0;
 /* SQL: extract arrays as named variables */
 %token EXEC ARRAYS
 
+/* SQL: show the table in tabular form */
+%token SHOW
+
  /* SQL: load data from file */
 %token LOAD DATA INFILE FIELDS TERMINATED
 
@@ -149,7 +152,7 @@ int silence_warnings = 0;
 
 %type <plan> from_clause select_clause where_clause order_clause
 %type <plan> groupby_clause having_clause groupby_with_having groupby_ex_having
-%type <plan> base_query base_operations
+%type <plan> base_query query_or_exec base_query_ops
 %type <order> order_spec order_specs order_specs_tail
 
 %type <namedexpr> select_elem select_clause_tail groupby_elem groupby_tail
@@ -248,11 +251,11 @@ global_query: full_query                     { $$ = $1; }
 
 full_query:                     { env = push_env(env); } /* create a new scope to handle local query identifiers */
 			local_queries 		
-			base_operations 			{ env = pop_env(env); $$ = make_FullQueryNode($2, $3); } /* pop off to remove local queries and create AST node */
+			query_or_exec 			{ env = pop_env(env); $$ = make_FullQueryNode($2, $3); } /* pop off to remove local queries and create AST node */
 			;
 
-base_operations: base_query {$$ = $1; }
-			 | EXEC ARRAYS base_query {$$ = make_execArrays($3); }
+query_or_exec: base_query_ops {$$ = $1; }
+			 | EXEC ARRAYS base_query_ops {$$ = make_execArrays($3); }
 			 ;
 
 
@@ -266,7 +269,7 @@ local_queries_tail: local_query local_queries_tail  { $1->next_sibling = $2; $$ 
 
 local_query: ID                        
              col_aliases 				
-			 UC_AS '(' base_query ')'  { put_sym(env, $1, TABLE_TYPE, 0, 0); $$ = make_LocalQueryNode($1, $2, $5); add_order(env, $1, curr_order); } /* place local query info in sym table */
+			 UC_AS '(' base_query_ops ')'  { put_sym(env, $1, TABLE_TYPE, 0, 0); $$ = make_LocalQueryNode($1, $2, $5); add_order(env, $1, curr_order); } /* place local query info in sym table */
 			 ; 
 
 col_aliases: '(' comma_identifier_list ')' 			{ $$ = $2; }
@@ -282,8 +285,12 @@ comma_identifier_list_tail: ',' ID comma_identifier_list_tail	{ $$ = make_IDList
 
  /******* 2.3: Base query *******/
  //TODO: make this better.....
-  /* assemble plan calls a different function depending on optimizer level, store order info for current query to use in symtable */
 
+base_query_ops: base_query { $$ = $1; }
+  | SHOW base_query        { $$ = make_showOp($2); }
+  ;
+
+ /* assemble plan calls a different function depending on optimizer level, store order info for current query to use in symtable */
 base_query: select_clause from_clause order_clause where_clause groupby_clause  { $$ = assemble_plan($1, $2, $3, $4, $5); curr_order = $3; if($5 != NULL) { annotate_groupedNamedExpr($1->params.namedexprs); } }
 	; 
  

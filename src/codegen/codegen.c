@@ -1204,7 +1204,7 @@ void validate_exec_arrays(LogicalQueryNode *query) {
 
   while(nexprs != NULL && valid) {
     if(!can_infer_name(nexprs) || nexprs->expr->node_type == ALLCOLS_EXPR) {
-      print_code("'\"exec arrays requires explicitly named columns\"\n");
+      print_code(" '\"exec arrays requires explicitly named columns\"\n");
       valid = 0;
     }
     nexprs = nexprs->next_sibling;
@@ -1216,6 +1216,12 @@ char *cg_execArrays(LogicalQueryNode *exec) {
   char *table = cg_LogicalQueryNode(exec->arg);
   validate_exec_arrays(exec->arg);
   print_code(" show {key[x] set'value x}flip 0!%s;\n", table);
+  return table;
+}
+
+char *cg_showOp(LogicalQueryNode *show) {
+  char *table = cg_LogicalQueryNode(show->arg);
+  print_code(" show %s;\n", table);
   return table;
 }
 
@@ -1306,9 +1312,12 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
         case FLATTENED_QUERY:
         result_table =  cg_FlattenedQuery(node->params.flat);
         break;
-       case EXEC_ARRAYS:
+      case EXEC_ARRAYS:
          result_table = cg_execArrays(node);
          break;
+      case SHOW_OP:
+        result_table = cg_showOp(node);
+        break;
     }
   }
   return result_table;
