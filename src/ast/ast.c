@@ -728,6 +728,12 @@ LogicalQueryNode *make_values(ExprNode *exprs) {
   return vals;
 }
 
+LogicalQueryNode *make_execArrays(LogicalQueryNode *query) {
+  LogicalQueryNode *exec = make_EmptyLogicalQueryNode(EXEC_ARRAYS);
+  exec->arg = query;
+  return exec;
+}
+
 // We need a way to send down an argument into the logical query plan
 // place RHS within lhs
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs,

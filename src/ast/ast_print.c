@@ -20,7 +20,7 @@ const char *LogicalQueryNodeTypeName[] = {
     "inner_join_using", "full_outer_join_using", "group_by", "simple_table",
     "alias", "sort", "flatten", "values", "col_names", "sort", "sort-each",
     "equi_join_on", "possible_push_filters", "concatenate",
-    "flattened query"};
+    "flattened query", "exec_arrays"};
 
 const char *CreateNodeTypeName[] = {"create_table", "create_view"};
 
@@ -192,6 +192,10 @@ void print_logical_query(LogicalQueryNode *step, int parent_id, int *id) {
       break;
     case CONCATENATE_FUN:
       print_concatenate(step, parent_id, id);
+      break;
+    case EXEC_ARRAYS:
+      print_exec_arrays(step, parent_id,id);
+      break;
     }
   }
 }
@@ -475,6 +479,11 @@ void print_dump(DumpNode *dump, int parent_id, int *id) {
   print_full_query(dump->query, parent_id, id);
   print_self(parent_id, id, dump->delim);
   print_self(parent_id, id, dump->dest);
+}
+
+void print_exec_arrays(LogicalQueryNode *exec, int parent_id, int *id) {
+  int self_id = print_self(parent_id, id, LogicalQueryNodeTypeName[exec->node_type]);
+  print_logical_query(exec->arg, self_id, id);
 }
 //#ifdef STAND_ALONE
 //	int main()

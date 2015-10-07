@@ -39,6 +39,7 @@ void print_sort_cols(LogicalQueryNode *sort, int parent_id, int *id);
 void print_flat_query(LogicalQueryNode *query, int parent_id, int *id);
 void print_load(LoadNode *load, int parent_id, int *id);
 void print_dump(DumpNode *dump, int parent_id, int *id);
+void print_exec_arrays(LogicalQueryNode *exec, int parent_id, int *id);
 
 // optimized queries
 void print_compute_sortix(LogicalQueryNode *comp, int parent_id, int *id);

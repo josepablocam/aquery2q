@@ -74,6 +74,9 @@ int silence_warnings = 0;
  /* SQL: update/insert/delete statements */
 %token UPDATE SET INSERT INTO VALUES DELETE
 
+/* SQL: extract arrays as named variables */
+%token EXEC ARRAYS
+
  /* SQL: load data from file */
 %token LOAD DATA INFILE FIELDS TERMINATED
 
@@ -146,7 +149,7 @@ int silence_warnings = 0;
 
 %type <plan> from_clause select_clause where_clause order_clause
 %type <plan> groupby_clause having_clause groupby_with_having groupby_ex_having
-%type <plan> base_query
+%type <plan> base_query base_operations
 %type <order> order_spec order_specs order_specs_tail
 
 %type <namedexpr> select_elem select_clause_tail groupby_elem groupby_tail
@@ -245,9 +248,12 @@ global_query: full_query                     { $$ = $1; }
 
 full_query:                     { env = push_env(env); } /* create a new scope to handle local query identifiers */
 			local_queries 		
-			base_query 			{ env = pop_env(env); $$ = make_FullQueryNode($2, $3); } /* pop off to remove local queries and create AST node */
-								
+			base_operations 			{ env = pop_env(env); $$ = make_FullQueryNode($2, $3); } /* pop off to remove local queries and create AST node */
 			;
+
+base_operations: base_query {$$ = $1; }
+			 | EXEC ARRAYS base_query {$$ = make_execArrays($3); }
+			 ;
 
 
 local_queries: WITH local_query local_queries_tail  { $2->next_sibling = $3; $$ = $2; } /* local queries are chained as siblings */
