@@ -72,6 +72,7 @@ void consume_verbatim_q();
 "DELETE"	{ count(); return DELETE;   }
 ("EXEC")|("exec") { count(); return EXEC;   }
 ("ARRAYS")|("arrays") { count(); return ARRAYS;   }
+("SHOW")|("show")   { count(); return SHOW;   }
 
  /* SQL: load data */
 ("LOAD")|("load") { count(); return LOAD;   }

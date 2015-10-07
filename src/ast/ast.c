@@ -734,6 +734,12 @@ LogicalQueryNode *make_execArrays(LogicalQueryNode *query) {
   return exec;
 }
 
+LogicalQueryNode *make_showOp(LogicalQueryNode *query) {
+  LogicalQueryNode *show = make_EmptyLogicalQueryNode(SHOW_OP);
+  show->arg = query;
+  return show;
+}
+
 // We need a way to send down an argument into the logical query plan
 // place RHS within lhs
 LogicalQueryNode *pushdown_logical(LogicalQueryNode *lhs,
