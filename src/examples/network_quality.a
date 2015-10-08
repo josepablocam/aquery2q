@@ -1,0 +1,97 @@
+/*
+<q>
+\S 10
+numhandsets: 5;
+numtimepoints: 10;
+numbasestations: 4;
+myhandsets: ` $ (numhandsets # "h") ,' string(1 + til numhandsets);
+mytimepoints: 1 + til numtimepoints;
+mybasestations: ` $ (numbasestations # "b") ,' string(1 + til numbasestations);
+myqualities: (numhandsets * numtimepoints * numbasestations) ? 100
+mycross: flip mybasestations cross myhandsets cross mytimepoints cross myqualities;
+basestation: mycross[0];
+handset: ();
+quality: ();
+time: ();
+i: 0;
+t:([]basestation:mycross[0];handset:mycross[1];time:mycross[2];quality:mycross[3])
+`:network.csv 0:csv 0:t
+delete t from `.
+</q>
+*/
+
+
+CREATE TABLE network(basestation STRING, handset STRING, time INT, quality INT)
+
+LOAD DATA INFILE "network.csv" INTO TABLE network FIELDS TERMINATED BY ","
+
+CREATE TABLE qualtable AS
+  SHOW SELECT basestation, handset, avg(quality) as avg_quality
+  FROM  network ASSUMING ASC time GROUP BY basestation, handset
+
+// create a moving average table for each basestation
+CREATE TABLE histqual AS
+ WITH movingavg(basestation, time, mavg_quality) AS
+  (SELECT basestation, time, avgs(7, quality) FROM network ASSUMING ASC time GROUP BY basestation)
+  SELECT * FROM FLATTEN(movingavg)
+
+CREATE TABLE crossed AS
+  WITH 
+    grouped AS 
+    (SELECT basestation, time, mavg_quality FROM histqual 
+      ASSUMING ASC time GROUP BY basestation)
+    // Note that we are crossing nested arrables 
+    crossed(base1, base2, time, qual1, qual2) AS
+      (SELECT g1.basestation, g2.basestation, g1.time, g1.mavg_quality, g2.mavg_quality 
+       FROM grouped g1, grouped g2)
+    SHOW SELECT * FROM FLATTEN(crossed) WHERE base1 != base2
+    
+
+// let's define our own correlation function
+FUNCTION covariance(x, y) {
+  mean_x := avg(x);
+  mean_y := avg(y);
+  avg((x - mean_x) * (y - mean_y))
+}
+
+// note that aquery's algo to infer what columns need sorting will make sure
+// that correlation calculation is correct.. if we need to sort x/y we also sort y/x (respectively)
+FUNCTION corr(x, y) {
+  sd_x := sqrt(covariance(x, x));
+  sd_y := sqrt(covariance(y, y));
+  covariance(x,y) / (sd_x * sd_y) 
+ }
+
+
+// we want the table but might also want each field as a separate array for separate analysis
+CREATE TABLE correlations AS 
+  EXEC ARRAYS SELECT base1, base2, corr(qual1, qual2) as corrqual FROM crossed GROUP BY base1, base2
+  
+
+// the reality of the matter is that I assume we might be interested in seeing that correlation over 
+// specified buckets of time (correlations might break down over longer/shorter periods)
+CREATE TABLE couple_of_corrs AS
+  WITH 
+    days3(base1, base2, period_length, bucket, corr_val) AS
+    // note that bucket is not recomputed, since we use a named group-by
+    (SELECT base1, base2, 3, bucket, corr(qual1, qual2) 
+    FROM crossed GROUP BY base1, base2, floor(time / 3) as bucket)
+    
+    days5(base1, base2, period_length, bucket, corr_val) AS 
+    (SELECT base1, base2, 5, bucket, corr(qual1, qual2) 
+    FROM crossed GROUP BY base1, base2, floor(time / 5) as bucket)
+    
+    SELECT * FROM CONCATENATE(days3, days5)
+    
+ 
+ 
+    
+ 
+
+
+  
+  
+
+
+
+
