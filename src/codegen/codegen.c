@@ -47,7 +47,7 @@ char *q_builtins[] = {"abs", "avg", "avgs", "mavg", "count", "deltas",
                       "mmin", "mod", "next", "{(neg x) xprev y}","prev", "xprev", "prd", "prds", "reverse",
                       "sum", "sums", "msum", "sqrt", "dev", "first 0#", "not",
                       "::", "within", "in", "{[x;y] x like string y}", "null",
-                      "{[x;y] not (x[1]<y[0])|y[1]<x[0]}", "enlist", "{[x;y] x%y xprev x}"};
+                      "{[x;y] not (x[1]<y[0])|y[1]<x[0]}", "enlist", "{[x;y] y%x xprev y}"};
 
 char *aquery_overloads[] = {"avgs", "maxs", "mins", "sums", "first", "last", "prev", "next"};
 int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
@@ -127,7 +127,7 @@ void init_aq_helpers() {
                  "  // if has any predicate that is not equality based otherwise just cross (guaranteed matches)\n"
                  "  inner:b bw ba xcol key matches;\n"
                  "  outer:s value matches;\n"
-                 "  $[hasneq;raze nj'[inner;outer;(count matches)#enlist p];raze {x cross y}'[inner;outer]]\n"
+                 "  $[hasneq;raze .aq.nj'[inner;outer;(count matches)#enlist p];raze {x cross y}'[inner;outer]]\n"
                  " }\n");
 
    print_code("\n\n// Start of code\n");
