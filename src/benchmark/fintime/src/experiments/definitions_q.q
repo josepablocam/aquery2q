@@ -1,20 +1,7 @@
-path:hsym`$"/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/src/experiments"
-base:get ` sv path,`base
-price:get ` sv path,`price
-split:get ` sv path,`split
 
-// Retrieve randomly created lists
-stock10:get ` sv path,`stock10
-startYear10:get ` sv path,`startYear10
-stock1000:get ` sv path,`stock1000
-start300Days:get ` sv path,`start300Days
-startPeriod:get ` sv path,`startPeriod
-endPeriod:get ` sv path,`endPeriod
-SP500:get ` sv path,`SP500
-start6Mo:get ` sv path,`start6Mo
-Russell2000:get ` sv path,`Russell2000
-
+\l load_data.q
 /
+********* QUERY 0 ****************
 	Get the closing price of a set of 10 stocks for a 10-year period and group into weekly, monthly and yearly aggregates. For each aggregate period determine the low, high and average closing price value. The output should be sorted by id and trade date.
 \
 .qtest.q0:{
@@ -29,6 +16,7 @@ Russell2000:get ` sv path,`Russell2000
 	}
 
 /
+********* QUERY 1 ****************
 Adjust all prices and volumes (prices are multiplied by the split factor and volumes are divided by the split factor) for a set of 1000 stocks to reflect the split events during a specified 300 day period, assuming that events occur before the first trade of the split date. These are called split-adjusted prices and volumes.
 \
 .qtest.q1:{
@@ -42,10 +30,11 @@ Adjust all prices and volumes (prices are multiplied by the split factor and vol
 		ClosePrice:first ClosePrice*prd 1%SplitFactor,
 		OpenPrice:first OpenPrice*prd 1%SplitFactor,
 		Volume:first Volume*prd SplitFactor 
-		by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate
+		by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate <= SplitDate
 	}
 
 /
+********* QUERY 2 ****************
 For each stock in a specified list of 1000 stocks, find the differences between the daily high and daily low on the day of each split event during a specified period.
 \
 .qtest.q2:{
@@ -54,11 +43,12 @@ For each stock in a specified list of 1000 stocks, find the differences between 
 	splitdata:select Id, TradeDate:SplitDate, SplitFactor from split where Id in stock1000, 
 		SplitDate within (startPeriod;endPeriod);
 	select Id, TradeDate, MaxDiff:HighPrice - LowPrice from 
-		`Id`TradeDate xasc pxdata ij `Id`TradeDate xkey splitdata
+    `Id`TradeDate xasc ej[`Id`TradeDate;pxdata;splitdata]
 	}
 
 
 /
+********* QUERY 3 + 4 ****************
 Calculate the value of the S&P500 and Russell 2000 index for a specified day using unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on the specified day
 Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
 \
@@ -71,6 +61,7 @@ Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
  }
 
 /
+********* QUERY 5 ****************
 Find the 21-day and 5-day moving average price for a specified list of 1000 stocks during a 6-month period. (Use split adjusted prices)
 \
 .qtest.q5:{
@@ -81,37 +72,52 @@ Find the 21-day and 5-day moving average price for a specified list of 1000 stoc
 	data:select ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate 
 		from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
   avgdata:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc data;
-  select Id, TradeDate, m21, m5 from avgdata
+  0!avgdata
  }
- 
-/
-(Based on the previous query) 
-Modified: For now, just doing moving average not with respect to last query,
-as A2Q has not yet implemented creating a table from a query, which is needed to store
-the prior queries result (without repeating the query again). Performing on all stock instead
 
+show `query5TableQ set .qtest.q5[]; 
+
+/
+********* QUERY 6 ****************
+(Based on the previous query) 
 Find the points (specific days) when the 5-month moving average intersects the 21-day moving average for these stocks. The output is to be sorted by id and date.
 \
 .qtest.q6:{
-	pricedata:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc price;
-	select Id, CrossDate:TradeDate, ClosePrice from pricedata where Id=prev Id, 
-	((prev[m5] < prev m21) & m5 >= m21)|((prev[m5] > prev m21) & m5 <= m21)
+	select Id, CrossDate:TradeDate, ClosePrice from query5TableQ where Id=prev Id, 
+	((prev[m5] <= prev m21) & m5 > m21)|((prev[m5] >= prev m21) & m5 < m21)
   }
 
 
 
 /
+********* QUERY 7 ****************
 Determine the value of $100,000 now if 1 year ago it was invested equally in 10 specified stocks (i.e. allocation for each stock is $10,000). The trading strategy is: When the 20-day moving average crosses over the 5-month moving average the complete allocation for that stock is invested and when the 20-day moving average crosses below the 5-month moving average the entire position is sold. The trades happen on the closing price of the trading day.
 \
 
-// TODO
-
+.qtest.q7:{
+ relevant:select from price where Id in stock10, TradeDate >= -365 + max TradeDate;
+ movingAvgs:update m20day:20 mavg ClosePrice, m5month:(31 * 5) mavg ClosePrice by Id
+ from `Id`TradeDate xasc relevant;
+ 
+ simulated:select ClosePrice, result:10000*prd ?[maxs m20day > m5month;?[m20day > m5month;1%ClosePrice;ClosePrice];1],
+ stillInvested:last[m20day] > last m5month by Id
+ from movingAvgs where (Id=prev[Id]) & 
+   (
+     ((prev[m5month] <= prev m20day)& m5month > m20day) |
+     ((prev[m5month] >= prev m20day)& m5month < m20day)
+   );
+   
+ latestPxs:select Id, ClosePrice from relevant where TradeDate=max TradeDate;
+ select Id, dollars:result * ?[stillInvested;ClosePrice;1] from simulated ij `Id xkey latestPxs
+ }
 
 /
+********* QUERY 8 ****************
 Find the pair-wise coefficients of correlation in a set of 10 securities for a 2 year period. Sort the securities by the coefficient of correlation, indicating the pair of securities corresponding to that row. [Note: coefficient of correlation defined in appendix]
 \
-.qtest.q7:{
-	pricedata:select from `Id`TradeDate xasc price where Id in stock10, TradeDate >= startYear10, 		TradeDate < startYear10 + 365 * 2;
+.qtest.q8:{
+	pricedata:select Id, ClosePrice from `Id`TradeDate xasc price where Id in stock10, TradeDate >= startYear10,
+    TradeDate < startYear10 + 365 * 2;
 	pair1:select ClosePrice1:ClosePrice by Id1:Id from pricedata;
 	pair2:`Id2`ClosePrice2 xcol pair1;
 	// full matrix, not just lower/upper triangular
@@ -119,14 +125,6 @@ Find the pair-wise coefficients of correlation in a set of 10 securities for a 2
 	select Id1, Id2, corrCoeff:cor'[ClosePrice1;ClosePrice2] from corrdata where Id1<>Id2
  }
 
-/
-Determine the yearly dividends and annual yield (dividends/average closing price) for the past 3 years for all the stocks in the Russell 2000 index that did not split during that period. Use unadjusted prices since there were no splits to adjust for.
-
-No dividend file produced by software (I will have to follow up on this one), so skipping for now.
-\
-
-
-// TODO
 
 
 

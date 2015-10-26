@@ -821,20 +821,26 @@ char *cg_SortCols(LogicalQueryNode *node) {
   // Now for each column in node->next_arg, generate a dictionary
   // of enlist[`col_name]!enlist(`col_name; .aq.six)
   IDListNode *curr_col = node->next_arg->params.cols;
-  print_code(" %s:![%s;();0b;", t2, t1);
+//  print_code(" %s:![%s;();0b;", t2, t1);
+//  while (curr_col != NULL) {
+//    print_code("(enlist[");
+//    cg_LookupCol(
+//        curr_col->name); // want to make sure column mappings are preserved
+//    print_code("]!enlist (");
+//    cg_LookupCol(curr_col->name);
+//    print_code("; %s", AQ_SORT_IX);
+//    print_code("))");
+//
+//    curr_col = curr_col->next_sibling;
+//    if (curr_col != NULL) {
+//      print_code(",");
+//    }
+//  }
+//  print_code("];\n");
+  print_code(" %s:![%s;();0b;c!( ;%s) each c:(),{x^%s x}", t2, t1, AQ_SORT_IX, AQ_COL_DICT);
   while (curr_col != NULL) {
-    print_code("(enlist[");
-    cg_LookupCol(
-        curr_col->name); // want to make sure column mappings are preserved
-    print_code("]!enlist (");
-    cg_LookupCol(curr_col->name);
-    print_code("; %s", AQ_SORT_IX);
-    print_code("))");
-
+    print_code("`%s", curr_col->name);
     curr_col = curr_col->next_sibling;
-    if (curr_col != NULL) {
-      print_code(",");
-    }
   }
   print_code("];\n");
 
@@ -1659,7 +1665,6 @@ void cg_CreateStatement(CreateNode *create) {
 void cg_CreateTable(CreateNode *create) {
   // wrap create statement in an anonymous function
   print_code("// create table statement\n");
-  print_code("{\n");
   switch(create->src->node_type) {
     case QUERY_SOURCE:
       cg_CreateTableFromQuery(create);
@@ -1668,15 +1673,19 @@ void cg_CreateTable(CreateNode *create) {
       cg_CreateTableFromSchema(create);
       break;
   }
- // close out anonymous function and run it
- print_code(" }[]\n");
 }
 
 void cg_CreateTableFromQuery(CreateNode *create) {
+  int query_id = QUERY_CT++;
+  // function
   print_code(" // creation query\n");
+  print_code("%s%d:", AQ_QUERY_NM, query_id); // query placed into named for create statements
+  print_code("{[]\n");
   char *srcnm = cg_FullQuery_Embedded(create->src->load.query);
-  print_code(" // actual creation\n");
-  print_code(" `%s set %s\n", create->name, srcnm);
+  print_code(" %s\n", srcnm); // return value
+  free(srcnm);
+  print_code(" };\n"); // store function
+  print_code("show `%s set %s%d[];\n", create->name, AQ_QUERY_NM, query_id);
 }
 
 void cg_CreateTableFromSchema(CreateNode *create) {

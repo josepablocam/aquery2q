@@ -1,5 +1,3 @@
-
-
 // Load q query definitions (as functions)
 \l definitions_q.q
 
@@ -9,22 +7,20 @@ system "a2q -c -s -a 1 -o compiled.q definitions_aquery.a"
 
 // Load compiled aquery (will run one query once, by default)
 \l compiled.q
-
-queries:`$"q",/:string til 8
-
-nruns:10;
+N:9;
+queries:`$"q",/:string til N;
 
 //verify correctness
 show "---> Queries match"
-show queries!{
+show results:queries!{
   ar:eval(`$".aq.",x;::);
   .Q.gc[];
   qr:eval(`$".qtest.",x;::);
   ar~qr
-  } each string queries
+  } each string queries;
+  
 
-exit 0
-
+$[all results; exit 0; exit 1];
 
 
  
