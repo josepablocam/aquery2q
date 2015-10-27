@@ -1,12 +1,23 @@
 \l definitions_q.q
-queries:`$"q",/:string til 8
-
-time:{
+timeit:{[x;y]
+  `funtotime set get y;
   .Q.gc[];
-  start:.z.P;
-  do[x;eval(`$".qtest.",y;::)];
-  (.z.P - start)%1e6*x
+  time:system ssr["ts:%d funtotime[]";"%d";string x];
+  @[`float$time;enlist 0;%[;x]]
   }
   
-time[10;] each string queries
+opts:.Q.opt .z.x;
+N:9;
+outpath:hsym `$first opts`out;
+iters:10^first "I"$opts`iters;
+queries:til N;
+// execute them in a random order, but note that q5/q6 must be together
+// since q6 depends on q5
+randomize:{first[p],t,last p:(0, 1?count s) cut s:{neg[count x]?x}x except t:5 6};
+results:timeit[iters;] each `$".qtest.",/:"q",/:string randomize queries;
+msg:","sv/:(enlist "q";string iters),/:string queries,'results;
+// if we have a path append to that file
+$[0=count outpath;1 ("\n"sv msg),"\n"; 
+ [(neg h:hopen outpath) msg; hclose h]
+ ];
 exit 0  
