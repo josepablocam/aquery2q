@@ -69,9 +69,11 @@ Find the 21-day and 5-day moving average price for a specified list of 1000 stoc
 	 TradeDate < start6Mo + 31 * 6;
 	splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
     SplitDate >= start6Mo, SplitDate < start6Mo + 31 * 6;
-	data:select ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate 
-		from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
-  avgdata:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc data;
+	splitadj:0!select ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate 
+		from ej[`Id;pxdata;splitdata] where TradeDate <= SplitDate;
+  nosplits:select Id, TradeDate, ClosePrice from pxdata where 
+    not ([]Id;TradeDate) in (select Id, TradeDate from splitadj);
+  avgdata:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc splitadj,nosplits;
   0!avgdata
  }
 
@@ -122,7 +124,8 @@ Find the pair-wise coefficients of correlation in a set of 10 securities for a 2
 	pair2:`Id2`ClosePrice2 xcol pair1;
 	// full matrix, not just lower/upper triangular
 	corrdata:pair1 cross pair2;
-	select Id1, Id2, corrCoeff:cor'[ClosePrice1;ClosePrice2] from corrdata where Id1<>Id2
+	corrResults:select Id1, Id2, corrCoeff:cor'[ClosePrice1;ClosePrice2] from corrdata where Id1<>Id2;
+  `corrCoeff xdesc corrResults
  }
 
 

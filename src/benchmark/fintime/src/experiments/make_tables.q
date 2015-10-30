@@ -8,7 +8,6 @@
 
 // Data paths
 DATAPATH:`:/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/data;
-UNIXEPOCH:1970.01.01;
 files:`$("hist-base-file";"hist-price-file";"hist-split-file");
 
 // Hist base file

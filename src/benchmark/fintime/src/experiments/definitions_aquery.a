@@ -116,6 +116,8 @@ select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where Id in Rus
 ********* QUERY 5 ****************
 Find the 21-day and 5-day moving average price for a specified list of 1000 stocks during a 6-month period. (Use split adjusted prices)
 */
+<q>exclude:{[id;date;tid;tdate] not ([]Id:id;TradeDate:date) in ([]Id:tid;TradeDate:tdate)}</q>
+
 CREATE TABLE query5TableAQ AS
   WITH
     // Price data for the period
@@ -132,18 +134,24 @@ CREATE TABLE query5TableAQ AS
    splitadj(Id, TradeDate, ClosePrice) AS
      (select Id, TradeDate, first(ClosePrice * prd(1/SplitFactor))
       from 
-      pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
+      pxdata INNER JOIN splitdata USING Id where TradeDate <= SplitDate
       group by Id, TradeDate)
-  
-    // moving averages
-    avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS (select 
-      Id, TradeDate, ClosePrice,
-      avgs(21, ClosePrice),
-    	avgs(5, ClosePrice)
-    	from splitadj assuming asc Id, asc TradeDate 
-      group by Id)
-	
-    select * from FLATTEN(avgInfo)
+      
+   // nosplit
+   nosplit(Id, TradeDate, ClosePrice) AS (
+     select Id, TradeDate, ClosePrice from pxdata where 
+     exclude(Id, TradeDate, splitadj("Id"), splitadj("TradeDate"))
+   ) 
+
+   // moving averages
+   avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS (select 
+     Id, TradeDate, ClosePrice,
+     avgs(21, ClosePrice),
+   	avgs(5, ClosePrice)
+   	from CONCATENATE(splitadj, nosplit) assuming asc Id, asc TradeDate 
+     group by Id)
+   
+  select * from FLATTEN(avgInfo)
    
 
 
@@ -258,4 +266,4 @@ WITH
   corrTable(Id1, Id2, corrCoeff) AS (select Id1, Id2,
        pairCorrEach(ClosePrice1, ClosePrice2) from
        pairsGrouped where Id1 != Id2)
-  select * from corrTable     
+  select * from corrTable assuming desc corrCoeff  

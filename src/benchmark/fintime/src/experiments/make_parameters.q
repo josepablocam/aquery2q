@@ -23,14 +23,16 @@ SP500:neg[500 & count base]?base`Id;
 start6Mo:first 1?exec distinct TradeDate from price where TradeDate.month <= -6 + max TradeDate.month;
 Russell2000:neg[2000 & count base]?base`Id;
 
-save ` sv path,`parameters`stock10
-save ` sv path,`parameters`startYear10
-save ` sv path,`parameters`stock1000
-save ` sv path,`parameters`start300Days
-save ` sv path,`parameters`startPeriod
-save ` sv path,`parameters`endPeriod
-save ` sv path,`parameters`SP500
-save ` sv path,`parameters`start6Mo
-save ` sv path,`parameters`Russell2000
+// saving in q format for aquery and q, and as a text file for others
+saveparams:{
+  // saving as q binaries for aquery and q
+  show save p:` sv path,`parameters,x;
+  // saving as csvfile for non-q
+  show (` sv path,`parameters,` sv x,`csv) 1:"," sv string (),get x;
+  }
+
+params:`stock10`startYear10`stock1000`start300Days`startPeriod`endPeriod`SP500`start6Mo`Russell2000;
+saveparams each params
+
 exit 0
 
