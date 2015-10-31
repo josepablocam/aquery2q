@@ -14,11 +14,12 @@ opts:.Q.opt .z.x;
 N:9;
 outpath:hsym `$first opts`out;
 iters:10^first "I"$opts`iters;
-queries:til N;
 // execute them in a random order, but note that q5/q6 must be together
-// since q6 depends on q5
-randomize:{first[p],t,last p:(0, 1?count s) cut s:{neg[count x]?x}x except t:5 6};
-results:timeit[iters;] each `$".aq.",/:"q",/:string randomize queries;
+// since q6 depends on q5, just run q5 at the start alwayws
+.aq.q5[];
+randomize:{neg[count x]?x};
+queries:randomize til N;
+results:timeit[iters;] each `$".aq.",/:"q",/:string queries;
 msg:","sv/:("aquery";string iters),/:string queries,'results;
 // if we have a path append to that file
 $[0=count outpath;1 ("\n"sv msg),"\n"; 
