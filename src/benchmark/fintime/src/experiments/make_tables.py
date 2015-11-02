@@ -36,7 +36,7 @@ def clean(df, date_cols = []):
     return df
         
 # read in data and clean up       
-path = "/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/data/"
+path = "../../data/"
 files = ["hist-base-file", "hist-price-file", "hist-split-file"]
 base = pd.read_csv(path + "/" + files[0], sep = "|")
 price = pd.read_csv(path + "/" + files[1], sep = "|")
