@@ -11,11 +11,11 @@ DATAGENPATH=./findata
 all: a2q fintime data
 
 clean:
-	cd ${EXPATH}; rm -rf compiled.q *.pyc parameters/ tables/
+	cd ${EXPPATH}; rm -rf compiled.q *.pyc parameters/ tables/
 	
 # make compiler for aquery and set alias
 a2q:
-	cd ../../../; make; alias a2q="./a2q"
+	cd ../../../; make
 
 # make benchmark generation code
 fintime:

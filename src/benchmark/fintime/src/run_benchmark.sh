@@ -33,11 +33,18 @@ if [ -f $CSVOUT ]
 		CSVOUT=${CSVOUT}.tmp
 fi		
 
-
 # Running experiments from RUNPATH
 announce "Running experiments from ${RUNPATH}, output path should be absolute"
 cd ${RUNPATH}
 :
+
+# check that aquery compiler is available
+export A2Q=../../../../a2q
+if [ ! -f $A2Q ]
+	then 
+		warn "No aquery compiler available, please call `make` before running"
+		exit 1
+fi
 
 # build data
 announce "Building tables and parameters"
@@ -46,7 +53,7 @@ q make_parameters.q > /dev/null
 python make_tables.py > /dev/null
 
 announce "Compiling aquery"
-a2q -c -s -a 1 -o compiled.q definitions_aquery.a > /dev/null
+${A2Q} -c -s -a 1 -o compiled.q definitions_aquery.a > /dev/null
 
 # No point in running benchmark if we are getting different results
 # using q as a gold-standard for aquery

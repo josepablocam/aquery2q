@@ -3,7 +3,8 @@
 
 // Compile aquery, with silenced warnings (since we're performing a cross in benchmark)
 // Make sure you have a2q in your path or aliased
-system "a2q -c -s -a 1 -o compiled.q definitions_aquery.a"
+a2qcompiler:getenv `A2Q;
+system a2qcompiler," -c -s -a 1 -o compiled.q definitions_aquery.a"
 
 // Load compiled aquery (will run one query once, by default)
 \l compiled.q
