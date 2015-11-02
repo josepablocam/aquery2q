@@ -23,6 +23,6 @@ fintime:
 
 # # create data neede for benchmark
 data: fintime
-	cd ${DATAGENPATH}; ./histgen ${BENCHMARKSIZE}; mv ./hist-* ../../data/
+	cd ${DATAGENPATH}; ./histgen ${BENCHMARKSIZE}; mkdir -p ../../data/; mv ./hist-* ../../data/
 
         
