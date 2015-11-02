@@ -1,7 +1,7 @@
 # arguments and validation
 if [ $# -ne 3 ]
   then
-    echo "usage: <csv-output-path> <per_query_iters> <benchmark_iters>"
+    echo "usage: <abs-path-csv-output> <per_query_iters> <benchmark_iters>"
     exit 1
 fi    
 
@@ -14,6 +14,10 @@ GOOD_PROMPT="\033[32m Benchmark:"
 BAD_PROMPT="\033[31m Benchmark:"
 NC="\033[0m"
 
+# path to run experiments
+RUNPATH=./experiments/
+TOPPATH=$(pwd)
+
 function announce {
   echo -e "${GOOD_PROMPT} ${1}${NC}"
 }
@@ -22,9 +26,17 @@ function warn {
   echo -e "${BAD_PROMPT} ${1}${NC}"
 }
 
+# Running experiments from RUNPATH
+announce "Running experiments from ${RUNPATH}, output path should be absolute"
+cd ${RUNPATH}
+:
+
 # build data
-announce "Building tables"
+announce "Building tables and parameters"
 q make_tables.q > /dev/null
+q make_parameters.q > /dev/null
+python make_tables.py > /dev/null
+
 announce "Compiling aquery"
 a2q -c -s -a 1 -o compiled.q definitions_aquery.a > /dev/null
 
@@ -51,4 +63,3 @@ for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   python run_pandas.py -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
   # TODO: monetdb
 done
-

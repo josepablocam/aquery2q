@@ -7,7 +7,7 @@
 //                                      //
 //////////////////////////////////////////
 
-path:hsym`$"/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/src/experiments"
+path:hsym`$"./"
 base:get ` sv path,`tables`base
 price:get ` sv path,`tables`price
 split:get ` sv path,`tables`split

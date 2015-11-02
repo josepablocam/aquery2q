@@ -1,11 +1,12 @@
 from datetime import datetime
 import pandas as pd
 
-# loading query parameters
-PARAMSPATH = "/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/src/experiments/parameters"
+PARAMSPATH = "./parameters"
+TABLESPATH = "./tables"
 PARAMS = ['stock10','startYear10','stock1000','start300Days',
     'startPeriod','endPeriod','SP500','start6Mo','Russell2000']
-    
+
+# loading query parameters    
 def load_params():
     param_dict = {}
     for param in PARAMS:
@@ -31,7 +32,6 @@ start6Mo = param_values.get("start6Mo")
 Russell2000 = param_values.get("Russell2000")
 
 # loading tables
-TABLESPATH = "/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/src/experiments/tables"
 price = pd.read_pickle(TABLESPATH + "/" + "price_pandas")
 base = pd.read_pickle(TABLESPATH + "/" + "base_pandas")
 split = pd.read_pickle(TABLESPATH + "/" + "split_pandas")

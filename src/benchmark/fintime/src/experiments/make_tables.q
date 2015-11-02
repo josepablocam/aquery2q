@@ -7,7 +7,7 @@
 //////////////////////////////////////////
 
 // Data paths
-DATAPATH:`:/Users/josecambronero/MS/S15/aquery/src/benchmark/fintime/data;
+DATAPATH:hsym `$"../../data/";
 files:`$("hist-base-file";"hist-price-file";"hist-split-file");
 
 // Hist base file

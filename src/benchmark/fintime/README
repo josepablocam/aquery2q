@@ -1,0 +1,20 @@
+This benchmark runs the historical queries that are part of 
+
+http://cs.nyu.edu/shasha/fintime.html
+
+
+To reproduce:
+1 - call `make` from the src directory.
+  cd src/
+  a) to build the default data (2000 stock ids, 4000 days):
+     make
+  b) to build with arbitrary # of stock ids
+    export BENCHMARKSIZE=n
+    make
+    
+Finally, you can run the experiments with
+./run_benchmark.sh your_csv_path_for_results.csv per_query_iterations benchmark_iterations
+
+Note that you should provide an absolute path for outputting results, as the script
+changes directories during execution.
+
