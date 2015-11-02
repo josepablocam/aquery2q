@@ -27,8 +27,8 @@ def timeAndWrite(f, filehandle, iters):
     funcname = f.__name__
     querynumber = funcname[1:]
     # timeit returns time in seconds, we want milliseconds
-    time = (1000 * timeit(f, number = iters)) / iters
-    # we don't care about measuring memory for pandas really
+    time = (1000.0 * timeit(f, number = iters)) / iters
+    # we don't care about measuring memory for pandas
     msg = "pandas," + str(iters) + "," + querynumber + "," + str(time) + ",NA\n"
     if filehandle == None:
         print(msg)

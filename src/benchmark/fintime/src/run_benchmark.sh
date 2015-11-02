@@ -26,6 +26,14 @@ function warn {
   echo -e "${BAD_PROMPT} ${1}${NC}"
 }
 
+# if output file already exists, create fresh name and warn
+if [ -f $CSVOUT ]
+	then
+		warn "${CSVOUT} already exists, writing to fresh file:${CSVOUT}.tmp"
+		CSVOUT=${CSVOUT}.tmp
+fi		
+
+
 # Running experiments from RUNPATH
 announce "Running experiments from ${RUNPATH}, output path should be absolute"
 cd ${RUNPATH}
