@@ -51,6 +51,7 @@ announce "Building tables and parameters"
 q make_tables.q > /dev/null
 q make_parameters.q > /dev/null
 python make_tables.py > /dev/null
+./make_tables_monetdb.sh
 
 announce "Compiling aquery"
 ${A2Q} -c -s -a 1 -o compiled.q definitions_aquery.a > /dev/null
@@ -78,3 +79,6 @@ for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   python run_pandas.py -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
   # TODO: monetdb
 done
+
+#stop monetdb server
+monetdb_server.sh -stop

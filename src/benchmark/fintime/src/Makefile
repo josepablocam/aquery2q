@@ -25,4 +25,7 @@ fintime:
 data: fintime
 	cd ${DATAGENPATH}; ./histgen ${BENCHMARKSIZE}; mkdir -p ../../data/; mv ./hist-* ../../data/
 
+# start up monetdb server
+monet:
+	cd ${EXPPATH}; monetdb_server.sh -start
         

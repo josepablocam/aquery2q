@@ -8,14 +8,19 @@
 
 // Data paths
 DATAPATH:hsym `$"../../data/";
-files:`$("hist-base-file";"hist-price-file";"hist-split-file");
+files:`base`price`split!` sv/:DATAPATH,/:`$("hist-base-file";"hist-price-file";"hist-split-file");
 
 // Hist base file
-base:("SSSSSSD";enlist "|") 0:` sv DATAPATH,files 0;
+base:("SSSSSSD";enlist "|") 0:files`base;
 // Hist price file
-price:("SDFFFFJ";enlist "|") 0:` sv DATAPATH,files 1;
+price:("SDFFFFJ";enlist "|") 0:files`price;
 // Hist split file
-split:("SDDI";enlist "|") 0:` sv DATAPATH,files 2;
+split:("SDDI";enlist "|") 0:files`split;
+
+
+// Rewrite the files as friendly for monetdb and pandas
+{x 0:"|" 0:get y}'[value files;key files];
+
 
 /////////////////////////////////
 //                             //
