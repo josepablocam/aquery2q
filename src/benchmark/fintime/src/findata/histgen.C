@@ -30,7 +30,7 @@ int main(int ac, char *av[])
   ofstream basefile("hist-base-file");
   ofstream pricefile("hist-price-file");
   ofstream splitfile("hist-split-file");
-  
+  ofstream dividendfile("hist-dividend-file");
 
   if (!basefile) 
    {
@@ -49,6 +49,14 @@ int main(int ac, char *av[])
      cerr << "Cannot open split-file" << endl;
      return 1;
    }
+   
+   if (!dividendfile)
+    {
+      cerr << "Cannot open dividend-file" << endl;
+      return 1;
+    }
+   
+   
   
   if (ac < 2) 
    {
@@ -159,10 +167,24 @@ int main(int ac, char *av[])
            splitfile << " | " << splitfactor;
            splitfile << endl;
          }
+         
+         // check dividends
+         if (op[k] > minop[k]) 
+          {
+            int dividend = rg(1,100) / 100;
+           
+            dividendfile << id;
+            dividendfile << " | " << cal;
+            dividendfile << " | " << dividend;
+            dividendfile << endl;
+          }
       }
+      
+      
    }
   splitfile.close();
   pricefile.close();
+  dividendfile.close();
 }
 
 

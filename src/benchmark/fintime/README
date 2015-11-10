@@ -18,3 +18,22 @@ Finally, you can run the experiments with
 Note that you should provide an absolute path for outputting results, as the script
 changes directories during execution.
 
+In order to run the monetdb benchmarking, you will need to build from source
+the pyapi branch, as per
+
+https://www.monetdb.org/blog/embedded-pythonnumpy-monetdb
+
+If you are building on OSX (which is what we used here), you will likely find the 
+following helpful:
+  For general installation info
+     https://www.monetdb.org/Developers/SourceCompile/OSX
+
+Additionally, the following file might need editing
+  MonetDB-pyapi/monetdb5/extras/pyapi/benchmark.c
+  Namely, Mac OSX doesn't have 
+  
+  clock_gettime(CLOCK_MONOTONIC, timespec);
+  
+In our case, we didn't need this, so we just commented out. Your approach might
+be different.
+  

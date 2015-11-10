@@ -19,7 +19,7 @@ def parse_datetime(dt_array, cache=None):
             date = pd.to_datetime(d_str)
             cache[d_str] = date
         parsed_dates[i] = date        
-    return parsed_dates
+    return pd.Series(parsed_dates)
     
     
 def clean(df, date_cols = []):

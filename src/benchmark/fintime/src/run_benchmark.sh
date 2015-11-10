@@ -16,7 +16,6 @@ NC="\033[0m"
 
 # path to run experiments
 RUNPATH=./experiments/
-TOPPATH=$(pwd)
 
 function announce {
   echo -e "${GOOD_PROMPT} ${1}${NC}"
@@ -46,11 +45,11 @@ if [ ! -f $A2Q ]
 		exit 1
 fi
 
-# build data
-announce "Building tables and parameters"
-q make_tables.q > /dev/null
-q make_parameters.q > /dev/null
-python make_tables.py > /dev/null
+# monetdb set up
+announce "Starting up monetdb"
+./monetdb_server.sh -start
+source ./load_data_monetdb.sh 
+source ./definitions_monetdb.sh
 
 announce "Compiling aquery"
 ${A2Q} -c -s -a 1 -o compiled.q definitions_aquery.a > /dev/null
@@ -59,13 +58,15 @@ ${A2Q} -c -s -a 1 -o compiled.q definitions_aquery.a > /dev/null
 # using q as a gold-standard for aquery
 announce "Verifying q-Aquery equivalence"
 q verify_equivalence.q > /dev/null
+
 if [ $? -ne 0 ]
   then
     warn "Aquery and Q results are not strictly equivalent. Fix and rerun"
     exit 1
 fi    
 
-# run benchmark
+
+
 for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   announce "Iteration ${iter} of benchmark"
   announce "Creating random benchmark parameters"
@@ -76,5 +77,9 @@ for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   q run_q.q -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
   announce "running pandas"
   python run_pandas.py -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
-  # TODO: monetdb
+  announce "running monetdb + embedded python" 
+  q run_monetdb.q -out $CSVOUT -iters $PER_QUERY_ITERS 
 done
+
+#stop monetdb server
+./monetdb_server.sh -stop

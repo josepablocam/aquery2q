@@ -8,7 +8,7 @@ endif
 EXPPATH=./experiments
 DATAGENPATH=./findata
 
-all: a2q fintime data
+all: a2q fintime data tables
 
 clean:
 	cd ${EXPPATH}; rm -rf compiled.q *.pyc parameters/ tables/
@@ -21,8 +21,19 @@ a2q:
 fintime:
 	cd ${DATAGENPATH}; make
 
-# # create data neede for benchmark
+# create raw data needed for benchmark
 data: fintime
 	cd ${DATAGENPATH}; ./histgen ${BENCHMARKSIZE}; mkdir -p ../../data/; mv ./hist-* ../../data/
 
-        
+# create tables for each system
+tables: data
+	cd ${EXPPATH};\
+	q make_tables.q > /dev/null;\
+	q make_parameters.q > /dev/null;\
+	python make_tables.py > /dev/null;\
+	./monetdb_server.sh -init;\
+	sleep 5s;\
+	./monetdb_server.sh -start;\
+	./make_tables_monetdb.sh -create;\
+	./load_data_monetdb.sh -create;\
+	./monetdb_server.sh -stop
