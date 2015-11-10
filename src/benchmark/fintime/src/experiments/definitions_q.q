@@ -64,18 +64,16 @@ Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
 ********* QUERY 5 ****************
 Find the 21-day and 5-day moving average price for a specified list of 1000 stocks during a 6-month period. (Use split adjusted prices)
 \
+
 .qtest.q5:{
 	pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, TradeDate >= start6Mo,
 	 TradeDate < start6Mo + 31 * 6;
 	splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
     SplitDate >= start6Mo, SplitDate < start6Mo + 31 * 6;
-	splitadj:0!select ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate 
-		from ej[`Id;pxdata;splitdata] where TradeDate <= SplitDate;
-  nosplits:select Id, TradeDate, ClosePrice from pxdata where 
-    not ([]Id;TradeDate) in (select Id, TradeDate from splitadj);
-  avgdata:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc splitadj,nosplits;
-  0!avgdata
- }
+	splitadj:0!select ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate <= SplitDate;
+  
+  update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc pxdata lj `Id`TradeDate xkey splitadj  
+ };
 
 show `query5TableQ set .qtest.q5[]; 
 
@@ -88,7 +86,6 @@ Find the points (specific days) when the 5-month moving average intersects the 2
 	select Id, CrossDate:TradeDate, ClosePrice from query5TableQ where Id=prev Id, 
 	((prev[m5] <= prev m21) & m5 > m21)|((prev[m5] >= prev m21) & m5 < m21)
   }
-
 
 
 /

@@ -132,13 +132,10 @@ def q5():
     adjFactors.columns = ['Id', 'TradeDate', 'SF']
     adjData = adjFactors.merge(pxdata, on = ['Id', 'TradeDate'], how = 'inner')
     adjData['ClosePrice'] = adjData['ClosePrice'] / adjData['SF']
-    # set index to be able to drop records
-    indexedPxData = pxdata.set_index(['Id', 'TradeDate'])
-    noSplitData = indexedPxData.drop(zip(adjData['Id'], adjData['TradeDate'])).reset_index()
-    # concatenate adjusted and non-adjusted prices
+    allData = pxdata.merge(adjData, on = ['Id', 'TradeDate'], how = 'left', suffixes = ['_pxdata', '_adjdata'])
+    allData['ClosePrice'] = allData['ClosePrice_adjdata'].fillna(allData['ClosePrice_pxdata'])
     relevantCols = ['Id', 'TradeDate', 'ClosePrice']
-    allData = pd.concat([adjData[relevantCols], noSplitData[relevantCols]])
-    # sort data
+    allData = allData[relevantCols]
     sortedData = allData.sort(columns = ['Id','TradeDate'], ascending = True)
     # groupby preserves order 
     grouped = sortedData[['Id', 'ClosePrice']].groupby('Id')
@@ -149,7 +146,7 @@ def q5():
     # as per query description
     global query5Table
     query5Table = sortedData
-    return sortedData
+    return sortedData    
 
 # ********* QUERY 6 ****************
 # (Based on the previous query) 

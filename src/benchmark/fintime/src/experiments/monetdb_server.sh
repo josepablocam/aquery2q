@@ -7,13 +7,13 @@ fi
 if [ $1 == "-init" ];
 	then
 		# create databases and set embedded python permission
+		# Set up monetdb config file with monetdb user
+		printf "user=monetdb\npassword=monetdb" > .monetdb
 		monetdbd create tables/monetdb
 		monetdbd start tables/monetdb
 		monetdb create fintime
 		monetdb set embedded_py=true fintime
 		monetdb release fintime
-		# Set up monetdb config file with monetdb user
-		echo -e "user=monetdb\npassword=monetdb" > .monetdb
 		monetdbd stop tables/monetdb	
 fi		
 

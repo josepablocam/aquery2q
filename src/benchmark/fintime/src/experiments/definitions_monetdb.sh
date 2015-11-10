@@ -1,62 +1,9 @@
-
-function date_to_monetdb {
-	sed 's/\./-/g' | awk '{printf "'\''%s'\''", $1}'
-}
-
-function csv_ids_to_monetdb {
-	sed "s/,/\',\'/g" | awk '{printf "'\''%s'\''", $1}'
-}
-
-# declaring variables used in queries...
-PARAMPATH=./parameters
-
-stock10=$(cat ${PARAMPATH}/stock10.csv | csv_ids_to_monetdb)
-startYear10=$(cat ${PARAMPATH}/startYear10.csv | date_to_monetdb) 
-endYear10=$(cat ${PARAMPATH}/endYear10.csv | date_to_monetdb) 
-startYear10Plus2=$(cat ${PARAMPATH}/startYear10Plus2.csv | date_to_monetdb) 
-stock1000=$(cat ${PARAMPATH}/stock1000.csv | csv_ids_to_monetdb)
-start300Days=$(cat ${PARAMPATH}/start300Days.csv | date_to_monetdb) 
-end300Days=$(cat ${PARAMPATH}/end300Days.csv | date_to_monetdb) 
-startPeriod=$(cat ${PARAMPATH}/startPeriod.csv | date_to_monetdb) 
-endPeriod=$(cat ${PARAMPATH}/endPeriod.csv | date_to_monetdb) 
-sp500=$(cat ${PARAMPATH}/SP500.csv | csv_ids_to_monetdb) 
-start6Mo=$(cat ${PARAMPATH}/start6Mo.csv | date_to_monetdb) 
-end6Mo=$(cat ${PARAMPATH}/end6Mo.csv | date_to_monetdb) 
-russell2000=$(cat ${PARAMPATH}/Russell2000.csv | csv_ids_to_monetdb) 
-maxTradeDate=$(cat ${PARAMPATH}/maxTradeDate.csv | date_to_monetdb) 
-maxTradeDateMinusYear=$(cat ${PARAMPATH}/maxTradeDateMinusYear.csv | date_to_monetdb) 
-alloc=10000
-
-## TURN OFF glob, avoid replacement of * in queries with directory contents
-set -f
-
-
-# create tables for stock data
-# #if [ $1  == "-create" ]; then
-# 	create_insert_params="";
-# 	OLDIFS=${IFS}
-# 	IFS=","
-# 	for tb in "stock10" "stock1000" "sp500" "russell2000";
-# 	do
-# 		create_insert_params="${create_insert_params}
-# 			DROP TABLE ${tb}; CREATE TABLE \"${tb}\"(\"id\" char(30));"
-# 		poss=${!tb}
-# 		for id in $poss; do
-# 			create_insert_params="${create_insert_params} INSERT into ${tb} VALUES($id);"
-# 		done
-# 	done
-# 	IFS=$OLDIFS
-# #fi
-
-
-
-
 # ********* QUERY 0 ****************
 # 	Get the closing price of a set of 10 stocks for a 10-year period and
 # 	group into weekly, monthly and yearly aggregates. For each aggregate
 # 	period determine the low, high and average closing price value.
 # 	The output should be sorted by id and trade date.
-q0="CREATE TEMPORARY TABLE pricedata (
+export q0="CREATE TEMPORARY TABLE pricedata (
 		id	    				char(30),
 		trade_date	  date,
 		close_price   double,
@@ -119,7 +66,7 @@ CREATE TEMPORARY TABLE query_result AS
 # volumes are divided by the split factor) for a set of 1000 stocks to reflect the
 # split events during a specified 300 day period, assuming that events occur before
 # the first trade of the split date. These are called split-adjusted prices and volumes.
-q1="
+export q1="
  CREATE TEMPORARY TABLE pricedata AS
  	 SELECT *
 	 FROM price INNER JOIN stock1000 USING (id)
@@ -161,7 +108,7 @@ q1="
 #********* QUERY 2 ****************
 # For each stock in a specified list of 1000 stocks, find the differences between the daily 
 # high and  daily low on the day of each split event during a specified period.
-q2="
+export q2="
   CREATE TEMPORARY TABLE query_result AS
 		select p.id, trade_date, max(high_price - low_price)  FROM
 		((SELECT * FROM price where 
@@ -181,12 +128,12 @@ q2="
 # Calculate the value of the S&P500 and Russell 2000 index for a specified day using
 # unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on
 # the specified day
-q3="
+export q3="
 select sum(close_price * Volume)/ 8.9e9 as index_val from
 (select * from price where trade_date=${startPeriod}) p
  INNER JOIN sp500 ix ON p.id = ix.id;
 "
-q4="
+export q4="
 select sum(close_price * Volume)/ 8.9e9 as index_val from
 (select * from price where trade_date=${startPeriod}) p
  INNER JOIN russell2000 ix ON p.id = ix.id;
@@ -198,7 +145,7 @@ select sum(close_price * Volume)/ 8.9e9 as index_val from
 # ********* QUERY 5 ****************
 # Find the 21-day and 5-day moving average price for a specified list of
 # 1000 stocks during a 6-month period. (Use split adjusted prices)
-q5="
+export q5="
  CREATE TEMPORARY TABLE pricedata AS
  	 SELECT *
 	 FROM price INNER JOIN stock1000 USING (id)
@@ -252,7 +199,7 @@ q5="
 # (Based on the previous query) 
 # Find the points (specific days) when the 5-month moving average intersects 
 # the 21-day moving average for these stocks. The output is to be sorted by id and date.
-q6="
+export q6="
 CREATE TEMPORARY TABLE m21_data AS
 	SELECT id, trade_date, m21, prev_double(m21) as prev_m21 
 	FROM q5_result
@@ -296,7 +243,7 @@ ON COMMIT PRESERVE ROWS
 # moving average the complete allocation for that stock is invested and when the
 # 20-day moving average crosses below the 5-month moving average the entire position
 # is sold. The trades happen on the closing price of the trading day.
-q7="
+export q7="
 	CREATE TEMPORARY TABLE pricedata AS
 		SELECT * FROM
 		(SELECT id, trade_date, close_price FROM price 
@@ -342,7 +289,7 @@ q7="
 	
 	CREATE TEMPORARY TABLE simulated AS
 		select id, result, still_invested FROM
-			(select id, execute_strategy(buy_signal, close_price) * 10000.0 as result
+			(select id, execute_strategy(buy_signal, close_price) * ${alloc} as result
 			from relevant group by id) a INNER JOIN 
 			(select id, last_boolean(buy_signal) as still_invested
 				from relevant group by id) s USING (id)
@@ -370,7 +317,7 @@ q7="
 # for a 2 year period. Sort the securities by the coefficient of correlation,
 # indicating the pair of securities corresponding to that row. [Note: coefficient
 # of correlation defined in appendix]
-q8="
+export q8="
 	CREATE TEMPORARY TABLE pricedata AS
 		SELECT * FROM
 		(SELECT id, trade_date, close_price FROM price WHERE
