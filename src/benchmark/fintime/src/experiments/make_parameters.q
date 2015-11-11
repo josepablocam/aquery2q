@@ -34,6 +34,7 @@ Russell2000:neg[2000 & count base]?base`Id;
 
 maxTradeDate:exec max TradeDate from price;
 maxTradeDateMinusYear:maxTradeDate-365;
+maxTradeDateMinus3Years:maxTradeDate-3*365;
 
 // saving in q format for aquery and q, and as a text file for others
 saveparams:{
@@ -45,7 +46,7 @@ saveparams:{
 
 params:`stock10`startYear10`stock1000`start300Days`startPeriod`endPeriod`SP500`start6Mo`Russell2000;
 // extra for ease of use with monetdb
-params,:`endYear10`startYear10Plus2`end300Days`end6Mo`maxTradeDate`maxTradeDateMinusYear;
+params,:`endYear10`startYear10Plus2`end300Days`end6Mo`maxTradeDate`maxTradeDateMinusYear`maxTradeDateMinus3Years;
 saveparams each params
 
 exit 0

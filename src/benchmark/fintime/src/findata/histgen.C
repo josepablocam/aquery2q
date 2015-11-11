@@ -122,6 +122,7 @@ int main(int ac, char *av[])
   
   pricefile << "Id | TradeDate | HighPrice | LowPrice | ClosePrice | OpenPrice | Volume" << endl;
   splitfile << "Id | SplitDate | EntryDate | SplitFactor" << endl;
+  dividendfile << "Id | XdivDate | DivAmt | AnnounceDate" << endl;
   
   for (d=0;d<ndays; d++)
    {
@@ -171,11 +172,15 @@ int main(int ac, char *av[])
          // check dividends
          if (op[k] > minop[k]) 
           {
-            int dividend = rg(1,100) / 100;
+            // dividend as a fraction of current closing price
+            double dividend = (rg(1, 100) / 100.0) * cp;
            
             dividendfile << id;
             dividendfile << " | " << cal;
             dividendfile << " | " << dividend;
+            // assumes announced and disbursed same day, 
+            // queries can be trivially modified to do away with this assumption
+            dividendfile << " | " << cal; 
             dividendfile << endl;
           }
       }

@@ -24,6 +24,7 @@ end6Mo=$(cat ${PARAMPATH}/end6Mo.csv | date_to_monetdb)
 russell2000=$(cat ${PARAMPATH}/Russell2000.csv | csv_ids_to_monetdb) 
 maxTradeDate=$(cat ${PARAMPATH}/maxTradeDate.csv | date_to_monetdb) 
 maxTradeDateMinusYear=$(cat ${PARAMPATH}/maxTradeDateMinusYear.csv | date_to_monetdb) 
+maxTradeDateMinus3Years=$(cat ${PARAMPATH}/maxTradeDateMinus3Years.csv | date_to_monetdb) 
 alloc=10000
 
 ## TURN OFF glob, avoid replacement of * in queries with directory contents

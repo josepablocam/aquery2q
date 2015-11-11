@@ -37,17 +37,20 @@ def clean(df, date_cols = []):
         
 # read in data and clean up       
 path = "../../data/"
-files = ["hist-base-file", "hist-price-file", "hist-split-file"]
+files = ["hist-base-file", "hist-price-file", "hist-split-file", "hist-dividend-file"]
 base = pd.read_csv(path + "/" + files[0], sep = "|")
 price = pd.read_csv(path + "/" + files[1], sep = "|")
 split = pd.read_csv(path + "/" + files[2], sep = "|")
+dividend = pd.read_csv(path + "/" + files[3], sep = "|")
 
 base = clean(base, ['CreateDate'])
 price = clean(price, ['TradeDate'])
 split = clean(split, ['SplitDate', 'EntryDate'])
+dividend = clean(dividend, ['XdivDate', 'AnnounceDate'])
 
 
 # write out to pickle format
 price.to_pickle("./tables/price_pandas")
 base.to_pickle("./tables/base_pandas")
 split.to_pickle("./tables/split_pandas")
+dividend.to_pickle("./tables/dividend_pandas")

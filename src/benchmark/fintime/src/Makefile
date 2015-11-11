@@ -32,8 +32,9 @@ tables: data
 	q make_parameters.q > /dev/null;\
 	python make_tables.py > /dev/null;\
 	./monetdb_server.sh -init;\
-	sleep 5s;\
+	sleep 7s;\
 	./monetdb_server.sh -start;\
+	sleep 5s; \
 	./make_tables_monetdb.sh -create;\
 	./load_data_monetdb.sh -create;\
 	./monetdb_server.sh -stop

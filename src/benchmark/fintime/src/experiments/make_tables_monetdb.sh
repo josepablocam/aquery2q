@@ -1,5 +1,6 @@
 # Drop the tables in case they exists
-echo "DROP TABLE price; DROP TABLE base; DROP TABLE split;" | mclient -d fintime
+echo "DROP TABLE price; DROP TABLE base; DROP TABLE split; DROP TABLE dividend;" | \
+  mclient -d fintime
 
 # Create tables, note columns here must be lower case
 echo 'CREATE TABLE "base" (
@@ -29,6 +30,13 @@ echo 'CREATE TABLE "price" (
   "volume"        bigint
 );' | mclient -d fintime
 
+echo 'CREATE TABLE "dividend" (
+  "id"                char(30),
+  "xdivdate"          date,
+  "divamt"            double,
+  "announcedate"      date
+);' | mclient -d fintime
+
 DATAPATH=$(pwd)/../../data/
 
 function nrows {
@@ -41,6 +49,7 @@ function nrows {
 PRICEN=$(nrows ${DATAPATH}/hist-price-file)
 BASEN=$(nrows ${DATAPATH}/hist-base-file)
 SPLITN=$(nrows ${DATAPATH}/hist-split-file)
+DIVIDENDN=$(nrows ${DATAPATH}/hist-dividend-file)
 
 echo "COPY ${PRICEN} OFFSET 2 RECORDS INTO price FROM '${DATAPATH}/hist-price-file'  
  USING DELIMITERS '|', '\n';" | mclient -d fintime
@@ -51,7 +60,8 @@ echo "COPY ${BASEN} OFFSET 2 RECORDS INTO base FROM '${DATAPATH}/hist-base-file'
 echo "COPY ${SPLITN} OFFSET 2 RECORDS INTO split FROM '${DATAPATH}/hist-split-file' 
  USING DELIMITERS '|', '\n';" | mclient -d fintime
  
- 
+echo "COPY ${DIVIDENDN} OFFSET 2 RECORDS INTO dividend FROM '${DATAPATH}/hist-dividend-file' 
+ USING DELIMITERS '|', '\n';" | mclient -d fintime 
  
 
 

@@ -14,7 +14,7 @@ timeit:{[iters;query]
 
 opts:.Q.opt .z.x;
 
-N:9;
+N:10;
 outpath:hsym `$first opts`out;
 iters:10^first "I"$opts`iters;
 // execute them in a random order

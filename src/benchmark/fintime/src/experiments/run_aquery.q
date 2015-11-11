@@ -12,7 +12,7 @@ timeit:{[x;y]
   }
   
 opts:.Q.opt .z.x;
-N:9;
+N:10;
 outpath:hsym `$first opts`out;
 iters:10^first "I"$opts`iters;
 // execute them in a random order, but note that q5/q6 must be together

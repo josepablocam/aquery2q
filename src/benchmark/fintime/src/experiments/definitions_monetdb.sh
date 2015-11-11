@@ -336,5 +336,60 @@ export q8="
 "
 
 
+# ********* QUERY 9 ****************
+# Determine the yearly dividends and annual yield (dividends/average closing price) for the past 3
+# years for all the stocks in the Russell 2000 index that did not split during that period.
+# Use unadjusted prices since there were no splits to adjust for.
+export q9="
+  CREATE TEMPORARY TABLE splitdata AS
+    SELECT distinct(id) from split INNER JOIN russell2000 USING (id)
+    WHERE split_date >= ${maxTradeDateMinus3Years}
+    WITH DATA
+  ON COMMIT PRESERVE ROWS;
+  
+  CREATE TEMPORARY TABLE pricedata AS
+  select * from 
+  (select * from price where trade_date >= ${maxTradeDateMinus3Years}) p
+  INNER JOIN russell2000 USING (id)
+  WITH DATA
+  ON COMMIT PRESERVE ROWS;
+  
+  CREATE TEMPORARY TABLE nosplit_avgpx AS
+    select id, year_val, avg(close_price) as avg_px from
+    (select id, close_price, \"year\"(trade_date) as year_val from pricedata
+    WHERE NOT EXISTS (SELECT * from splitdata WHERE pricedata.id=splitdata.id)
+    ) pxs group by id, year_val
+    WITH DATA
+  ON COMMIT PRESERVE ROWS;
+  
+  CREATE TEMPORARY TABLE dividenddata AS
+  select * from 
+  (select * from dividend where xdivdate >= ${maxTradeDateMinus3Years}) d
+  INNER JOIN russell2000 USING (id)
+  WITH DATA
+  ON COMMIT PRESERVE ROWS;
+  
+  CREATE TEMPORARY TABLE nosplit_div AS
+    select id, year_val, sum(divamt) as total_divs from
+    (select id, divamt, \"year\"(xdivdate) as year_val from dividenddata
+    WHERE NOT EXISTS (SELECT * from splitdata WHERE dividenddata.id=splitdata.id)
+    ) divs group by id, year_val
+    WITH DATA
+  ON COMMIT PRESERVE ROWS;
+
+  CREATE TEMPORARY TABLE query_result AS
+    select id, year_val, avg_px, total_divs, total_divs / avg_px as yield
+     from nosplit_avgpx LEFT JOIN nosplit_div USING (id, year_val)
+    WITH DATA
+  ON COMMIT PRESERVE ROWS;
+  
+  UPDATE query_result SET total_divs=0.0, yield=0.0 WHERE total_divs IS NULL; 
+"  
+
+
+    
+    
+    
+
 
 

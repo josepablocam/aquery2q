@@ -35,7 +35,7 @@ Russell2000 = param_values.get("Russell2000")
 price = pd.read_pickle(TABLESPATH + "/" + "price_pandas")
 base = pd.read_pickle(TABLESPATH + "/" + "base_pandas")
 split = pd.read_pickle(TABLESPATH + "/" + "split_pandas")
-
+dividend = pd.read_pickle(TABLESPATH + "/" + "dividend_pandas")
 
             
         
