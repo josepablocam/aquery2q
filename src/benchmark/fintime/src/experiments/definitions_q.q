@@ -149,7 +149,7 @@ defined in appendix]
 	// full matrix, not just lower/upper triangular
 	corrdata:pair1 cross pair2;
 	corrResults:select Id1, Id2, corrCoeff:cor'[ClosePrice1;ClosePrice2] from corrdata where Id1<>Id2;
-  `corrCoeff xdesc corrResults
+  `corrCoeff xasc corrResults
  }
 
 

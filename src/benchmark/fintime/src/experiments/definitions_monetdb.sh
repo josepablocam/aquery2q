@@ -329,6 +329,7 @@ export q8="
 		SELECT p1.id as id1, p2.id as id2, pairs_corr(p1.close_price, p2.close_price) as corr_val
 		FROM pricedata p1, pricedata p2 WHERE p1.id <> p2.id AND p1.trade_date = p2.trade_date
 		GROUP BY p1.id, p2.id
+    ORDER BY corr_val ASC
 		WITH DATA
 	ON COMMIT PRESERVE ROWS;   
 "

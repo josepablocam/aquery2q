@@ -246,7 +246,7 @@ def q8():
     # remove self-correlation
     flatCorrs = flatCorrs[flatCorrs['Id'] != flatCorrs["Id2"]]
     # sort by correlation coefficient
-    return flatCorrs.sort(['corrCoeff'], ascending = False)
+    return flatCorrs.sort(['corrCoeff'], ascending = True)
   
     
 # ********* QUERY 9 ****************

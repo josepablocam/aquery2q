@@ -286,7 +286,7 @@ WITH
   corrTable(Id1, Id2, corrCoeff) AS (select Id1, Id2,
        pairCorrEach(ClosePrice1, ClosePrice2) from
        pairsGrouped where Id1 != Id2)
-  select * from corrTable assuming desc corrCoeff  
+  select * from corrTable assuming asc corrCoeff  
   
   
 /*
