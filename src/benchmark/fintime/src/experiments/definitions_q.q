@@ -85,10 +85,12 @@ during a 6-month period. (Use split adjusted prices)
 	pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, TradeDate >= start6Mo,
 	 TradeDate < start6Mo + 31 * 6;
 	splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
-    SplitDate >= start6Mo, SplitDate < start6Mo + 31 * 6;
-	splitadj:0!select ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate <= SplitDate;
+    SplitDate >= start6Mo;
+	splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
+    ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
   
-  update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc pxdata lj `Id`TradeDate xkey splitadj  
+  update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from 
+    `Id`TradeDate xasc pxdata lj `Id`TradeDate xkey splitadj  
  };
 
 show `query5TableQ set .qtest.q5[]; 

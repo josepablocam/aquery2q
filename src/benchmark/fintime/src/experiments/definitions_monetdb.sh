@@ -154,7 +154,7 @@ export q5="
  CREATE TEMPORARY TABLE splitdata AS
  	 SELECT *
 	 FROM split INNER JOIN stock1000 USING (id)
-	 WHERE split_date >= ${start6Mo} AND split_date < ${end6Mo}
+	 WHERE split_date >= ${start6Mo}
 	 WITH DATA
  ON COMMIT PRESERVE ROWS;
  
@@ -167,7 +167,7 @@ export q5="
  ON COMMIT PRESERVE ROWS;
  
  CREATE TEMPORARY TABLE combined AS
-	 SELECT id, trade_date, close_price, close_price * 1.0 / adj as adj_price
+	 SELECT id, trade_date, close_price, close_price * adj as adj_price
 	 FROM pricedata LEFT JOIN adjdata USING (id, trade_date)
 	 ORDER BY id ASC, trade_date asc
 	 WITH DATA

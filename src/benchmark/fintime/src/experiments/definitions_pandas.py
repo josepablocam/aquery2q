@@ -121,7 +121,7 @@ def q5():
     pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
     # relevant split information
     splitdata = split[split['Id'].isin(stock1000)]
-    splitdata = splitdata[(splitdata['SplitDate'] >= start) & (splitdata['SplitDate'] < end)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
     # join to adjust prices by split factors
     joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
     # prices get adjusted by splits that happen later
@@ -129,10 +129,9 @@ def q5():
     # adjustment factor for each stock's trade date
     adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
     adjFactors.columns = ['Id', 'TradeDate', 'SF']
-    adjData = adjFactors.merge(pxdata, on = ['Id', 'TradeDate'], how = 'inner')
-    adjData['ClosePrice'] = adjData['ClosePrice'] / adjData['SF']
-    allData = pxdata.merge(adjData, on = ['Id', 'TradeDate'], how = 'left', suffixes = ['_pxdata', '_adjdata'])
-    allData['ClosePrice'] = allData['ClosePrice_adjdata'].fillna(allData['ClosePrice_pxdata'])
+    allData = pxdata.merge(adjFactors, on = ['Id', 'TradeDate'], how = 'left', suffixes = ['_pxdata', '_adjdata'])
+    allData['SF'] = allData['SF'].fillna(1.0)
+    allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
     relevantCols = ['Id', 'TradeDate', 'ClosePrice']
     allData = allData[relevantCols]
     sortedData = allData.sort(columns = ['Id','TradeDate'], ascending = True)
@@ -145,7 +144,7 @@ def q5():
     # as per query description
     global query5Table
     query5Table = sortedData
-    return sortedData    
+    return sortedData         
 
 # ********* QUERY 6 ****************
 # (Based on the previous query) 

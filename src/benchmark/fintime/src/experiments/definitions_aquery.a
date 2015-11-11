@@ -143,13 +143,13 @@ CREATE TABLE query5TableAQ AS
    // splits that happened  
    splitdata(Id, SplitDate, SplitFactor) AS 
    (select Id, SplitDate, SplitFactor from split
-     where Id in stock1000 and SplitDate >= start6Mo and SplitDate < start6Mo + 31 * 6)
+     where Id in stock1000 and SplitDate >= start6Mo)
   
    // prices after adjusting for splits
    splitadj(Id, TradeDate, ClosePrice) AS
-     (select Id, TradeDate, first(ClosePrice * prd(1/SplitFactor))
+     (select Id, TradeDate, first(ClosePrice * prd(SplitFactor))
       from 
-      pxdata INNER JOIN splitdata USING Id where TradeDate <= SplitDate
+      pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
       group by Id, TradeDate)
       
    // fill in missing splitadj price with original price when necessary
