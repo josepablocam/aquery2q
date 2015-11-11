@@ -1,7 +1,10 @@
 // Loading in data and tables using verbatim q
 <q>
 \l load_data.q
+getMonth:{1 + (`month$x) mod 12}
 getYear:{`year$x}
+firstDateOfYear:{`date$`month$d-30*-1+getMonth d:`date$`month$x}
+getWeek:{1 + floor (x - firstDateOfYear x)%7}
 </q>
 
 
@@ -26,7 +29,7 @@ WITH
     "weekly",
     min(ClosePrice), 
 	  max(ClosePrice), avg(ClosePrice)
-  	from Target group by Id, floor((TradeDate - startYear10)/7) as timeBucket)
+  	from Target group by Id, getWeek(TradeDate) as timeBucket)
 	
   monthly(Id, bucket, name, low, high, mean) AS (select
     Id,
@@ -35,7 +38,7 @@ WITH
      min(ClosePrice), 
 	   max(ClosePrice), 
      avg(ClosePrice)
-  	 from Target group by Id, floor((TradeDate - startYear10)/31) as timeBucket)
+  	 from Target group by Id, getMonth(TradeDate) as timeBucket)
 	
   yearly(Id, bucket, name, low, high, mean) AS (select
     Id,
@@ -44,7 +47,7 @@ WITH
      min(ClosePrice), 
 	   max(ClosePrice), 
      avg(ClosePrice)
-  	 from Target group by Id, floor((TradeDate - startYear10)/365) as timeBucket)
+  	 from Target group by Id, getYear(TradeDate) as timeBucket)
 		
 select Id, bucket, name, low, high, mean from CONCATENATE(weekly, monthly, yearly) 
     assuming asc Id, asc name, asc bucket

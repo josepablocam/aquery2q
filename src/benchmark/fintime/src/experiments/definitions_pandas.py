@@ -30,10 +30,9 @@ def q0():
     # select relevant data set and add time columns for grouping
     pxdata = price[price['Id'].isin(stock10)]
     pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
-    timeSinceStart = pxdata['TradeDate'] - start
-    pxdata['week'] = (timeSinceStart / timedelta(days = 7)).astype(int)
-    pxdata['month'] = (timeSinceStart / timedelta(days = 31)).astype(int)
-    pxdata['year'] = (timeSinceStart / timedelta(days = 365)).astype(int)
+    pxdata['week'] = pxdata['TradeDate'].map(lambda x: x.week)
+    pxdata['month'] = pxdata['TradeDate'].map(lambda x: x.month)
+    pxdata['year'] = pxdata['TradeDate'].map(lambda x: x.year)
     ops = { 'low' :  np.min, 'high' : np.max, 'mean' : np.mean }
    
     # aggregate along various time dimensions

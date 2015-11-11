@@ -3,29 +3,22 @@
 # 	group into weekly, monthly and yearly aggregates. For each aggregate
 # 	period determine the low, high and average closing price value.
 # 	The output should be sorted by id and trade date.
-export q0="CREATE TEMPORARY TABLE pricedata (
-		id	    				char(30),
-		trade_date	  date,
-		close_price   double,
-		week_bucket   integer,
-		month_bucket  integer,
-		year_bucket   integer)
-		ON COMMIT PRESERVE ROWS;
-
-INSERT INTO pricedata
-	select p.id, p.trade_date, p.close_price,
-	p.datediff/7 as week_bucket,
-	p.datediff/31 as month_bucket,
-	p.datediff/365 as year_bucket from 
+export q0="
+CREATE TEMPORARY TABLE pricedata AS
+	  select * from
 		(select id, trade_date, close_price,
-		trade_date - ${startYear10} as datediff
+    week(trade_date) as week_bucket,
+    \"year\"(trade_date) as year_bucket,
+    \"month\"(trade_date) as month_bucket
 		from price 
 		where 
 		trade_date >= ${startYear10} and 
 		trade_date < ${endYear10}
 		) p INNER JOIN stock10 s
-		ON p.id = s.id
-;
+		USING (id)
+  WITH DATA
+  ON COMMIT PRESERVE ROWS;  
+
 
 CREATE TEMPORARY TABLE collect_aggs(
 	id     char(30),

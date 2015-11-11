@@ -1,5 +1,10 @@
 
 \l load_data.q
+getMonth:{1 + (`month$x) mod 12}
+getYear:{`year$x}
+firstDateOfYear:{`date$`month$d-30*-1+getMonth d:`date$`month$x}
+getWeek:{1 + floor (x - firstDateOfYear x)%7}
+
 /
 ********* QUERY 0 ****************
 	Get the closing price of a set of 10 stocks for a 10-year period and group into 
@@ -13,8 +18,8 @@
 	`Id`name`bucket xasc (upsert/)
 	 {[x;y;z] 
 		0!select low:min ClosePrice, high:max ClosePrice, mean:avg ClosePrice 
-		by Id, bucket:floor (TradeDate - startYear10)%y, name:z from x
-		}[data;;]'[7 31 365;`weekly`monthly`yearly]
+		by Id, bucket:y TradeDate, name:z from x
+		}[data;;]'[(getWeek;getMonth;getYear);`weekly`monthly`yearly]
 	}
 
 /
