@@ -10,6 +10,7 @@ path:hsym `$"./"
 base:get ` sv path,`tables`base
 price:get ` sv path,`tables`price
 split:get ` sv path,`tables`split
+dividend:get ` sv path,`tables`dividend
 
 // Retrieve randomly created lists
 stock10:get ` sv path,`parameters`stock10

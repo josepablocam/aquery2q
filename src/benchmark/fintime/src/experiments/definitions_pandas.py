@@ -249,3 +249,29 @@ def q8():
     flatCorrs = flatCorrs[flatCorrs['Id'] != flatCorrs["Id2"]]
     # sort by correlation coefficient
     return flatCorrs.sort(['corrCoeff'], ascending = False)
+  
+    
+# ********* QUERY 9 ****************
+# Determine the yearly dividends and annual yield (dividends/average closing price) for the past 3
+# years for all the stocks in the Russell 2000 index that did not split during that period.
+# Use unadjusted prices since there were no splits to adjust for.  
+def q9():
+    start = price['TradeDate'].max() - timedelta(days = 365 * 3)
+    splitdata = split[split['Id'].isin(Russell2000)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
+    hadSplits = pd.unique(splitdata['Id'])
+    pxdata = price[(price['Id'].isin(Russell2000)) & (~price['Id'].isin(hadSplits))]
+    pxdata = pxdata[pxdata['TradeDate'] >= start]
+    pxdata['year'] = pxdata['TradeDate'].map(lambda x: x.year)
+    nosplit_avgpx = pxdata.groupby(['Id', 'year'], as_index = False)['ClosePrice'].mean()
+    divdata = dividend[(dividend['Id'].isin(Russell2000)) & (~dividend['Id'].isin(hadSplits))]
+    divdata = divdata[divdata['XdivDate'] >= start]
+    divdata['year'] = divdata['XdivDate'].map(lambda x: x.year)
+    divs = divdata.groupby(['Id', 'year'], as_index = False)['DivAmt'].sum()
+    combined = nosplit_avgpx.merge(divs, on = ['Id', 'year'], how = 'left')
+    combined['DivAmt'] = combined['DivAmt'].fillna(0)
+    combined['yield'] = combined['DivAmt'] / combined['ClosePrice']
+    return combined    
+    
+    
+    
