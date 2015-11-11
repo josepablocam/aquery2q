@@ -70,12 +70,13 @@ def q1():
     adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
     adjFactors.columns = ['Id', 'TradeDate', 'SF']
     # only care about adjusting those that have splits, so inner join
-    allData = adjFactors.merge(pxdata, on = ['Id', 'TradeDate'], how = 'inner')
-    allData['HighPrice'] = allData['HighPrice'] / allData['SF']
-    allData['LowPrice'] = allData['LowPrice'] / allData['SF']
-    allData['ClosePrice'] = allData['ClosePrice'] / allData['SF']
-    allData['OpenPrice'] = allData['OpenPrice'] / allData['SF']
-    allData['Volume'] = allData['Volume'] * allData['SF']
+    allData = pxdata.merge(adjFactors, on = ['Id', 'TradeDate'], how = 'left')
+    allData['SF'] = allData['SF'].fillna(1.0)
+    allData['HighPrice'] = allData['HighPrice'] * allData['SF']
+    allData['LowPrice'] = allData['LowPrice'] * allData['SF']
+    allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
+    allData['OpenPrice'] = allData['OpenPrice'] * allData['SF']
+    allData['Volume'] = allData['Volume'] / allData['SF']
     allData.drop(['SF'], axis = 1, inplace = True)
     return allData
 

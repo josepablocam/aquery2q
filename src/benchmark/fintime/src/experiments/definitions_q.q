@@ -31,17 +31,20 @@ the split date. These are called split-adjusted prices and volumes.
 \
 .qtest.q1:{
 	pxdata:select from price where Id in stock1000, TradeDate >= start300Days, 
-		TradeDate < start300Days + 300;
+    TradeDate < start300Days + 300;
 	splitdata:select from split where Id in stock1000, SplitDate >= start300Days, 
-		SplitDate < start300Days + 300;
-	
-	0!select HighPrice:first HighPrice*prd 1%SplitFactor,
-		LowPrice:first LowPrice*prd 1%SplitFactor,
-		ClosePrice:first ClosePrice*prd 1%SplitFactor,
-		OpenPrice:first OpenPrice*prd 1%SplitFactor,
-		Volume:first Volume*prd SplitFactor 
-		by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate <= SplitDate
-	}
+    SplitDate < start300Days + 300;
+  adjdata:select adjFactor:prd SplitFactor by Id, TradeDate
+    from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
+  
+    0!`Id`TradeDate xasc
+    select Id, TradeDate, HighPrice:HighPrice*1^adjFactor, 
+    LowPrice:LowPrice*1^adjFactor, 
+    ClosePrice:ClosePrice*1^adjFactor,
+    OpenPrice:OpenPrice*1^adjFactor,
+    Volume:Volume%1^adjFactor
+    from pxdata lj `Id`TradeDate xkey adjdata
+	}  
 
 /
 ********* QUERY 2 ****************

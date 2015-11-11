@@ -72,18 +72,23 @@ WITH
     (select Id, SplitDate, SplitFactor 
       from split where Id in stock1000 and SplitDate >= start300Days 
       and SplitDate < start300Days + 300)
-  
-  
-  select
-  Id as Id, TradeDate as TradeDate,
-  first(HighPrice * prd(1/SplitFactor)) as HighPrice,
-  first(LowPrice * prd(1/SplitFactor)) as LowPrice,
-  first(ClosePrice * prd(1/SplitFactor)) as ClosePrice,
-  first(OpenPrice * prd(1/SplitFactor)) as OpenPrice,
-  first(Volume * prd(SplitFactor)) as Volume
+
+  adjdata(Id, TradeDate, AdjFactor) AS (
+  select Id, TradeDate, prd(SplitFactor)
   from
-  pxdata INNER JOIN splitdata USING Id where TradeDate <= SplitDate
+  pxdata INNER JOIN splitdata USING Id 
+  where TradeDate < SplitDate
   group by Id, TradeDate
+  )
+  
+  select Id, TradeDate, HighPrice * fill(1, AdjFactor) as HighPrice,
+  LowPrice * fill(1, AdjFactor) as LowPrice,
+  ClosePrice * fill(1, AdjFactor) as ClosePrice,
+  OpenPrice * fill(1, AdjFactor) as OpenPrice,
+  Volume / fill(1, AdjFactor) as Volume
+  FROM
+  pxdata FULL OUTER JOIN adjdata USING (Id, TradeDate)
+  ASSUMING ASC Id, ASC TradeDate
 
 
 /*

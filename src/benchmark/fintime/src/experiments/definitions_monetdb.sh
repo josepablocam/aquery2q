@@ -85,13 +85,18 @@ export q1="
  CREATE TEMPORARY TABLE query_result AS
  	SELECT
   id, trade_Date,
- 	high_price * 1.0 / adj as high_price,
- 	low_price * 1.0 / adj as low_price,
- 	close_price * 1.0 / adj as close_price,
- 	open_price * 1.0 / adj as open_price,
- 	volume * adj as volume
- 	 FROM
- 	pricedata INNER JOIN adjdata USING (id, trade_date)
+ 	high_price * adj as high_price,
+ 	low_price * adj as low_price,
+ 	close_price * adj as close_price,
+ 	open_price * adj as open_price,
+ 	volume / adj as volume
+ 	FROM
+  (select id, trade_date, high_price, low_price,
+  close_price, open_price, volume,
+  CASE WHEN adj is NULL then 1 ELSE adj END as adj 
+   FROM
+ 	pricedata LEFT JOIN adjdata USING (id, trade_date)) filled
+  ORDER BY Id asc, trade_date asc
  	WITH DATA
  ON COMMIT PRESERVE ROWS;
 "
