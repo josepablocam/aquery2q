@@ -70,7 +70,7 @@ export q1="
  CREATE TEMPORARY TABLE splitdata AS
  	 SELECT *
 	 FROM split INNER JOIN stock1000 USING (id)
-	 WHERE split_date >= ${start300Days} AND split_date < ${end300Days}
+	 WHERE split_date >= ${start300Days}
 	 WITH DATA
  ON COMMIT PRESERVE ROWS;
  
@@ -127,12 +127,12 @@ export q2="
 # unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on
 # the specified day
 export q3="
-select sum(close_price * Volume)/ 8.9e9 as index_val from
+select avg(close_price) as avg_close_px from
 (select * from price where trade_date=${startPeriod}) p
  INNER JOIN sp500 ix ON p.id = ix.id;
 "
 export q4="
-select sum(close_price * Volume)/ 8.9e9 as index_val from
+select avg(close_price) as avg_close_px from
 (select * from price where trade_date=${startPeriod}) p
  INNER JOIN russell2000 ix ON p.id = ix.id;
 "

@@ -32,8 +32,7 @@ the split date. These are called split-adjusted prices and volumes.
 .qtest.q1:{
 	pxdata:select from price where Id in stock1000, TradeDate >= start300Days, 
     TradeDate < start300Days + 300;
-	splitdata:select from split where Id in stock1000, SplitDate >= start300Days, 
-    SplitDate < start300Days + 300;
+	splitdata:select from split where Id in stock1000, SplitDate >= start300Days;
   adjdata:select adjFactor:prd SplitFactor by Id, TradeDate
     from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
   
@@ -67,14 +66,13 @@ of each split event during a specified period.
 Calculate the value of the S&P500 and Russell 2000 index for a specified day 
 using unadjusted prices and the index composition of the 2 indexes (see appendix 
 for spec) on the specified day
-Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
 \
 .qtest.q3:{
-	select index:sum[ClosePrice*Volume]%8.9e9 from price where Id in SP500, TradeDate = startPeriod
+	select avg_close_price:avg ClosePrice from price where Id in SP500, TradeDate = startPeriod
  }
 
 .qtest.q4:{
-	select index:sum[ClosePrice*Volume]%8.9e9 from price where Id in Russell2000, TradeDate = startPeriod
+	select avg_close_price:avg ClosePrice from price where Id in Russell2000, TradeDate = startPeriod
  }
 
 /

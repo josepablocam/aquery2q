@@ -70,8 +70,7 @@ WITH
    
   splitdata(Id, SplitDate, SplitFactor) AS 
     (select Id, SplitDate, SplitFactor 
-      from split where Id in stock1000 and SplitDate >= start300Days 
-      and SplitDate < start300Days + 300)
+      from split where Id in stock1000 and SplitDate >= start300Days)
 
   adjdata(Id, TradeDate, AdjFactor) AS (
   select Id, TradeDate, prd(SplitFactor)
@@ -122,10 +121,10 @@ Calculate the value of the S&P500 and Russell 2000 index for a specified day usi
 and the index composition of the 2 indexes (see appendix for spec) on the specified day
 */
 // SP 500
-select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where Id in SP500 and TradeDate = startPeriod
+select avg(ClosePrice) as avg_close_price from price where Id in SP500 and TradeDate = startPeriod
 
 // russell 2000
-select sum(ClosePrice*Volume)/(8.9 * 10 ^ 9) as index from price where Id in Russell2000 and TradeDate = startPeriod
+select avg(ClosePrice) as avg_close_price from price where Id in Russell2000 and TradeDate = startPeriod
 
 
 

@@ -62,7 +62,7 @@ def q1():
     pxdata = price[price['Id'].isin(stock1000)]
     pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
     splitdata = split[split['Id'].isin(stock1000)]
-    splitdata = splitdata[(splitdata['SplitDate'] >= start) & (splitdata['SplitDate'] < end)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
     joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
     # prices get adjusted by splits that happen later
     joindata = joindata[joindata['TradeDate'] <= joindata['SplitDate']]
@@ -99,16 +99,15 @@ def q2():
 # ********* QUERY 3 + 4 ****************
 # Calculate the value of the S&P500 and Russell 2000 index for a specified day using unadjusted
 # prices and the index composition of the 2 indexes (see appendix for spec) on the specified day
-# Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
 def q3():
     pxdata = price[price['Id'].isin(SP500) & (price['TradeDate'] == startPeriod)]
-    indexValue = (pxdata['ClosePrice'] * pxdata['Volume']).sum() / 8.9e9
-    return pd.DataFrame({'index' : [ indexValue ] })
+    indexValue = pxdata['ClosePrice'].mean()
+    return pd.DataFrame({'avg_close_px' : [ indexValue ] })
     
 def q4():
     pxdata = price[price['Id'].isin(Russell2000) & (price['TradeDate'] == startPeriod)]
-    indexValue = (pxdata['ClosePrice'] * pxdata['Volume']).sum() / 8.9e9
-    return pd.DataFrame({'index' : [ indexValue ] })
+    indexValue = pxdata['ClosePrice'].mean()
+    return pd.DataFrame({'avg_close_px' : [ indexValue ] })
         
 
 # ********* QUERY 5 ****************
