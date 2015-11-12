@@ -77,7 +77,7 @@ export q1="
  CREATE TEMPORARY TABLE adjdata AS 
    SELECT id, trade_date, prod(split_factor) as adj
    FROM pricedata INNER JOIN splitdata USING (id)
-	 WHERE trade_date <= split_date
+	 WHERE trade_date < split_date
 	 GROUP BY id, trade_date
 	 WITH DATA
  ON COMMIT PRESERVE ROWS;	
@@ -161,7 +161,7 @@ export q5="
  CREATE TEMPORARY TABLE adjdata AS 
    SELECT id, trade_date, prod(split_factor) as adj
    FROM pricedata INNER JOIN splitdata USING (id)
-	 WHERE trade_date <= split_date
+	 WHERE trade_date < split_date
 	 GROUP BY id, trade_date
 	 WITH DATA
  ON COMMIT PRESERVE ROWS;
@@ -242,45 +242,69 @@ ON COMMIT PRESERVE ROWS
 # 20-day moving average crosses below the 5-month moving average the entire position
 # is sold. The trades happen on the closing price of the trading day.
 export q7="
-	CREATE TEMPORARY TABLE pricedata AS
-		SELECT * FROM
-		(SELECT id, trade_date, close_price FROM price 
-		WHERE trade_date >= ${maxTradeDateMinusYear}) p INNER JOIN
-		stock10 USING (id) ORDER BY id ASC, trade_date ASC
-		WITH DATA
-	ON COMMIT PRESERVE ROWS;
+  CREATE TEMPORARY TABLE pricedata AS
+  	 SELECT *
+ 	 FROM price INNER JOIN stock10 USING (id)
+ 	 WHERE trade_date >= ${maxTradeDateMinusYear}
+ 	 WITH DATA
+  ON COMMIT PRESERVE ROWS;
+ 
+  CREATE TEMPORARY TABLE splitdata AS
+  	 SELECT *
+ 	 FROM split INNER JOIN stock10 USING (id)
+ 	 WHERE split_date >= ${maxTradeDateMinusYear}
+ 	 WITH DATA
+  ON COMMIT PRESERVE ROWS;
+ 
+  CREATE TEMPORARY TABLE adjdata AS 
+    SELECT id, trade_date, prod(split_factor) as adj
+    FROM pricedata INNER JOIN splitdata USING (id)
+ 	 WHERE trade_date < split_date
+ 	 GROUP BY id, trade_date
+ 	 WITH DATA
+  ON COMMIT PRESERVE ROWS;
+ 
+  CREATE TEMPORARY TABLE combined AS
+ 	 SELECT id, trade_date, close_price as unadj_close_price, 
+   close_price * adj as close_price
+ 	 FROM pricedata LEFT JOIN adjdata USING (id, trade_date)
+ 	 ORDER BY id ASC, trade_date asc
+ 	 WITH DATA
+ 	ON COMMIT PRESERVE ROWS;
 	
-	CREATE TEMPORARY TABLE mavg_20_day AS
-	  SELECT id, trade_date, m20day, prev_double(m20day) as prev_m20day FROM
-		(SELECT id, trade_date, mavg(close_price, 20, id) as m20day FROM pricedata) p
+ 	UPDATE combined SET close_price=unadj_close_price WHERE close_price IS NULL;
+
+	CREATE TEMPORARY TABLE mavg_21_day AS
+	  SELECT id, trade_date, m21day, prev_double(m21day) as prev_m21day FROM
+		(SELECT id, trade_date, mavg(close_price, 21, id) as m21day FROM combined) p
 	WITH DATA
 	ON COMMIT PRESERVE ROWS;
 	
 	CREATE TEMPORARY TABLE mavg_5_month AS
 	 SELECT id, trade_date, m5month, prev_double(m5month) as prev_m5month,
 	 close_price FROM
-	 (select id, trade_date, mavg(close_price, 5 * 31, id) as m5month, 
-	 close_price FROM pricedata) p
+	 (select id, trade_date, mavg(close_price, 160, id) as m5month, 
+	 close_price FROM combined) p
 	 WITH DATA
 	ON COMMIT PRESERVE ROWS;
 	
   CREATE TEMPORARY TABLE sorted_data AS
     		select id,  prev_char(id) as prev_id, trade_date, 
-    			m20day, prev_m20day, m5month, prev_m5month, close_price FROM 
-    			mavg_5_month INNER JOIN mavg_20_day USING (id, trade_date)
+    			m21day, prev_m21day, m5month, prev_m5month, close_price FROM 
+    			mavg_5_month INNER JOIN mavg_21_day USING (id, trade_date)
     	ORDER BY id ASC, trade_date ASC
     WITH DATA
   ON COMMIT PRESERVE ROWS;  
   
 	CREATE TEMPORARY TABLE relevant AS
-	SELECT id, prev_id, trade_date, m20day, prev_m20day, m5month, prev_m5month,
-		m20day > m5month as buy_signal, close_price
+	SELECT id, prev_id, trade_date, m21day, prev_m21day, m5month, prev_m5month,
+		m21day > m5month as buy_signal, close_price
 	 from sorted_data
 	WHERE id = prev_id AND 
 	(
-		(prev_m5month <= prev_m20day AND m5month > m20day)
+		(prev_m5month <= prev_m21day AND m5month > m21day)
 		OR
-		(prev_m5month >= prev_m20day AND m5month < m20day) 
+		(prev_m5month >= prev_m21day AND m5month < m21day) 
 	)	
 	WITH DATA
 	ON COMMIT PRESERVE ROWS;
@@ -295,18 +319,16 @@ export q7="
 	ON COMMIT PRESERVE ROWS;
 	
 	CREATE TEMPORARY TABLE query_result AS
-	select 
-		id, result * close_price as dollars, result
+	select  
+    sum(result * CASE WHEN still_invested then close_price ELSE 1 END) as stock_value
     from 
-	simulated LEFT JOIN (
-		select id, close_price, true as still_invested 
-		FROM pricedata
+	(
+		select id, close_price
+		FROM combined
 		where trade_date=${maxTradeDate}
-	) latest_pxs USING (id, still_invested)
+	) latest_pxs LEFT JOIN simulated USING (id)
 	WITH DATA
 	ON COMMIT PRESERVE ROWS;
-	
-  UPDATE query_result SET dollars=result WHERE dollars IS NULL;  
 "
 
 

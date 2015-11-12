@@ -65,7 +65,7 @@ def q1():
     splitdata = splitdata[splitdata['SplitDate'] >= start]
     joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
     # prices get adjusted by splits that happen later
-    joindata = joindata[joindata['TradeDate'] <= joindata['SplitDate']]
+    joindata = joindata[joindata['TradeDate'] < joindata['SplitDate']]
     # adjustment factor for each stock's trade date
     adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
     adjFactors.columns = ['Id', 'TradeDate', 'SF']
@@ -125,7 +125,7 @@ def q5():
     # join to adjust prices by split factors
     joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
     # prices get adjusted by splits that happen later
-    joindata = joindata[joindata['TradeDate'] <= joindata['SplitDate']]
+    joindata = joindata[joindata['TradeDate'] < joindata['SplitDate']]
     # adjustment factor for each stock's trade date
     adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
     adjFactors.columns = ['Id', 'TradeDate', 'SF']
@@ -166,30 +166,46 @@ def q6():
 # moving average crosses over the 5-month moving average the complete allocation for that stock
 # is invested and when the 20-day moving average crosses below the 5-month moving average the entire
 # position is sold. The trades happen on the closing price of the trading day.
+# Modifications based on sybase benchmark: use adjusted prices, 21-day moving avg, instead
+# of 20 days
 def q7():
-    # creating moving price information for signals
-    n = np.size(stock10)
-    seedMoneyPerStock = 10000
-    start = price['TradeDate'].max() - timedelta(days = 365)
+    # create adjusted prices
+    maxTradeDate = price['TradeDate'].max()
+    start = maxTradeDate - timedelta(days = 365)
     pxdata = price[price['Id'].isin(stock10)]
     pxdata = pxdata[pxdata['TradeDate'] >= start]
-    pxdata = pxdata.sort(['Id', 'TradeDate'], ascending = True)
-    grouped = pxdata.groupby('Id')
-    pxdata['m5month'] = grouped['ClosePrice'].transform(lambda x: qma(x, 31 * 5))
-    pxdata['m20day'] = grouped['ClosePrice'].transform(lambda x: qma(x, 20))
-    pxdata['isSignal'] = (pxdata['Id'].shift(1) == pxdata['Id']) & (
+    # relevant split information
+    splitdata = split[split['Id'].isin(stock10)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
+    # join to adjust prices by split factors
+    joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
+    # prices get adjusted by splits that happen later
+    joindata = joindata[joindata['TradeDate'] < joindata['SplitDate']]
+    # adjustment factor for each stock's trade date
+    adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
+    adjFactors.columns = ['Id', 'TradeDate', 'SF']
+    allData = pxdata.merge(adjFactors, on = ['Id', 'TradeDate'], how = 'left')
+    allData['SF'] = allData['SF'].fillna(1.0)
+    allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
+
+    # creating moving price information for signals
+    allData = allData.sort(['Id', 'TradeDate'], ascending = True)
+    grouped = allData.groupby('Id')
+    allData['m5month'] = grouped['ClosePrice'].transform(lambda x: qma(x, 160))
+    allData['m21day'] = grouped['ClosePrice'].transform(lambda x: qma(x, 21))
+    allData['isSignal'] = (allData['Id'].shift(1) == allData['Id']) & (
        ( # cross under -> sell signal
-           (pxdata['m5month'].shift(1) <= pxdata['m20day'].shift(1)) &
-           (pxdata['m5month'] > pxdata['m20day'])
+           (allData['m5month'].shift(1) <= allData['m21day'].shift(1)) &
+           (allData['m5month'] > allData['m21day'])
         )
      | # alternatively
         ( # cross over -> buy signal
-            (pxdata['m5month'].shift(1) >= pxdata['m20day'].shift(1)) &
-            (pxdata['m5month'] < pxdata['m20day'])
+            (allData['m5month'].shift(1) >= allData['m21day'].shift(1)) &
+            (allData['m5month'] < allData['m21day'])
         )
      )
-    pxdata['buySignal'] = pxdata['m5month'] < pxdata['m20day'] # buy signal, if coincides with isSignal
-    signals = pxdata[pxdata['isSignal']]
+    allData['buySignal'] = allData['m5month'] < allData['m21day'] # buy signal, if coincides with isSignal
+    signals = allData[allData['isSignal']]
     grouped = signals.groupby('Id')
     # a vectorized approach to the strategy is
     # - can't sell before we buy, so need to wait for first buy signal to do anything w/ 10k
@@ -198,6 +214,7 @@ def q7():
     # result of strategy then is 10,000 * product of "actions"
     # if last action is buy, then multiply by latest price.
     # result: total valuation per stock simulating strategy (ignoring fees etc)
+    seedMoneyPerStock = 10000
     def strategy(x):
         hasSeenBuy = np.cumsum(x['buySignal']) > 0.0
         if (not hasSeenBuy.any()):
@@ -215,12 +232,15 @@ def q7():
 
     valuations = grouped.apply(strategy)
     # latest set of prices incase needed
-    results = pxdata.groupby('Id', as_index = False).last()
+    # making copy to avoid setting a slice error
+    results = allData[allData['TradeDate'] == maxTradeDate].copy()
     results['valuation'] = valuations[results['Id']].values
-    # size of stock10...incase we change that later on
-    results['value'] = np.maximum(np.ones(np.size(stock10)), results['ClosePrice'] * results['buySignal']) * results['valuation']
-    results['value'] = results['value'].fillna(seedMoneyPerStock)
-    return results[['Id', 'value']]
+    # value stock holdings at current market prices
+    stillInvested = results['buySignal']
+    results.loc[stillInvested, 'valuation'] = results.loc[stillInvested, 'ClosePrice'] * results.loc[stillInvested, 'valuation']
+    # if you never invested the allocation for a given stock, you still have the initial allocation
+    results['valuation'] = results['valuation'].fillna(seedMoneyPerStock)
+    return results['valuation'].sum()
 
 
 

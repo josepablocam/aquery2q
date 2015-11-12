@@ -158,7 +158,7 @@ CREATE TABLE query5TableAQ AS
      Id, TradeDate, 
      fill(pxdata.ClosePrice, splitadj.ClosePrice), 
      avgs(21,  fill(pxdata.ClosePrice, splitadj.ClosePrice)),
-   	  avgs(5,  fill(pxdata.ClosePrice, splitadj.ClosePrice))
+   	 avgs(5,  fill(pxdata.ClosePrice, splitadj.ClosePrice))
    FROM pxdata FULL OUTER JOIN splitadj USING (Id, TradeDate)
    assuming asc Id, asc TradeDate
    group by Id
@@ -192,6 +192,9 @@ or
    the complete allocation for that stock is invested and when the 
    20-day moving average crosses below the 5-month moving average the 
    entire position is sold. The trades happen on the closing price of the trading day.
+   
+   Modifications based on sybase benchmark: use adjusted prices, 21-day moving avg, instead
+   of 20 days
 */
 // encode execution of our trading strategy
 FUNCTION executeStrategy(alloc, mavgday, mavgmonth, px) {
@@ -208,37 +211,63 @@ FUNCTION executeStrategy(alloc, mavgday, mavgmonth, px) {
 }
 
 WITH
-  relevant AS (
-  select Id, TradeDate, ClosePrice from price  
-    where Id in stock10 and TradeDate >= max(TradeDate) - 365 
-  )
-  // moving averages for each of the stocks
-  movingAverages AS (
-    select Id, TradeDate, ClosePrice, avgs(20, ClosePrice) as m20day,
-    avgs(31 * 5, ClosePrice) as m5month from relevant assuming asc Id, asc TradeDate
-    group by Id
-  )
+    // Price data for the period
+   pxdata(Id, TradeDate, ClosePrice) AS
+     (select Id, TradeDate, ClosePrice from price 
+     where Id in stock10 and TradeDate >= max(TradeDate) - 365)
+ 
+   // splits that happened  
+   splitdata(Id, SplitDate, SplitFactor) AS 
+   (select Id, SplitDate, SplitFactor from split
+     where Id in stock10 and SplitDate >= max(SplitDate) - 365)
+  
+   // prices after adjusting for splits
+   splitadj(Id, TradeDate, ClosePrice) AS
+     (select Id, TradeDate, first(ClosePrice * prd(SplitFactor))
+      from 
+      pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
+      group by Id, TradeDate)
+    
+   // all prices, including split adjusted  
+   adjpxdata(Id, TradeDate, ClosePrice) AS (
+   select Id, TradeDate, fill(pxdata.ClosePrice, splitadj.ClosePrice) as ClosePrice
+   FROM pxdata FULL OUTER JOIN splitadj USING (Id, TradeDate)
+   )
+      
+   // fill in missing splitadj price with original price when necessary
+   movingAvgs(Id, TradeDate, ClosePrice, m21day, m5month) AS 
+   (select 
+     Id, TradeDate, 
+     ClosePrice, 
+     avgs(21, ClosePrice),
+   	 avgs(160, ClosePrice)
+   FROM adjpxdata assuming asc Id, asc TradeDate group by Id
+   )
+  
   // points of interest: when we invest all or sell all
   // execute strategy accordingly
  simulated AS (
-   select Id, ClosePrice,
-    executeStrategy(10000, m20day, m5month, ClosePrice) as result,
-    last(m20day) > last(m5month) as stillInvested
-    from FLATTEN(movingAverages)
+   select Id, 
+    executeStrategy(10000, m21day, m5month, ClosePrice) as result,
+    last(m21day) > last(m5month) as stillInvested
+    from FLATTEN(movingAvgs)
      where Id = prev(Id) and
      // (sell)
-     (prev(m5month) <= prev(m20day) & m5month > m20day)  
+     (prev(m5month) <= prev(m21day) & m5month > m21day)  
      or 
      // (buy)
-     (prev(m5month) >= prev(m20day) & m5month < m20day)
-     group by Id
-     
+     (prev(m5month) >= prev(m21day) & m5month < m21day)
+     group by Id  
    )
   // latest set of prices (needed for those stocks that we still hold)
-  latestPxs AS (select * from relevant where TradeDate=max(TradeDate))  
-  // the value of our portfolio broken up by stock
-  select Id, result * CASE WHEN stillInvested THEN currpx.ClosePrice ELSE 1 END as dollars
-  from simulated INNER JOIN latestPxs currpx USING Id
+  latestPxs AS (select * from  adjpxdata where TradeDate=max(TradeDate))  
+  
+  // the value of our portfolio
+  select 
+  sum(
+    fill(10000, result * CASE WHEN stillInvested THEN ClosePrice ELSE 1 END)
+    ) as stock_value
+  from latestPxs FULL OUTER JOIN simulated USING Id
   
 
 

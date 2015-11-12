@@ -115,23 +115,36 @@ is: When the 20-day moving average crosses over the 5-month moving average the c
 allocation for that stock is invested and when the 20-day moving average crosses below 
 the 5-month moving average the entire position is sold. The trades happen on the closing
 price of the trading day.
+
+Modifications based on sybase benchmark: use adjusted prices, 21-day moving avg, instead
+of 20 days
 \
 
 .qtest.q7:{
- relevant:select from price where Id in stock10, TradeDate >= -365 + max TradeDate;
- movingAvgs:update m20day:20 mavg ClosePrice, m5month:(31 * 5) mavg ClosePrice by Id
- from `Id`TradeDate xasc relevant;
+ alloc:10000.0;
+ pxdata:select Id, TradeDate, ClosePrice from price where Id in stock10, 
+  TradeDate >= -365 + max TradeDate;
  
- simulated:select ClosePrice, result:10000*prd ?[maxs m20day > m5month;?[m20day > m5month;1%ClosePrice;ClosePrice];1],
- stillInvested:last[m20day] > last m5month by Id
- from movingAvgs where (Id=prev[Id]) & 
-   (
-     ((prev[m5month] <= prev m20day)& m5month > m20day) |
-     ((prev[m5month] >= prev m20day)& m5month < m20day)
-   );
+ splitdata:select Id, SplitDate, SplitFactor from split where Id in stock10, 
+   SplitDate >= -365 + max SplitDate;
+ 
+ splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
+   ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
+ 
+ adjpxdata:`Id`TradeDate xasc pxdata lj `Id`TradeDate xkey splitadj;
+ 
+ movingAvgs:update m21day:21 mavg ClosePrice, m5month:160 mavg ClosePrice by Id from adjpxdata;
+ 
+ simulated:select result:alloc*prd ?[maxs m21day > m5month;?[m21day > m5month;1%ClosePrice;ClosePrice];1],
+   stillInvested:last[m21day] > last m5month by Id
+   from movingAvgs where (Id=prev[Id]) & 
+    (
+      ((prev[m5month] <= prev m21day)& m5month > m21day) |
+      ((prev[m5month] >= prev m21day)& m5month < m21day)
+    );
    
- latestPxs:select Id, ClosePrice from relevant where TradeDate=max TradeDate;
- select Id, dollars:result * ?[stillInvested;ClosePrice;1] from simulated ij `Id xkey latestPxs
+ latestPxs:select Id, ClosePrice from adjpxdata where TradeDate=max TradeDate;
+ select stock_value:sum alloc^result * ?[stillInvested;ClosePrice;1] from latestPxs lj `Id xkey simulated
  }
 
 /
