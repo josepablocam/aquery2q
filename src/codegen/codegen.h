@@ -13,7 +13,7 @@ void add_to_dc(char *alias, char *tbl, int modify_cols);
 void init_dc();
 void add_to_dt(char *alias, char *tbl);
 void sort_where_clause_by_ix(char *tbl);
-char *gen_table_nm();
+char *gen_table_nm(char *nm);
 void cols_to_Aquery(char *new, char *t, char *p);
 void acct_for_computed_groupBys();
 
