@@ -68,6 +68,7 @@ char *AQ_CHECK_ATTR = ".aq.chkattr";
 char *AQ_GROUPED_EXPR = ".aq.grpexpr"; // keep track of what the group by has,
                                        // to avoid recalc in projection
 char *AQ_INDICES = ".aq.ix"; // indices that can be used for various purposes (e.g. updates/deletes)
+char *AQ_NAMESPACE = ".aq."; // the prefix to anything aquery related in q
 
 // generate some aquery functions into the file
 void init_aq_helpers() {
@@ -199,14 +200,37 @@ void poss_add_each(ExprNode *expr) {
   }
 }
 
+// returns 1 if the name is an aquery name (i.e. has the AQ_TABLE_NM prefix"
+int name_is_aq(char *name) {
+  size_t namespace_len = strlen(AQ_NAMESPACE);
+  if (strlen(name) < namespace_len) {
+    return 0;
+  } else {
+    char prefix[namespace_len + 1];
+    strncpy(prefix, name, 4);
+    prefix[namespace_len] = '\0';
+    return strcmp(prefix, AQ_NAMESPACE) == 0;
+  }
+}
+
 // generates a locally fresh name for an aquery intermediate table
 // caller has responsibility of freeing when done with name...
-char *gen_table_nm() {
-  int num_ints = ((int)log((double)TABLE_CT)) + 1;
-  char *nm = malloc((strlen(AQ_TABLE_NM) + num_ints + 1) * sizeof(char));
-  sprintf(nm, "%s%d", AQ_TABLE_NM, TABLE_CT);
-  TABLE_CT++;
-  return nm;
+char *gen_table_nm(char *currname) {
+  if (currname != NULL && name_is_aq(currname)) {
+    return currname; // reuse when possible
+  } else {
+    int num_ints = ((int)log((double)TABLE_CT)) + 1;
+    char *nm = malloc((strlen(AQ_TABLE_NM) + num_ints + 1) * sizeof(char));
+    sprintf(nm, "%s%d", AQ_TABLE_NM, TABLE_CT);
+    TABLE_CT++;
+    return nm;
+  }
+}
+
+void free_aq_name(char *orig, char *new) {
+  if(new == NULL || strcmp(orig, new) != 0) {
+    free(orig);
+  }
 }
 
 int is_overloaded(char *name) {
@@ -666,7 +690,7 @@ char *cg_Table(char *orig_name, char *prefix, int modify_cols) {
   // if we modify the table we need to assign a new name to it to avoid hitting the original with changes
   char *new_name = orig_name;
   if (modify_cols) {
-    new_name = gen_table_nm();
+    new_name = gen_table_nm(NULL);
     // create a new table with renamed columns
     cols_to_Aquery(new_name, orig_name, prefix);
   }
@@ -679,11 +703,10 @@ char *cg_Table(char *orig_name, char *prefix, int modify_cols) {
 // TODO: place clauses that have best index first, to take advantage
 char *cg_FilterWhere(LogicalQueryNode *where) {
   char *t1 = cg_LogicalQueryNode(where->arg);
-  char *t2 = gen_table_nm();
+  char *t2 = gen_table_nm(t1);
   print_code(" %s:", t2);
   cg_FilterWhere0(where->params.exprs, t1);
   print_code(";\n");
-  free(t1);
   return t2;
 }
 
@@ -711,14 +734,13 @@ void cg_FilterWhereExpressions(ExprNode *selection, char *from) {
 // TODO: need to account for grouping!!!
 char *cg_ProjectSelect(LogicalQueryNode *proj) {
   char *t1 = cg_LogicalQueryNode(proj->arg);
-  char *t2 = gen_table_nm();
+  char *t2 = gen_table_nm(t1);
   print_code(" %s:?[%s;();0b;", t2, t1);
   if (proj->params.namedexprs->expr->is_grouped) {
     acct_for_simple_groupBys();
   }
   cg_NamedExprTuples(t1, proj->params.namedexprs, 0, 1);
   print_code("];\n");
-  free(t1);
   return t2;
 }
 
@@ -774,11 +796,11 @@ int can_infer_name(NamedExprNode *nexpr) {
 // first run some experiments though to make sure this is true (generally)
 char *cg_Sort(LogicalQueryNode *node) {
   char *t1 = cg_LogicalQueryNode(node->arg);
-  char *t2 = gen_table_nm();
+  char *t2 = gen_table_nm(t1);
   print_code(" %s:", t2);
   cg_SimpleOrder(node->params.order); //`c1 xasc `c2 xdesc ....
   print_code("%s;\n", t1);
-  free(t1);
+  free_aq_name(t1, t2);
   return t2;
 }
 
@@ -812,7 +834,7 @@ void cg_SimpleOrder(OrderNode *ordnode) {
 // it
 char *cg_SortCols(LogicalQueryNode *node) {
   char *t1 = cg_LogicalQueryNode(node->arg);
-  char *t2 = gen_table_nm();
+  char *t2 = gen_table_nm(t1);
 
   print_code(" %s:?[%s;();();", AQ_SORT_IX, t1); // assign to our sorting index
   cg_SortIx(node->params.order); // generate index code
@@ -844,7 +866,7 @@ char *cg_SortCols(LogicalQueryNode *node) {
   }
   print_code("];\n");
 
-  free(t1);
+  free_aq_name(t1, t2);
   return t2;
 }
 
@@ -877,7 +899,7 @@ void cg_SortIx(OrderNode *ordnode) {
 
 char *cg_groupBy(LogicalQueryNode *node) {
   char *t1 = cg_LogicalQueryNode(node->arg);
-  char *t2 = gen_table_nm();
+  char *t2 = gen_table_nm(t1);
   print_code(" %s:?[%s;();", t2, t1);
   print_code("%s:", AQ_GROUPED_EXPR); // store the group by expression info
   cg_NamedExprTuples(t1, node->params.namedexprs, 0, 0);
@@ -888,7 +910,7 @@ char *cg_groupBy(LogicalQueryNode *node) {
   // from the column dictionary, as now these names shadow those available in the table
   // you can still use the original ones by using the correlation name as a clarifier
   groupby_shadow_cols(node->params.namedexprs);
-  free(t1);
+  free_aq_name(t1, t2);
   return t2;
 }
 
@@ -944,14 +966,14 @@ NamedExprNode *groupExpr_to_NamedGroupExpr(ExprNode *exprs) {
 
 char *cg_flatten(LogicalQueryNode *node) {
   char *t1 = cg_LogicalQueryNode(node->arg);
-  char *t2 = gen_table_nm();
+  char *t2 = gen_table_nm(t1);
   print_code(" %s:ungroup %s;\n", t2, t1);
-  free(t1);
+  //free(t1);
   return t2;
 }
 
 char *cg_concatenate(LogicalQueryNode *node) {
-  char *t1 = gen_table_nm();
+  char *t1 = gen_table_nm(NULL);
   print_code(" %s:(upsert/)", t1);
   print_code("(");
   IDListNode *tablenms = node->params.cols;
@@ -1017,13 +1039,13 @@ void cg_IJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2) {
 char *cg_IJUsing(LogicalQueryNode *ij) {
   char *t1 = cg_LogicalQueryNode(ij->arg);
   char *t2 = cg_LogicalQueryNode(ij->next_arg);
-  char *joined_nm = gen_table_nm();
+  char *joined_nm = gen_table_nm(t1);
 
   // inner joing semantics from sql correspond to an equijoin (ej) in q
   cg_IJUsing0(ij, joined_nm, t1, t2);
   print_code("; //inner join using\n");
-  free(t1);
-  free(t2);
+  free_aq_name(t1, joined_nm);
+  free_aq_name(t2, NULL);
   return joined_nm;
 }
 
@@ -1044,22 +1066,22 @@ void cg_FOJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2) {
 char *cg_FOJUsing(LogicalQueryNode *ij) {
   char *t1 = cg_LogicalQueryNode(ij->arg);
   char *t2 = cg_LogicalQueryNode(ij->next_arg);
-  char *joined_nm = gen_table_nm();
+  char *joined_nm = gen_table_nm(t1);
 
   cg_FOJUsing0(ij, joined_nm, t1, t2);
   print_code("; //full outer join using\n");
-  free(t1);
-  free(t2);
+  free_aq_name(t1, joined_nm);
+  free_aq_name(t2, NULL);
   return joined_nm;
 }
 
 char *cg_CartesianProd(LogicalQueryNode *cart) {
   char *t1 = cg_LogicalQueryNode(cart->arg);
   char *t2 = cg_LogicalQueryNode(cart->next_arg);
-  char *crossed_name = gen_table_nm();
+  char *crossed_name = gen_table_nm(t1);
   print_code(" %s:%s cross %s;\n", crossed_name, t1, t2);
-  free(t1);
-  free(t2);
+  free_aq_name(t1, crossed_name);
+  free_aq_name(t2, NULL);
   return crossed_name;
 }
 
@@ -1072,11 +1094,11 @@ char *cg_PossPushFilter(LogicalQueryNode *poss_push) {
   // generate code for tables involved
   char *t1 = cg_LogicalQueryNode(join->arg); // LHS
   char *t2 = cg_LogicalQueryNode(join->next_arg); // RHS
-  char *joined_name = gen_table_nm();
+  char *joined_name = gen_table_nm(NULL);
 
   int push_left = pushToLeftPossPush(poss_push);
   char *push_to = push_left ? t1 : t2; // which side to push to
-  char *push_to_filtered = gen_table_nm();
+  char *push_to_filtered = gen_table_nm(NULL);
 
   // columns used in join clause and that should be checked for attributes
   IDListNode *cols_in_join = colsCheckPossPush(join);
@@ -1413,7 +1435,7 @@ void cg_Update(FlatQuery *update) {
   char *updatedTable = origTable;
   // we create a new sorted table if necessary
   if (update->order != NULL) {
-      updatedTable = gen_table_nm();
+      updatedTable = gen_table_nm(updatedTable);
       print_code(" %s:", updatedTable);
       cg_SimpleOrder(update->order->params.order);
       print_code("%s;\n", origTable);
@@ -1447,7 +1469,7 @@ void cg_Update(FlatQuery *update) {
   }
   print_code(" }[]\n");
   turn_off_query_global_flags();
-  free(origTable);
+  free_aq_name(origTable, updatedTable);
   if (update->order != NULL) free(updatedTable);
 }
 
@@ -1460,7 +1482,7 @@ void cg_Delete(FlatQuery *delete) {
   char *updatedTable = origTable;
   // we create a new sorted table if necessary
   if (delete->order != NULL) {
-    updatedTable = gen_table_nm();
+    updatedTable = gen_table_nm(updatedTable);
     print_code(" %s:", updatedTable);
     cg_SimpleOrder(delete->order->params.order);
     print_code("%s;\n", origTable);
@@ -1487,7 +1509,7 @@ void cg_Delete(FlatQuery *delete) {
 
   print_code(" }[]\n");
   turn_off_query_global_flags();
-  free(origTable);
+  free_aq_name(origTable, updatedTable);
   if (delete->order != NULL) free(updatedTable);
 
 }
