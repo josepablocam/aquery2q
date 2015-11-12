@@ -9,15 +9,14 @@ from load_data import *
 # set up a moving average function that behaves like q
 # meaning, for a moving window of size x, while we have |n| < x
 # we cumulatively and divide by n
+# we don't use this since performance is much slower than pd.rolling_mean
+# the q semantics are by no means the 'true' ones
 def qma(v, w):
     mavg = pd.rolling_mean(v, w)
-    isnull = pd.isnull(mavg)
     # assume n > 0, since that is the case unless w = 1
-    n = np.sum(isnull)
-    replace = np.cumsum(v[isnull]) / np.arange(1.0, n + 1)
-    mavg[isnull] = replace
+    mavg[0:w] = np.cumsum(v[0:w]) / np.arange(1.0, w + 1)
     return mavg
-    
+
 
 # ********* QUERY 0 ****************
 # Get the closing price of a set of 10 stocks for a 10-year period and group into weekly,
@@ -30,10 +29,9 @@ def q0():
     # select relevant data set and add time columns for grouping
     pxdata = price[price['Id'].isin(stock10)]
     pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
-    timeSinceStart = pxdata['TradeDate'] - start
-    pxdata['week'] = (timeSinceStart / timedelta(days = 7)).astype(int)
-    pxdata['month'] = (timeSinceStart / timedelta(days = 31)).astype(int)
-    pxdata['year'] = (timeSinceStart / timedelta(days = 365)).astype(int)
+    pxdata['week'] = pxdata['TradeDate'].map(lambda x: x.week)
+    pxdata['month'] = pxdata['TradeDate'].map(lambda x: x.month)
+    pxdata['year'] = pxdata['TradeDate'].map(lambda x: x.year)
     ops = { 'low' :  np.min, 'high' : np.max, 'mean' : np.mean }
    
     # aggregate along various time dimensions
@@ -49,7 +47,7 @@ def q0():
     for frame in frames:
         frame.index.names = ['Id', 'bucket']
 
-    return pd.concat(frames)
+    return pd.concat(frames).reset_index().sort(columns = ['Id', 'name', 'bucket'])
 
 
 # ********* QUERY 1 ****************
@@ -63,20 +61,21 @@ def q1():
     pxdata = price[price['Id'].isin(stock1000)]
     pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
     splitdata = split[split['Id'].isin(stock1000)]
-    splitdata = splitdata[(splitdata['SplitDate'] >= start) & (splitdata['SplitDate'] < end)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
     joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
     # prices get adjusted by splits that happen later
-    joindata = joindata[joindata['TradeDate'] <= joindata['SplitDate']]
+    joindata = joindata[joindata['TradeDate'] < joindata['SplitDate']]
     # adjustment factor for each stock's trade date
     adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
     adjFactors.columns = ['Id', 'TradeDate', 'SF']
     # only care about adjusting those that have splits, so inner join
-    allData = adjFactors.merge(pxdata, on = ['Id', 'TradeDate'], how = 'inner')
-    allData['HighPrice'] = allData['HighPrice'] / allData['SF']
-    allData['LowPrice'] = allData['LowPrice'] / allData['SF']
-    allData['ClosePrice'] = allData['ClosePrice'] / allData['SF']
-    allData['OpenPrice'] = allData['OpenPrice'] / allData['SF']
-    allData['Volume'] = allData['Volume'] * allData['SF']
+    allData = pxdata.merge(adjFactors, on = ['Id', 'TradeDate'], how = 'left')
+    allData['SF'] = allData['SF'].fillna(1.0)
+    allData['HighPrice'] = allData['HighPrice'] * allData['SF']
+    allData['LowPrice'] = allData['LowPrice'] * allData['SF']
+    allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
+    allData['OpenPrice'] = allData['OpenPrice'] * allData['SF']
+    allData['Volume'] = allData['Volume'] / allData['SF']
     allData.drop(['SF'], axis = 1, inplace = True)
     return allData
 
@@ -93,22 +92,21 @@ def q2():
     joindata = pxdata.merge(splitdata, on = ['Id', 'TradeDate'], how = "inner")
     joindata['MaxDiff'] = joindata['HighPrice'] - joindata['LowPrice']
     results = joindata[['Id', 'TradeDate', 'MaxDiff']]
-    return results.sort(columns = ['Id', 'TradeDate'], ascending = True)
+    return results
  
 
 # ********* QUERY 3 + 4 ****************
 # Calculate the value of the S&P500 and Russell 2000 index for a specified day using unadjusted
 # prices and the index composition of the 2 indexes (see appendix for spec) on the specified day
-# Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
 def q3():
     pxdata = price[price['Id'].isin(SP500) & (price['TradeDate'] == startPeriod)]
-    indexValue = (pxdata['ClosePrice'] * pxdata['Volume']).sum() / 8.9e9
-    return pd.DataFrame({'index' : [ indexValue ] })
+    indexValue = pxdata['ClosePrice'].mean()
+    return pd.DataFrame({'avg_close_px' : [ indexValue ] })
     
 def q4():
     pxdata = price[price['Id'].isin(Russell2000) & (price['TradeDate'] == startPeriod)]
-    indexValue = (pxdata['ClosePrice'] * pxdata['Volume']).sum() / 8.9e9
-    return pd.DataFrame({'index' : [ indexValue ] })
+    indexValue = pxdata['ClosePrice'].mean()
+    return pd.DataFrame({'avg_close_px' : [ indexValue ] })
         
 
 # ********* QUERY 5 ****************
@@ -122,76 +120,112 @@ def q5():
     pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
     # relevant split information
     splitdata = split[split['Id'].isin(stock1000)]
-    splitdata = splitdata[(splitdata['SplitDate'] >= start) & (splitdata['SplitDate'] < end)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
     # join to adjust prices by split factors
     joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
     # prices get adjusted by splits that happen later
-    joindata = joindata[joindata['TradeDate'] <= joindata['SplitDate']]
+    joindata = joindata[joindata['TradeDate'] < joindata['SplitDate']]
     # adjustment factor for each stock's trade date
     adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
     adjFactors.columns = ['Id', 'TradeDate', 'SF']
-    adjData = adjFactors.merge(pxdata, on = ['Id', 'TradeDate'], how = 'inner')
-    adjData['ClosePrice'] = adjData['ClosePrice'] / adjData['SF']
-    allData = pxdata.merge(adjData, on = ['Id', 'TradeDate'], how = 'left', suffixes = ['_pxdata', '_adjdata'])
-    allData['ClosePrice'] = allData['ClosePrice_adjdata'].fillna(allData['ClosePrice_pxdata'])
+    allData = pxdata.merge(adjFactors, on = ['Id', 'TradeDate'], how = 'left', suffixes = ['_pxdata', '_adjdata'])
+    allData['SF'] = allData['SF'].fillna(1.0)
+    allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
     relevantCols = ['Id', 'TradeDate', 'ClosePrice']
     allData = allData[relevantCols]
     sortedData = allData.sort(columns = ['Id','TradeDate'], ascending = True)
     # groupby preserves order 
     grouped = sortedData[['Id', 'ClosePrice']].groupby('Id')
     # note that we use a rolling mean function that emulates q's treatment of edge cases
-    sortedData['p21'] = grouped['ClosePrice'].transform(lambda x: qma(x, 21))
-    sortedData['p5'] = grouped['ClosePrice'].transform(lambda x: qma(x, 5))
+    sortedData['p21'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 21))
+    sortedData['p5'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 5))
     # set a copy of results to a global variable, so can use in q6
     # as per query description
-    global query5Table
-    query5Table = sortedData
-    return sortedData    
+    return sortedData         
 
 # ********* QUERY 6 ****************
 # (Based on the previous query) 
 # Find the points (specific days) when the 5-month moving average intersects the 21-day 
 # moving average for these stocks. The output is to be sorted by id and date.
-# Note that given differences in moving average calculation, this won't tie out 100%
-# to results in aquery/q, but we focus on performance vs exact results
 def q6():
-    crossAbove = (query5Table['p5'].shift(1) <= query5Table['p21'].shift(1)) & (query5Table['p5'] > query5Table['p21'])
-    crossBelow = (query5Table['p5'].shift(1) >= query5Table['p21'].shift(1)) & (query5Table['p5'] < query5Table['p21'])
-    sameId = query5Table['Id'].shift(1) == query5Table['Id']
-    crosses = query5Table[sameId & (crossAbove | crossBelow)]
+    start = start6Mo
+    end = start6Mo + timedelta(days = 31 * 6)
+    # relevant prices
+    pxdata = price[price['Id'].isin(stock1000)]
+    pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
+    # relevant split information
+    splitdata = split[split['Id'].isin(stock1000)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
+    # join to adjust prices by split factors
+    joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
+    # prices get adjusted by splits that happen later
+    joindata = joindata[joindata['TradeDate'] < joindata['SplitDate']]
+    # adjustment factor for each stock's trade date
+    adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
+    adjFactors.columns = ['Id', 'TradeDate', 'SF']
+    allData = pxdata.merge(adjFactors, on = ['Id', 'TradeDate'], how = 'left', suffixes = ['_pxdata', '_adjdata'])
+    allData['SF'] = allData['SF'].fillna(1.0)
+    allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
+    relevantCols = ['Id', 'TradeDate', 'ClosePrice']
+    allData = allData[relevantCols]
+    sortedData = allData.sort(columns = ['Id','TradeDate'], ascending = True)
+    # groupby preserves order 
+    grouped = sortedData[['Id', 'ClosePrice']].groupby('Id')
+    # note that we use a rolling mean function that emulates q's treatment of edge cases
+    sortedData['p21'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 21))
+    sortedData['p5'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 5))
+    crossAbove = (sortedData['p5'].shift(1) <= sortedData['p21'].shift(1)) & (sortedData['p5'] > sortedData['p21'])
+    crossBelow = (sortedData['p5'].shift(1) >= sortedData['p21'].shift(1)) & (sortedData['p5'] < sortedData['p21'])
+    sameId = sortedData['Id'].shift(1) == sortedData['Id']
+    crosses = sortedData[sameId & (crossAbove | crossBelow)]
     return crosses[['Id', 'TradeDate', 'ClosePrice']]
-    
-
+ 
 # ********* QUERY 7 ****************
 # Determine the value of $100,000 now if 1 year ago it was invested equally in 10 specified
 # stocks (i.e. allocation for each stock is $10,000). The trading strategy is: When the 20-day
 # moving average crosses over the 5-month moving average the complete allocation for that stock
 # is invested and when the 20-day moving average crosses below the 5-month moving average the entire
 # position is sold. The trades happen on the closing price of the trading day.
+# Modifications based on sybase benchmark: use adjusted prices, 21-day moving avg, instead
+# of 20 days
 def q7():
-    # creating moving price information for signals
-    n = np.size(stock10)
-    seedMoneyPerStock = 10000
-    start = price['TradeDate'].max() - timedelta(days = 365)
+    # create adjusted prices
+    maxTradeDate = price['TradeDate'].max()
+    start = maxTradeDate - timedelta(days = 365)
     pxdata = price[price['Id'].isin(stock10)]
     pxdata = pxdata[pxdata['TradeDate'] >= start]
-    pxdata = pxdata.sort(['Id', 'TradeDate'], ascending = True)
-    grouped = pxdata.groupby('Id')
-    pxdata['m5month'] = grouped['ClosePrice'].transform(lambda x: qma(x, 31 * 5))
-    pxdata['m20day'] = grouped['ClosePrice'].transform(lambda x: qma(x, 20))
-    pxdata['isSignal'] = (pxdata['Id'].shift(1) == pxdata['Id']) & (
+    # relevant split information
+    splitdata = split[split['Id'].isin(stock10)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
+    # join to adjust prices by split factors
+    joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
+    # prices get adjusted by splits that happen later
+    joindata = joindata[joindata['TradeDate'] < joindata['SplitDate']]
+    # adjustment factor for each stock's trade date
+    adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
+    adjFactors.columns = ['Id', 'TradeDate', 'SF']
+    allData = pxdata.merge(adjFactors, on = ['Id', 'TradeDate'], how = 'left')
+    allData['SF'] = allData['SF'].fillna(1.0)
+    allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
+
+    # creating moving price information for signals
+    allData = allData.sort(['Id', 'TradeDate'], ascending = True)
+    grouped = allData.groupby('Id')
+    allData['m5month'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 160))
+    allData['m21day'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 21))
+    allData['isSignal'] = (allData['Id'].shift(1) == allData['Id']) & (
        ( # cross under -> sell signal
-           (pxdata['m5month'].shift(1) <= pxdata['m20day'].shift(1)) &
-           (pxdata['m5month'] > pxdata['m20day'])
+           (allData['m5month'].shift(1) <= allData['m21day'].shift(1)) &
+           (allData['m5month'] > allData['m21day'])
         )
      | # alternatively
         ( # cross over -> buy signal
-            (pxdata['m5month'].shift(1) >= pxdata['m20day'].shift(1)) &
-            (pxdata['m5month'] < pxdata['m20day'])
+            (allData['m5month'].shift(1) >= allData['m21day'].shift(1)) &
+            (allData['m5month'] < allData['m21day'])
         )
      )
-    pxdata['buySignal'] = pxdata['m5month'] < pxdata['m20day'] # buy signal, if coincides with isSignal
-    signals = pxdata[pxdata['isSignal']]
+    allData['buySignal'] = allData['m5month'] < allData['m21day'] # buy signal, if coincides with isSignal
+    signals = allData[allData['isSignal']]
     grouped = signals.groupby('Id')
     # a vectorized approach to the strategy is
     # - can't sell before we buy, so need to wait for first buy signal to do anything w/ 10k
@@ -200,6 +234,7 @@ def q7():
     # result of strategy then is 10,000 * product of "actions"
     # if last action is buy, then multiply by latest price.
     # result: total valuation per stock simulating strategy (ignoring fees etc)
+    seedMoneyPerStock = 10000
     def strategy(x):
         hasSeenBuy = np.cumsum(x['buySignal']) > 0.0
         if (not hasSeenBuy.any()):
@@ -217,12 +252,15 @@ def q7():
 
     valuations = grouped.apply(strategy)
     # latest set of prices incase needed
-    results = pxdata.groupby('Id', as_index = False).last()
+    # making copy to avoid setting a slice error
+    results = allData[allData['TradeDate'] == maxTradeDate].copy()
     results['valuation'] = valuations[results['Id']].values
-    # size of stock10...incase we change that later on
-    results['value'] = np.maximum(np.ones(np.size(stock10)), results['ClosePrice'] * results['buySignal']) * results['valuation']
-    results['value'] = results['value'].fillna(seedMoneyPerStock)
-    return results[['Id', 'value']]
+    # value stock holdings at current market prices
+    stillInvested = results['buySignal']
+    results.loc[stillInvested, 'valuation'] = results.loc[stillInvested, 'ClosePrice'] * results.loc[stillInvested, 'valuation']
+    # if you never invested the allocation for a given stock, you still have the initial allocation
+    results['valuation'] = results['valuation'].fillna(seedMoneyPerStock)
+    return results['valuation'].sum()
 
 
 
@@ -248,30 +286,35 @@ def q8():
     # remove self-correlation
     flatCorrs = flatCorrs[flatCorrs['Id'] != flatCorrs["Id2"]]
     # sort by correlation coefficient
-    return flatCorrs.sort(['corrCoeff'], ascending = False)
+    return flatCorrs.sort(['corrCoeff'], ascending = True)
   
     
 # ********* QUERY 9 ****************
 # Determine the yearly dividends and annual yield (dividends/average closing price) for the past 3
 # years for all the stocks in the Russell 2000 index that did not split during that period.
-# Use unadjusted prices since there were no splits to adjust for.  
+# Use unadjusted prices since there were no splits to adjust for. 
+# Note that we follow the implementation provided by sybase, which excludes tickers
+# with a split anytime in the past three calendar years (not necessarily in the
+# 3 years since today). Furthermore, note that their solution uses only inner joins
+# thus it doesn't include stocks that did not have dividends (which would have a yield
+# of 0 by default). It also includes dividends that might have happened been announced prior to the
+# first trade date in the relevant 3 year period (the inner join is done on the year part) 
 def q9():
     start = price['TradeDate'].max() - timedelta(days = 365 * 3)
     splitdata = split[split['Id'].isin(Russell2000)]
-    splitdata = splitdata[splitdata['SplitDate'] >= start]
+    splitdata['year'] = splitdata['SplitDate'].map(lambda x: x.year)
+    splitdata = splitdata[splitdata['year'] >= start.year]
     hadSplits = pd.unique(splitdata['Id'])
-    pxdata = price[(price['Id'].isin(Russell2000)) & (~price['Id'].isin(hadSplits))]
-    pxdata = pxdata[pxdata['TradeDate'] >= start]
+    pxdata = price[(price['Id'].isin(Russell2000)) & (~price['Id'].isin(hadSplits))].copy()
     pxdata['year'] = pxdata['TradeDate'].map(lambda x: x.year)
+    pxdata = pxdata[pxdata['year'] >= start.year]
     nosplit_avgpx = pxdata.groupby(['Id', 'year'], as_index = False)['ClosePrice'].mean()
-    divdata = dividend[(dividend['Id'].isin(Russell2000)) & (~dividend['Id'].isin(hadSplits))]
-    divdata = divdata[divdata['XdivDate'] >= start]
-    divdata['year'] = divdata['XdivDate'].map(lambda x: x.year)
+    divdata = dividend[(dividend['Id'].isin(Russell2000)) & (~dividend['Id'].isin(hadSplits))].copy()
+    divdata['year'] = divdata['AnnounceDate'].map(lambda x: x.year)
+    divdata = divdata[divdata['year'] >= start.year]
     divs = divdata.groupby(['Id', 'year'], as_index = False)['DivAmt'].sum()
-    combined = nosplit_avgpx.merge(divs, on = ['Id', 'year'], how = 'left')
-    combined['DivAmt'] = combined['DivAmt'].fillna(0)
+    combined = nosplit_avgpx.merge(divs, on = ['Id', 'year'], how = 'inner')
     combined['yield'] = combined['DivAmt'] / combined['ClosePrice']
     return combined    
-    
-    
+
     

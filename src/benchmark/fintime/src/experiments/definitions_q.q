@@ -1,5 +1,10 @@
 
 \l load_data.q
+getMonth:{1 + (`month$x) mod 12}
+getYear:{`year$x}
+firstDateOfYear:{`date$`month$d-30*-1+getMonth d:`date$`month$x}
+getWeek:{1 + floor (x - firstDateOfYear x)%7}
+
 /
 ********* QUERY 0 ****************
 	Get the closing price of a set of 10 stocks for a 10-year period and group into 
@@ -13,8 +18,8 @@
 	`Id`name`bucket xasc (upsert/)
 	 {[x;y;z] 
 		0!select low:min ClosePrice, high:max ClosePrice, mean:avg ClosePrice 
-		by Id, bucket:floor (TradeDate - startYear10)%y, name:z from x
-		}[data;;]'[7 31 365;`weekly`monthly`yearly]
+		by Id, bucket:y TradeDate, name:z from x
+		}[data;;]'[(getWeek;getMonth;getYear);`weekly`monthly`yearly]
 	}
 
 /
@@ -26,17 +31,19 @@ the split date. These are called split-adjusted prices and volumes.
 \
 .qtest.q1:{
 	pxdata:select from price where Id in stock1000, TradeDate >= start300Days, 
-		TradeDate < start300Days + 300;
-	splitdata:select from split where Id in stock1000, SplitDate >= start300Days, 
-		SplitDate < start300Days + 300;
-	
-	0!select HighPrice:first HighPrice*prd 1%SplitFactor,
-		LowPrice:first LowPrice*prd 1%SplitFactor,
-		ClosePrice:first ClosePrice*prd 1%SplitFactor,
-		OpenPrice:first OpenPrice*prd 1%SplitFactor,
-		Volume:first Volume*prd SplitFactor 
-		by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate <= SplitDate
-	}
+    TradeDate < start300Days + 300;
+	splitdata:select from split where Id in stock1000, SplitDate >= start300Days;
+  adjdata:select adjFactor:prd SplitFactor by Id, TradeDate
+    from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
+  
+    0!`Id`TradeDate xasc
+    select Id, TradeDate, HighPrice:HighPrice*1^adjFactor, 
+    LowPrice:LowPrice*1^adjFactor, 
+    ClosePrice:ClosePrice*1^adjFactor,
+    OpenPrice:OpenPrice*1^adjFactor,
+    Volume:Volume%1^adjFactor
+    from pxdata lj `Id`TradeDate xkey adjdata
+	}  
 
 /
 ********* QUERY 2 ****************
@@ -59,14 +66,13 @@ of each split event during a specified period.
 Calculate the value of the S&P500 and Russell 2000 index for a specified day 
 using unadjusted prices and the index composition of the 2 indexes (see appendix 
 for spec) on the specified day
-Divisor of 8.9bn taken from https://en.wikipedia.org/wiki/S%26P_500
 \
 .qtest.q3:{
-	select index:sum[ClosePrice*Volume]%8.9e9 from price where Id in SP500, TradeDate = startPeriod
+	select avg_close_price:avg ClosePrice from price where Id in SP500, TradeDate = startPeriod
  }
 
 .qtest.q4:{
-	select index:sum[ClosePrice*Volume]%8.9e9 from price where Id in Russell2000, TradeDate = startPeriod
+	select avg_close_price:avg ClosePrice from price where Id in Russell2000, TradeDate = startPeriod
  }
 
 /
@@ -79,13 +85,13 @@ during a 6-month period. (Use split adjusted prices)
 	pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, TradeDate >= start6Mo,
 	 TradeDate < start6Mo + 31 * 6;
 	splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
-    SplitDate >= start6Mo, SplitDate < start6Mo + 31 * 6;
-	splitadj:0!select ClosePrice:first ClosePrice*prd 1%SplitFactor by Id, TradeDate from ej[`Id;pxdata;splitdata] where TradeDate <= SplitDate;
+    SplitDate >= start6Mo;
+	splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
+    ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
   
-  update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from `Id`TradeDate xasc pxdata lj `Id`TradeDate xkey splitadj  
+  update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from 
+    `Id`TradeDate xasc pxdata lj `Id`TradeDate xkey splitadj  
  };
-
-show `query5TableQ set .qtest.q5[]; 
 
 /
 ********* QUERY 6 ****************
@@ -94,7 +100,16 @@ Find the points (specific days) when the 5-month moving average intersects the
 21-day moving average for these stocks. The output is to be sorted by id and date.
 \
 .qtest.q6:{
-	select Id, CrossDate:TradeDate, ClosePrice from query5TableQ where Id=prev Id, 
+	pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, TradeDate >= start6Mo,
+	 TradeDate < start6Mo + 31 * 6;
+	splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
+    SplitDate >= start6Mo;
+	splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
+    ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
+  movingAvgs:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from 
+      `Id`TradeDate xasc pxdata lj `Id`TradeDate xkey splitadj;
+    
+	select Id, CrossDate:TradeDate, ClosePrice from movingAvgs where Id=prev Id, 
 	((prev[m5] <= prev m21) & m5 > m21)|((prev[m5] >= prev m21) & m5 < m21)
   }
 
@@ -107,23 +122,36 @@ is: When the 20-day moving average crosses over the 5-month moving average the c
 allocation for that stock is invested and when the 20-day moving average crosses below 
 the 5-month moving average the entire position is sold. The trades happen on the closing
 price of the trading day.
+
+Modifications based on sybase benchmark: use adjusted prices, 21-day moving avg, instead
+of 20 days
 \
 
 .qtest.q7:{
- relevant:select from price where Id in stock10, TradeDate >= -365 + max TradeDate;
- movingAvgs:update m20day:20 mavg ClosePrice, m5month:(31 * 5) mavg ClosePrice by Id
- from `Id`TradeDate xasc relevant;
+ alloc:10000.0;
+ pxdata:select Id, TradeDate, ClosePrice from price where Id in stock10, 
+  TradeDate >= -365 + max TradeDate;
  
- simulated:select ClosePrice, result:10000*prd ?[maxs m20day > m5month;?[m20day > m5month;1%ClosePrice;ClosePrice];1],
- stillInvested:last[m20day] > last m5month by Id
- from movingAvgs where (Id=prev[Id]) & 
-   (
-     ((prev[m5month] <= prev m20day)& m5month > m20day) |
-     ((prev[m5month] >= prev m20day)& m5month < m20day)
-   );
+ splitdata:select Id, SplitDate, SplitFactor from split where Id in stock10, 
+   SplitDate >= -365 + max SplitDate;
+ 
+ splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
+   ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
+ 
+ adjpxdata:`Id`TradeDate xasc pxdata lj `Id`TradeDate xkey splitadj;
+ 
+ movingAvgs:update m21day:21 mavg ClosePrice, m5month:160 mavg ClosePrice by Id from adjpxdata;
+ 
+ simulated:select result:alloc*prd ?[maxs m21day > m5month;?[m21day > m5month;1%ClosePrice;ClosePrice];1],
+   stillInvested:last[m21day] > last m5month by Id
+   from movingAvgs where (Id=prev[Id]) & 
+    (
+      ((prev[m5month] <= prev m21day)& m5month > m21day) |
+      ((prev[m5month] >= prev m21day)& m5month < m21day)
+    );
    
- latestPxs:select Id, ClosePrice from relevant where TradeDate=max TradeDate;
- select Id, dollars:result * ?[stillInvested;ClosePrice;1] from simulated ij `Id xkey latestPxs
+ latestPxs:select Id, ClosePrice from adjpxdata where TradeDate=max TradeDate;
+ select stock_value:sum alloc^result * ?[stillInvested;ClosePrice;1] from latestPxs lj `Id xkey simulated
  }
 
 /
@@ -141,7 +169,7 @@ defined in appendix]
 	// full matrix, not just lower/upper triangular
 	corrdata:pair1 cross pair2;
 	corrResults:select Id1, Id2, corrCoeff:cor'[ClosePrice1;ClosePrice2] from corrdata where Id1<>Id2;
-  `corrCoeff xdesc corrResults
+  `corrCoeff xasc corrResults
  }
 
 
@@ -150,16 +178,28 @@ defined in appendix]
 Determine the yearly dividends and annual yield (dividends/average closing price)
 for the past 3 years for all the stocks in the Russell 2000 index that did not split
 during that period. Use unadjusted prices since there were no splits to adjust for.
+
+Note that we follow the implementation provided by sybase, which excludes tickers
+with a split anytime in the past three calendar years (not necessarily in the 
+3 years since today). Furthermore, note that their solution uses only inner joins
+thus it doesn't include stocks that did not have dividends (which would have a yield
+of 0 by default). It also includes dividends that might have happened been announced prior to the
+first trade date in the relevant 3 year period (the inner join is done on the year part)
 \
 .qtest.q9:{
+  startDate:first exec (-365*3)+max TradeDate from price;
+  startYear:getYear startDate;
   hadSplits:exec distinct Id from split where Id in Russell2000, 
-    SplitDate>=(-365*3)+max SplitDate;
-  nosplit:select avg_px:avg ClosePrice by Id, year:`year$TradeDate from price 
-    where Id in Russell2000, TradeDate>=(-365*3)+max TradeDate, not Id in hadSplits;
-  divdata:select total_divs:sum DivAmt by Id, year:`year$XdivDate from dividend 
-    where Id in Russell2000, XdivDate>=(-365*3)+max XdivDate, not Id in hadSplits;
+    (getYear SplitDate)>=startYear;
+    
+  nosplit:select avg_px:avg ClosePrice by Id, year:getYear TradeDate from price 
+    where Id in Russell2000, TradeDate>=startDate, not Id in hadSplits;
   
-  0!update yield:(0^total_divs)%avg_px from select from nosplit lj `Id`year xkey divdata
+  divdata:select total_divs:sum DivAmt by Id, year:`year$AnnounceDate from dividend 
+    where Id in Russell2000, (getYear AnnounceDate)>= startYear, 
+    not Id in hadSplits;
+  
+  0!update yield:total_divs%avg_px from select from nosplit ij `Id`year xkey divdata
  }
 
 

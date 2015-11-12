@@ -35,9 +35,6 @@ def timeAndWrite(f, filehandle, iters):
     else:
         filehandle.write(msg)
 
-# q6 depends on q5, so always run q5 at start to guarantee the global table needed
-# is set
-q5()
 
 functions = [ q0, q1, q2, q3, q4, q5, q6, q7, q8, q9 ]
 shuffle(functions) # randomize their execution order
