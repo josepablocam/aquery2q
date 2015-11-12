@@ -11,8 +11,6 @@ N:10;
 outpath:hsym `$first opts`out;
 iters:10^first "I"$opts`iters;
 // execute them in a random order
-// since q6 depends on q5, just run q5 at the start alwayws
-.qtest.q5[];
 randomize:{neg[count x]?x};
 queries:randomize til N;
 results:timeit[iters;] each `$".qtest.",/:"q",/:string queries;
