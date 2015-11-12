@@ -9,15 +9,14 @@ from load_data import *
 # set up a moving average function that behaves like q
 # meaning, for a moving window of size x, while we have |n| < x
 # we cumulatively and divide by n
+# we don't use this since performance is much slower than pd.rolling_mean
+# the q semantics are by no means the 'true' ones
 def qma(v, w):
     mavg = pd.rolling_mean(v, w)
-    isnull = pd.isnull(mavg)
     # assume n > 0, since that is the case unless w = 1
-    n = np.sum(isnull)
-    replace = np.cumsum(v[isnull]) / np.arange(1.0, n + 1)
-    mavg[isnull] = replace
+    mavg[0:w] = np.cumsum(v[0:w]) / np.arange(1.0, w + 1)
     return mavg
-    
+
 
 # ********* QUERY 0 ****************
 # Get the closing price of a set of 10 stocks for a 10-year period and group into weekly,
@@ -138,28 +137,49 @@ def q5():
     # groupby preserves order 
     grouped = sortedData[['Id', 'ClosePrice']].groupby('Id')
     # note that we use a rolling mean function that emulates q's treatment of edge cases
-    sortedData['p21'] = grouped['ClosePrice'].transform(lambda x: qma(x, 21))
-    sortedData['p5'] = grouped['ClosePrice'].transform(lambda x: qma(x, 5))
+    sortedData['p21'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 21))
+    sortedData['p5'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 5))
     # set a copy of results to a global variable, so can use in q6
     # as per query description
-    global query5Table
-    query5Table = sortedData
     return sortedData         
 
 # ********* QUERY 6 ****************
 # (Based on the previous query) 
 # Find the points (specific days) when the 5-month moving average intersects the 21-day 
 # moving average for these stocks. The output is to be sorted by id and date.
-# Note that given differences in moving average calculation, this won't tie out 100%
-# to results in aquery/q, but we focus on performance vs exact results
 def q6():
-    crossAbove = (query5Table['p5'].shift(1) <= query5Table['p21'].shift(1)) & (query5Table['p5'] > query5Table['p21'])
-    crossBelow = (query5Table['p5'].shift(1) >= query5Table['p21'].shift(1)) & (query5Table['p5'] < query5Table['p21'])
-    sameId = query5Table['Id'].shift(1) == query5Table['Id']
-    crosses = query5Table[sameId & (crossAbove | crossBelow)]
+    start = start6Mo
+    end = start6Mo + timedelta(days = 31 * 6)
+    # relevant prices
+    pxdata = price[price['Id'].isin(stock1000)]
+    pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
+    # relevant split information
+    splitdata = split[split['Id'].isin(stock1000)]
+    splitdata = splitdata[splitdata['SplitDate'] >= start]
+    # join to adjust prices by split factors
+    joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
+    # prices get adjusted by splits that happen later
+    joindata = joindata[joindata['TradeDate'] < joindata['SplitDate']]
+    # adjustment factor for each stock's trade date
+    adjFactors = joindata.groupby(['Id', 'TradeDate'], as_index = False)['SplitFactor'].agg(np.prod)
+    adjFactors.columns = ['Id', 'TradeDate', 'SF']
+    allData = pxdata.merge(adjFactors, on = ['Id', 'TradeDate'], how = 'left', suffixes = ['_pxdata', '_adjdata'])
+    allData['SF'] = allData['SF'].fillna(1.0)
+    allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
+    relevantCols = ['Id', 'TradeDate', 'ClosePrice']
+    allData = allData[relevantCols]
+    sortedData = allData.sort(columns = ['Id','TradeDate'], ascending = True)
+    # groupby preserves order 
+    grouped = sortedData[['Id', 'ClosePrice']].groupby('Id')
+    # note that we use a rolling mean function that emulates q's treatment of edge cases
+    sortedData['p21'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 21))
+    sortedData['p5'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 5))
+    crossAbove = (sortedData['p5'].shift(1) <= sortedData['p21'].shift(1)) & (sortedData['p5'] > sortedData['p21'])
+    crossBelow = (sortedData['p5'].shift(1) >= sortedData['p21'].shift(1)) & (sortedData['p5'] < sortedData['p21'])
+    sameId = sortedData['Id'].shift(1) == sortedData['Id']
+    crosses = sortedData[sameId & (crossAbove | crossBelow)]
     return crosses[['Id', 'TradeDate', 'ClosePrice']]
-    
-
+ 
 # ********* QUERY 7 ****************
 # Determine the value of $100,000 now if 1 year ago it was invested equally in 10 specified
 # stocks (i.e. allocation for each stock is $10,000). The trading strategy is: When the 20-day
@@ -191,8 +211,8 @@ def q7():
     # creating moving price information for signals
     allData = allData.sort(['Id', 'TradeDate'], ascending = True)
     grouped = allData.groupby('Id')
-    allData['m5month'] = grouped['ClosePrice'].transform(lambda x: qma(x, 160))
-    allData['m21day'] = grouped['ClosePrice'].transform(lambda x: qma(x, 21))
+    allData['m5month'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 160))
+    allData['m21day'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 21))
     allData['isSignal'] = (allData['Id'].shift(1) == allData['Id']) & (
        ( # cross under -> sell signal
            (allData['m5month'].shift(1) <= allData['m21day'].shift(1)) &

@@ -133,8 +133,47 @@ select avg(ClosePrice) as avg_close_price from price where Id in Russell2000 and
 Find the 21-day and 5-day moving average price for a specified list of 1000 stocks during a 6-month
 period. (Use split adjusted prices)
 */
-CREATE TABLE query5TableAQ AS
-  WITH
+WITH
+  // Price data for the period
+ pxdata(Id, TradeDate, ClosePrice) AS
+   (select Id, TradeDate, ClosePrice from price 
+   where Id in stock1000 and TradeDate >= start6Mo and TradeDate < start6Mo + 31 * 6)
+
+ // splits that happened  
+ splitdata(Id, SplitDate, SplitFactor) AS 
+ (select Id, SplitDate, SplitFactor from split
+   where Id in stock1000 and SplitDate >= start6Mo)
+
+ // prices after adjusting for splits
+ splitadj(Id, TradeDate, ClosePrice) AS
+   (select Id, TradeDate, first(ClosePrice * prd(SplitFactor))
+    from 
+    pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
+    group by Id, TradeDate)
+    
+ // fill in missing splitadj price with original price when necessary
+ avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS 
+ (select 
+   Id, TradeDate, 
+   fill(pxdata.ClosePrice, splitadj.ClosePrice), 
+   avgs(21,  fill(pxdata.ClosePrice, splitadj.ClosePrice)),
+ 	 avgs(5,  fill(pxdata.ClosePrice, splitadj.ClosePrice))
+ FROM pxdata FULL OUTER JOIN splitadj USING (Id, TradeDate)
+ assuming asc Id, asc TradeDate
+ group by Id
+ )
+   
+  select * from FLATTEN(avgInfo) assuming asc Id, asc TradeDate
+   
+
+
+/*
+********* QUERY 6 ****************
+(Based on the previous query) 
+Find the points (specific days) when the 5-month moving average intersects the 21-day moving average
+for these stocks. The output is to be sorted by id and date.
+*/
+WITH
     // Price data for the period
    pxdata(Id, TradeDate, ClosePrice) AS
      (select Id, TradeDate, ClosePrice from price 
@@ -164,24 +203,14 @@ CREATE TABLE query5TableAQ AS
    group by Id
    )
    
-  select * from FLATTEN(avgInfo) assuming asc Id, asc TradeDate
-   
-
-
-/*
-********* QUERY 6 ****************
-(Based on the previous query) 
-Find the points (specific days) when the 5-month moving average intersects the 21-day moving average
-for these stocks. The output is to be sorted by id and date.
-*/
-select Id, TradeDate as CrossDate, ClosePrice
-from query5TableAQ
-where Id = prev(Id) and 
-// cross over
-(prev(m5) <= prev(m21) & m5 > m21)  
-or 
-// cross under
-(prev(m5) >= prev(m21) & m5 < m21)
+  select Id, TradeDate as CrossDate, ClosePrice
+  from FLATTEN(avgInfo)
+  where Id = prev(Id) and 
+  // cross over
+  (prev(m5) <= prev(m21) & m5 > m21)  
+  or 
+  // cross under
+  (prev(m5) >= prev(m21) & m5 < m21)
 
 
 /*

@@ -167,71 +167,97 @@ export q5="
  ON COMMIT PRESERVE ROWS;
  
  CREATE TEMPORARY TABLE combined AS
-	 SELECT id, trade_date, close_price, close_price * adj as adj_price
+	 SELECT id, trade_date, 
+   CASE WHEN adj IS NULL THEN close_price ELSE close_price * adj END as close_price
 	 FROM pricedata LEFT JOIN adjdata USING (id, trade_date)
 	 ORDER BY id ASC, trade_date asc
 	 WITH DATA
 	ON COMMIT PRESERVE ROWS;
 	
-	UPDATE combined SET adj_price=close_price WHERE adj_price IS NULL;
-	
 	CREATE TEMPORARY TABLE mavg_21 AS
-		SELECT id, trade_date, mavg(adj_price, 21, id) as m21 FROM combined
+		SELECT id, trade_date, mavg(close_price, 21, id) as m21 FROM combined
 		WITH DATA
 	ON COMMIT PRESERVE ROWS;	
 	
 	CREATE TEMPORARY TABLE mavg_5 AS
-	 select id, trade_date, mavg(adj_price, 5, id) as m5, close_price FROM combined
+	 select id, trade_date, mavg(close_price, 5, id) as m5, close_price FROM combined
 	 WITH DATA
 	ON COMMIT PRESERVE ROWS;
-	
-	DROP TABLE q5_result;
-	
-	CREATE TABLE q5_result AS
+		
+	CREATE TEMPORARY TABLE query_result AS
 		SELECT * FROM mavg_21 INNER JOIN mavg_5 USING (id, trade_date)
-		WITH DATA;
+		WITH DATA
+  ON COMMIT PRESERVE ROWS;
 "
-
 
 # ********* QUERY 6 ****************
 # (Based on the previous query) 
 # Find the points (specific days) when the 5-month moving average intersects 
 # the 21-day moving average for these stocks. The output is to be sorted by id and date.
 export q6="
-CREATE TEMPORARY TABLE m21_data AS
-	SELECT id, trade_date, m21, prev_double(m21) as prev_m21 
-	FROM q5_result
-	WITH DATA
-ON COMMIT PRESERVE ROWS;
+ CREATE TEMPORARY TABLE pricedata AS
+ 	 SELECT *
+	 FROM price INNER JOIN stock1000 USING (id)
+	 WHERE trade_date >= ${start6Mo} AND trade_date < ${end6Mo}
+	 WITH DATA
+ ON COMMIT PRESERVE ROWS;
+ 
+ CREATE TEMPORARY TABLE splitdata AS
+ 	 SELECT *
+	 FROM split INNER JOIN stock1000 USING (id)
+	 WHERE split_date >= ${start6Mo}
+	 WITH DATA
+ ON COMMIT PRESERVE ROWS;
+ 
+ CREATE TEMPORARY TABLE adjdata AS 
+   SELECT id, trade_date, prod(split_factor) as adj
+   FROM pricedata INNER JOIN splitdata USING (id)
+	 WHERE trade_date < split_date
+	 GROUP BY id, trade_date
+	 WITH DATA
+ ON COMMIT PRESERVE ROWS;
+ 
+ CREATE TEMPORARY TABLE combined AS
+	 SELECT id, trade_date,
+   CASE WHEN adj IS NULL THEN close_price ELSE close_price * adj END as close_price
+	 FROM pricedata LEFT JOIN adjdata USING (id, trade_date)
+	 ORDER BY id ASC, trade_date asc
+	 WITH DATA
+	ON COMMIT PRESERVE ROWS;
+	
+	CREATE TEMPORARY TABLE mavg_21 AS
+    SELECT id, trade_date, m21, prev_double(m21) as prev_m21 FROM
+		(SELECT id, trade_date, mavg(close_price, 21, id) as m21 FROM combined) p21
+		WITH DATA
+	ON COMMIT PRESERVE ROWS;	
+	
+	CREATE TEMPORARY TABLE mavg_5 AS
+    SELECT id, trade_date, m5, prev_double(m5) as prev_m5 FROM
+	 (select id, trade_date, mavg(close_price, 5, id) as m5, close_price FROM combined) p5
+	 WITH DATA
+	ON COMMIT PRESERVE ROWS;
+		
+  CREATE TEMPORARY TABLE moving_avg_data AS
+  	SELECT * from
+  	(SELECT id, trade_date, prev_char(id) as prev_id, close_price
+  	FROM combined) ids INNER JOIN 
+  	(SELECT * from mavg_21 INNER JOIN mavg_5 USING (id, trade_date)) pxs
+  	USING (id, trade_date)
+  	WITH DATA
+  ON COMMIT PRESERVE ROWS;
 
-CREATE TEMPORARY TABLE m5_data AS
-	SELECT id, trade_date, m5, prev_double(m5) as prev_m5
-	FROM q5_result
-	WITH DATA
-ON COMMIT PRESERVE ROWS;
+  CREATE TEMPORARY TABLE sorted_data AS
+    SELECT * FROM moving_avg_data ORDER BY id ASC, trade_date ASC
+    WITH DATA
+  ON COMMIT PRESERVE ROWS;  
 
-CREATE TEMPORARY TABLE moving_avg_data AS
-	SELECT * from
-	(SELECT id, trade_date, prev_char(id) as prev_id, close_price
-	FROM q5_result) ids INNER JOIN 
-	(SELECT * from m21_data INNER JOIN m5_data USING (id, trade_date)) pxs
-	USING (id, trade_date)
-	WITH DATA
-ON COMMIT PRESERVE ROWS;
-
-CREATE TEMPORARY TABLE sorted_data AS
-  SELECT * FROM moving_avg_data ORDER BY id ASC, trade_date ASC
-  WITH DATA
-ON COMMIT PRESERVE ROWS;  
-
-
-CREATE TEMPORARY TABLE query_result AS
-	SELECT id, trade_date as cross_date, close_price from sorted_data
-	WHERE id = prev_id AND
-	((prev_m5 <= prev_m21 AND m5 > m21) OR (prev_m5 >= prev_m21 AND m5 < m21))
-	WITH DATA
-ON COMMIT PRESERVE ROWS	
-;
+  CREATE TEMPORARY TABLE query_result AS
+  	SELECT id, trade_date as cross_date, close_price from sorted_data
+  	WHERE id = prev_id AND
+  	((prev_m5 <= prev_m21 AND m5 > m21) OR (prev_m5 >= prev_m21 AND m5 < m21))
+  	WITH DATA
+  ON COMMIT PRESERVE ROWS	
+  ;
 "
 
 # ********* QUERY 7 ****************

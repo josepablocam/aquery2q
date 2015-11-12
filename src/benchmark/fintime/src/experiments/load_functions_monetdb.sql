@@ -9,6 +9,25 @@
 	assumes we've sorted columns to be able to partition
 	along a given column(id)
 */
+-- CREATE FUNCTION mavg(v double, win integer, part char(30)) RETURNS double LANGUAGE PYTHON {
+--   weights = numpy.repeat(1.0, win) / win
+--   ma = numpy.zeros(numpy.size(v))
+--   start = win - 1
+--   ma[start:] = numpy.convolve(v, weights, 'valid')
+--   # now recalc the edges of each group
+--   edge = numpy.append([0], (numpy.where(part[:-1] != part[1:])[0] + 1))
+--
+--   for i in edge:
+--     local_ix = numpy.arange(i, i + start)
+--     vals = v[local_ix]
+--     ma[local_ix] = numpy.cumsum(vals) / numpy.arange(1, win)
+--
+--   return ma
+-- };
+
+-- Similarly to the pandas case, we default to the fastest possible option
+-- for calculating moving averages, meaning the semantics of mavg at positions < win
+-- are that it is nan 
 CREATE FUNCTION mavg(v double, win integer, part char(30)) RETURNS double LANGUAGE PYTHON {
 	weights = numpy.repeat(1.0, win) / win
 	ma = numpy.zeros(numpy.size(v))
@@ -19,8 +38,7 @@ CREATE FUNCTION mavg(v double, win integer, part char(30)) RETURNS double LANGUA
 
 	for i in edge:
 		local_ix = numpy.arange(i, i + start)
-		vals = v[local_ix]
-		ma[local_ix] = numpy.cumsum(vals) / numpy.arange(1, win)
+		ma[local_ix] = numpy.nan
 
 	return ma	 
 };
