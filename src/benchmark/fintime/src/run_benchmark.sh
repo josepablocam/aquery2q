@@ -48,8 +48,6 @@ fi
 # monetdb set up
 announce "Starting up monetdb"
 ./monetdb_server.sh -start
-source ./load_data_monetdb.sh 
-source ./definitions_monetdb.sh
 
 announce "Compiling aquery"
 ${A2Q} -c -s -a 1 -o compiled.q definitions_aquery.a > /dev/null
@@ -78,6 +76,11 @@ for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   announce "running pandas"
   python run_pandas.py -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
   announce "running monetdb + embedded python" 
+  # we need to re-"source" so that we pick up the new random parameters
+  # call with create to recreate the tables for random stock indices
+   announce "\trebuilding monetdb random parameter tables" 
+  source ./load_data_monetdb.sh -create > /dev/null
+  source ./definitions_monetdb.sh
   q run_monetdb.q -out $CSVOUT -iters $PER_QUERY_ITERS 
 done
 
