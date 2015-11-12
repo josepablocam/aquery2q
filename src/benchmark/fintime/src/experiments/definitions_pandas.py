@@ -47,7 +47,7 @@ def q0():
     for frame in frames:
         frame.index.names = ['Id', 'bucket']
 
-    return pd.concat(frames)
+    return pd.concat(frames).reset_index().sort(columns = ['Id', 'name', 'bucket'])
 
 
 # ********* QUERY 1 ****************
@@ -92,7 +92,7 @@ def q2():
     joindata = pxdata.merge(splitdata, on = ['Id', 'TradeDate'], how = "inner")
     joindata['MaxDiff'] = joindata['HighPrice'] - joindata['LowPrice']
     results = joindata[['Id', 'TradeDate', 'MaxDiff']]
-    return results.sort(columns = ['Id', 'TradeDate'], ascending = True)
+    return results
  
 
 # ********* QUERY 3 + 4 ****************
@@ -292,24 +292,29 @@ def q8():
 # ********* QUERY 9 ****************
 # Determine the yearly dividends and annual yield (dividends/average closing price) for the past 3
 # years for all the stocks in the Russell 2000 index that did not split during that period.
-# Use unadjusted prices since there were no splits to adjust for.  
+# Use unadjusted prices since there were no splits to adjust for. 
+# Note that we follow the implementation provided by sybase, which excludes tickers
+# with a split anytime in the past three calendar years (not necessarily in the
+# 3 years since today). Furthermore, note that their solution uses only inner joins
+# thus it doesn't include stocks that did not have dividends (which would have a yield
+# of 0 by default). It also includes dividends that might have happened been announced prior to the
+# first trade date in the relevant 3 year period (the inner join is done on the year part) 
 def q9():
     start = price['TradeDate'].max() - timedelta(days = 365 * 3)
     splitdata = split[split['Id'].isin(Russell2000)]
-    splitdata = splitdata[splitdata['SplitDate'] >= start]
+    splitdata['year'] = splitdata['SplitDate'].map(lambda x: x.year)
+    splitdata = splitdata[splitdata['year'] >= start.year]
     hadSplits = pd.unique(splitdata['Id'])
-    pxdata = price[(price['Id'].isin(Russell2000)) & (~price['Id'].isin(hadSplits))]
-    pxdata = pxdata[pxdata['TradeDate'] >= start]
+    pxdata = price[(price['Id'].isin(Russell2000)) & (~price['Id'].isin(hadSplits))].copy()
     pxdata['year'] = pxdata['TradeDate'].map(lambda x: x.year)
+    pxdata = pxdata[pxdata['year'] >= start.year]
     nosplit_avgpx = pxdata.groupby(['Id', 'year'], as_index = False)['ClosePrice'].mean()
-    divdata = dividend[(dividend['Id'].isin(Russell2000)) & (~dividend['Id'].isin(hadSplits))]
-    divdata = divdata[divdata['XdivDate'] >= start]
-    divdata['year'] = divdata['XdivDate'].map(lambda x: x.year)
+    divdata = dividend[(dividend['Id'].isin(Russell2000)) & (~dividend['Id'].isin(hadSplits))].copy()
+    divdata['year'] = divdata['AnnounceDate'].map(lambda x: x.year)
+    divdata = divdata[divdata['year'] >= start.year]
     divs = divdata.groupby(['Id', 'year'], as_index = False)['DivAmt'].sum()
-    combined = nosplit_avgpx.merge(divs, on = ['Id', 'year'], how = 'left')
-    combined['DivAmt'] = combined['DivAmt'].fillna(0)
+    combined = nosplit_avgpx.merge(divs, on = ['Id', 'year'], how = 'inner')
     combined['yield'] = combined['DivAmt'] / combined['ClosePrice']
     return combined    
-    
-    
+
     

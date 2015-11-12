@@ -178,16 +178,28 @@ defined in appendix]
 Determine the yearly dividends and annual yield (dividends/average closing price)
 for the past 3 years for all the stocks in the Russell 2000 index that did not split
 during that period. Use unadjusted prices since there were no splits to adjust for.
+
+Note that we follow the implementation provided by sybase, which excludes tickers
+with a split anytime in the past three calendar years (not necessarily in the 
+3 years since today). Furthermore, note that their solution uses only inner joins
+thus it doesn't include stocks that did not have dividends (which would have a yield
+of 0 by default). It also includes dividends that might have happened been announced prior to the
+first trade date in the relevant 3 year period (the inner join is done on the year part)
 \
 .qtest.q9:{
+  startDate:first exec (-365*3)+max TradeDate from price;
+  startYear:getYear startDate;
   hadSplits:exec distinct Id from split where Id in Russell2000, 
-    SplitDate>=(-365*3)+max SplitDate;
-  nosplit:select avg_px:avg ClosePrice by Id, year:`year$TradeDate from price 
-    where Id in Russell2000, TradeDate>=(-365*3)+max TradeDate, not Id in hadSplits;
-  divdata:select total_divs:sum DivAmt by Id, year:`year$XdivDate from dividend 
-    where Id in Russell2000, XdivDate>=(-365*3)+max XdivDate, not Id in hadSplits;
+    (getYear SplitDate)>=startYear;
+    
+  nosplit:select avg_px:avg ClosePrice by Id, year:getYear TradeDate from price 
+    where Id in Russell2000, TradeDate>=startDate, not Id in hadSplits;
   
-  0!update yield:(0^total_divs)%avg_px from select from nosplit lj `Id`year xkey divdata
+  divdata:select total_divs:sum DivAmt by Id, year:`year$AnnounceDate from dividend 
+    where Id in Russell2000, (getYear AnnounceDate)>= startYear, 
+    not Id in hadSplits;
+  
+  0!update yield:total_divs%avg_px from select from nosplit ij `Id`year xkey divdata
  }
 
 
