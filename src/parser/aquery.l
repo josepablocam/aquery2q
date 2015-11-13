@@ -285,9 +285,9 @@ void consume_verbatim_q() {
 
                 if (!q_code_end)
                 {
-                  unput(c2);
-                  unput(c3);
                   unput(c4);
+                  unput(c3);
+                  unput(c2);
                 }
     			  }
 
