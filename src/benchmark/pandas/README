@@ -1,0 +1,18 @@
+This runs a subset of the operations that pandas uses
+in their vbench historical benchmarking. We pick operations
+that are interesting use cases for aquery (furthermore,
+we picked these prior to running any kind of experiments,
+so the choices are NOT tailored towards performance in any way).
+
+
+
+To reproduce:
+1 - call `make` from the src directory.
+    
+Finally, you can run the experiments with
+./run_benchmark.sh your_csv_path_for_results.csv per_query_iterations \
+  benchmark_iterations benchmark_size
+  
+
+Note that you should provide an absolute path for outputting results, as the script
+changes directories during execution.

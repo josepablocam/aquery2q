@@ -27,6 +27,7 @@ If you are building on OSX (which is what we used here), you will likely find th
 following helpful:
   For general installation info
      https://www.monetdb.org/Developers/SourceCompile/OSX
+     https://www.monetdb.org/Developers/SourceCompile
 
 Additionally, the following file might need editing
   MonetDB-pyapi/monetdb5/extras/pyapi/benchmark.c
