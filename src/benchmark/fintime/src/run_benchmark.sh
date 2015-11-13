@@ -28,8 +28,7 @@ function warn {
 # if output file already exists, create fresh name and warn
 if [ -f $CSVOUT ]
 	then
-		warn "${CSVOUT} already exists, writing to fresh file:${CSVOUT}.tmp"
-		CSVOUT=${CSVOUT}.tmp
+		warn "${CSVOUT} already exists, appending to file (careful!)"
 fi		
 
 # Running experiments from RUNPATH

@@ -14,7 +14,7 @@ iters:10^first "I"$opts`iters;
 randomize:{neg[count x]?x};
 queries:randomize til N;
 results:timeit[iters;] each `$".qtest.",/:"q",/:string queries;
-msg:","sv/:(enlist "q";string iters),/:string queries,'results;
+msg:","sv/:("fintime";enlist "q";string iters),/:string queries,'results;
 // if we have a path append to that file
 $[0=count outpath;1 ("\n"sv msg),"\n"; 
  [(neg h:hopen outpath) msg; hclose h]
