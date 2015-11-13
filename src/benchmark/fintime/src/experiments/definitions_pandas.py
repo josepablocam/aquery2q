@@ -47,7 +47,7 @@ def q0():
     for frame in frames:
         frame.index.names = ['Id', 'bucket']
 
-    return pd.concat(frames).reset_index().sort(columns = ['Id', 'name', 'bucket'])
+    return pd.concat(frames).reset_index().sort_values(by = ['Id', 'name', 'bucket'])
 
 
 # ********* QUERY 1 ****************
@@ -133,7 +133,7 @@ def q5():
     allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
     relevantCols = ['Id', 'TradeDate', 'ClosePrice']
     allData = allData[relevantCols]
-    sortedData = allData.sort(columns = ['Id','TradeDate'], ascending = True)
+    sortedData = allData.sort_values(by = ['Id','TradeDate'], ascending = True)
     # groupby preserves order 
     grouped = sortedData[['Id', 'ClosePrice']].groupby('Id')
     # note that we use a rolling mean function that emulates q's treatment of edge cases
@@ -168,7 +168,7 @@ def q6():
     allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
     relevantCols = ['Id', 'TradeDate', 'ClosePrice']
     allData = allData[relevantCols]
-    sortedData = allData.sort(columns = ['Id','TradeDate'], ascending = True)
+    sortedData = allData.sort_values(by = ['Id','TradeDate'], ascending = True)
     # groupby preserves order 
     grouped = sortedData[['Id', 'ClosePrice']].groupby('Id')
     # note that we use a rolling mean function that emulates q's treatment of edge cases
@@ -209,7 +209,7 @@ def q7():
     allData['ClosePrice'] = allData['ClosePrice'] * allData['SF']
 
     # creating moving price information for signals
-    allData = allData.sort(['Id', 'TradeDate'], ascending = True)
+    allData = allData.sort_values(by = ['Id', 'TradeDate'], ascending = True)
     grouped = allData.groupby('Id')
     allData['m5month'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 160))
     allData['m21day'] = grouped['ClosePrice'].transform(lambda x: pd.rolling_mean(x, 21))
@@ -274,7 +274,7 @@ def q8():
     end = startYear10 + timedelta(days = 365 * 2)
     pxdata = price[price['Id'].isin(stock10)]
     pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
-    pxdata = pxdata.sort(['TradeDate'], ascending = True)
+    pxdata = pxdata.sort_values(by = ['TradeDate'], ascending = True)
     #pxdata.set_index('TradeDate', inplace = True)
     corrdata = pxdata.pivot(index = 'TradeDate', columns = 'Id', values = 'ClosePrice')
     #column wise correlation
@@ -286,7 +286,7 @@ def q8():
     # remove self-correlation
     flatCorrs = flatCorrs[flatCorrs['Id'] != flatCorrs["Id2"]]
     # sort by correlation coefficient
-    return flatCorrs.sort(['corrCoeff'], ascending = True)
+    return flatCorrs.sort_values(by = ['corrCoeff'], ascending = True)
   
     
 # ********* QUERY 9 ****************
