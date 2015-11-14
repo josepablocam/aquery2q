@@ -1,0 +1,17 @@
+This runs the quantile computation benchmark referenced at
+https://www.monetdb.org/blog/embedded-pythonnumpy-monetdb
+
+We use numpy for the monetdb+embedded python version
+and a version implemented in aquery for the aquery benchmark
+
+
+To reproduce:
+1 - call `make` from the src directory.
+    
+Finally, you can run the experiments with
+./run_benchmark.sh your_csv_path_for_results.csv per_query_iterations \
+  benchmark_iterations benchmark_size
+  
+
+Note that you should provide an absolute path for outputting results, as the script
+changes directories during execution.
