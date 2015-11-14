@@ -15,4 +15,5 @@ a2q:
 tables:
 	cd ${EXPPATH};\
 	mkdir -p tables/;\
-	./monetdb_server.sh -init
+	./monetdb_server.sh -init; \
+	./definitions_monetdb.sh
