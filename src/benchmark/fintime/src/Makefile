@@ -36,5 +36,5 @@ tables: data
 	./monetdb_server.sh -start;\
 	sleep 5s; \
 	./make_tables_monetdb.sh -create;\
-	./load_data_monetdb.sh -create;\
+	./load_data_define_queries_monetdb.sh -create;\
 	./monetdb_server.sh -stop

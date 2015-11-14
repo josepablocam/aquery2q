@@ -62,9 +62,6 @@ for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   announce "running aquery"
   q run_aquery.q -out $CSVOUT -iters $PER_QUERY_ITERS 
   announce "running monetdb + embedded python" 
-  # we need to re-"source" so that we pick up the new random parameters
-  # call with create to recreate the tables for random stock indices
-  source ./definitions_monetdb.sh
   q run_monetdb.q -out $CSVOUT -iters $PER_QUERY_ITERS 
 done
 

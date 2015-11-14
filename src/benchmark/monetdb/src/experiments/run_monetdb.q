@@ -1,7 +1,7 @@
 // must have sourced definitions before, as they are set to be
 // system variables
 timeit0:{[x]
-  cmd:"set -f;echo $q",string[x]," | (TIMEFORMAT=\"%R\";time (mclient -d quantile) 2>&1)";
+  cmd:"(TIMEFORMAT=\"%R\";time (mclient -d quantile monetdb_queries/q",string[x],".sql) 2>&1)";
   results:system cmd;
   show -1_results;
   1000 * "F"$last results // convert to milliseconds
