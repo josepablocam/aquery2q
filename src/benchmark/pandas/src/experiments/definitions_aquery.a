@@ -24,7 +24,7 @@ from df_groupby group by key1, key2
 # series_value_counts_int64                                           #
 #######################################################################
 */
-select val, count(val) from s_value_counts group by val
+select val, count(val) as ct from s_value_counts group by val
 
 /*
 #######################################################################
