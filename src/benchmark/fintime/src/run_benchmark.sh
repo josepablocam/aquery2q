@@ -78,8 +78,7 @@ for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   # we need to re-"source" so that we pick up the new random parameters
   # call with create to recreate the tables for random stock indices
    announce "\trebuilding monetdb random parameter tables" 
-  source ./load_data_monetdb.sh -create > /dev/null
-  source ./definitions_monetdb.sh
+  ./load_data_define_queries_monetdb.sh -create > /dev/null
   q run_monetdb.q -out $CSVOUT -iters $PER_QUERY_ITERS 
 done
 

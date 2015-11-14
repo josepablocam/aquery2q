@@ -1,9 +1,63 @@
+function date_to_monetdb {
+	sed 's/\./-/g' | awk '{printf "'\''%s'\''", $1}'
+}
+
+function csv_ids_to_monetdb {
+	sed "s/,/\',\'/g" | awk '{printf "'\''%s'\''", $1}'
+}
+
+# declaring variables used in queries...
+PARAMPATH=./parameters
+
+stock10=$(cat ${PARAMPATH}/stock10.csv | csv_ids_to_monetdb)
+startYear10=$(cat ${PARAMPATH}/startYear10.csv | date_to_monetdb) 
+endYear10=$(cat ${PARAMPATH}/endYear10.csv | date_to_monetdb) 
+startYear10Plus2=$(cat ${PARAMPATH}/startYear10Plus2.csv | date_to_monetdb) 
+stock1000=$(cat ${PARAMPATH}/stock1000.csv | csv_ids_to_monetdb)
+start300Days=$(cat ${PARAMPATH}/start300Days.csv | date_to_monetdb) 
+end300Days=$(cat ${PARAMPATH}/end300Days.csv | date_to_monetdb) 
+startPeriod=$(cat ${PARAMPATH}/startPeriod.csv | date_to_monetdb) 
+endPeriod=$(cat ${PARAMPATH}/endPeriod.csv | date_to_monetdb) 
+sp500=$(cat ${PARAMPATH}/SP500.csv | csv_ids_to_monetdb) 
+start6Mo=$(cat ${PARAMPATH}/start6Mo.csv | date_to_monetdb) 
+end6Mo=$(cat ${PARAMPATH}/end6Mo.csv | date_to_monetdb) 
+russell2000=$(cat ${PARAMPATH}/Russell2000.csv | csv_ids_to_monetdb) 
+maxTradeDate=$(cat ${PARAMPATH}/maxTradeDate.csv | date_to_monetdb) 
+maxTradeDateMinusYear=$(cat ${PARAMPATH}/maxTradeDateMinusYear.csv | date_to_monetdb) 
+maxTradeDateMinus3Years=$(cat ${PARAMPATH}/maxTradeDateMinus3Years.csv | date_to_monetdb) 
+alloc=10000
+
+## TURN OFF glob, avoid replacement of * in queries with directory contents
+set -f
+
+# create tables for stock data
+if [ $# -eq 1 ]; then 
+  if [ $1  == "-create" ]; then
+    create_insert_params="";
+    OLDIFS=${IFS}
+    IFS=","
+    for tb in "stock10" "stock1000" "sp500" "russell2000";
+    do
+      create_insert_params="${create_insert_params}
+        DROP TABLE ${tb}; CREATE TABLE \"${tb}\"(\"id\" char(30));"
+      poss=${!tb}
+      for id in $poss; do
+        create_insert_params="${create_insert_params} INSERT into ${tb} VALUES($id);"
+      done
+    done
+    echo $create_insert_params | mclient -d fintime
+    IFS=$OLDIFS
+  fi
+fi
+
+
+# Query definitions
 # ********* QUERY 0 ****************
 # 	Get the closing price of a set of 10 stocks for a 10-year period and
 # 	group into weekly, monthly and yearly aggregates. For each aggregate
 # 	period determine the low, high and average closing price value.
 # 	The output should be sorted by id and trade date.
-export q0="
+q0="
 CREATE TEMPORARY TABLE pricedata AS
 	  select * from
 		(select id, trade_date, close_price,
@@ -59,7 +113,7 @@ CREATE TEMPORARY TABLE query_result AS
 # volumes are divided by the split factor) for a set of 1000 stocks to reflect the
 # split events during a specified 300 day period, assuming that events occur before
 # the first trade of the split date. These are called split-adjusted prices and volumes.
-export q1="
+q1="
  CREATE TEMPORARY TABLE pricedata AS
  	 SELECT *
 	 FROM price INNER JOIN stock1000 USING (id)
@@ -106,7 +160,7 @@ export q1="
 #********* QUERY 2 ****************
 # For each stock in a specified list of 1000 stocks, find the differences between the daily 
 # high and  daily low on the day of each split event during a specified period.
-export q2="
+q2="
   CREATE TEMPORARY TABLE query_result AS
 		select p.id, trade_date, max(high_price - low_price)  FROM
 		((SELECT * FROM price where 
@@ -126,12 +180,13 @@ export q2="
 # Calculate the value of the S&P500 and Russell 2000 index for a specified day using
 # unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on
 # the specified day
-export q3="
+q3="
 select avg(close_price) as avg_close_px from
 (select * from price where trade_date=${startPeriod}) p
  INNER JOIN sp500 ix ON p.id = ix.id;
 "
-export q4="
+
+q4="
 select avg(close_price) as avg_close_px from
 (select * from price where trade_date=${startPeriod}) p
  INNER JOIN russell2000 ix ON p.id = ix.id;
@@ -143,7 +198,7 @@ select avg(close_price) as avg_close_px from
 # ********* QUERY 5 ****************
 # Find the 21-day and 5-day moving average price for a specified list of
 # 1000 stocks during a 6-month period. (Use split adjusted prices)
-export q5="
+q5="
  CREATE TEMPORARY TABLE pricedata AS
  	 SELECT *
 	 FROM price INNER JOIN stock1000 USING (id)
@@ -194,7 +249,7 @@ export q5="
 # (Based on the previous query) 
 # Find the points (specific days) when the 5-month moving average intersects 
 # the 21-day moving average for these stocks. The output is to be sorted by id and date.
-export q6="
+q6="
  CREATE TEMPORARY TABLE pricedata AS
  	 SELECT *
 	 FROM price INNER JOIN stock1000 USING (id)
@@ -267,7 +322,7 @@ export q6="
 # moving average the complete allocation for that stock is invested and when the
 # 20-day moving average crosses below the 5-month moving average the entire position
 # is sold. The trades happen on the closing price of the trading day.
-export q7="
+q7="
   CREATE TEMPORARY TABLE pricedata AS
   	 SELECT *
  	 FROM price INNER JOIN stock10 USING (id)
@@ -363,7 +418,7 @@ export q7="
 # for a 2 year period. Sort the securities by the coefficient of correlation,
 # indicating the pair of securities corresponding to that row. [Note: coefficient
 # of correlation defined in appendix]
-export q8="
+q8="
 	CREATE TEMPORARY TABLE pricedata AS
 		SELECT * FROM
 		(SELECT id, trade_date, close_price FROM price WHERE
@@ -393,7 +448,7 @@ export q8="
 # thus it doesn't include stocks that did not have dividends (which would have a yield
 # of 0 by default). It also includes dividends that might have happened been announced prior to the
 # first trade date in the relevant 3 year period (the inner join is done on the year part)
-export q9="
+q9="
   CREATE TEMPORARY TABLE splitdata AS
     SELECT distinct(id) from split INNER JOIN russell2000 USING (id)
     WHERE \"year\"(split_date) >= \"year\"(date ${maxTradeDateMinus3Years})
@@ -433,8 +488,26 @@ export q9="
   CREATE TEMPORARY TABLE query_result AS
     select id, year_val, avg_px, total_divs, total_divs / avg_px as yield
      from nosplit_avgpx INNER JOIN nosplit_div USING (id, year_val)
+     order by id, year_val
     WITH DATA
   ON COMMIT PRESERVE ROWS;
-  
-  SELECT id, year_val, yield FROM query_result order by id, year_val;
 " 
+
+# Create a sql file per query
+if [ $1  == "-create" ]
+  mkdir -p monetdb_queries/
+ then
+  for query_num in {0..9}
+    do
+    query_name="q${query_num}"
+    query_content="${!query_name}"
+    echo ${query_content} > monetdb_queries/${query_name}.sql
+    done;
+    
+  # add in functions to database
+  mclient -d fintime < load_functions_monetdb.sql  
+fi
+
+
+
+
