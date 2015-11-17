@@ -71,17 +71,26 @@ if [ $# -eq 1 ]
     done
     
     # Create the temporary history tables used in queries
-    echo 'CREATE TABLE hist_temp(row_nbr int, 
+    echo 'CREATE TABLE hist_temp(
+    "row_nbr" int, 
     "INSTRUMENT_ID" char(30),
     "TRADE_DATE"        date,
     "CLOSE_PRICE"       double,
     "SPLIT_FACTOR"      double);' >> ${TMP_IQ_FILE}
     
-    echo 'CREATE TABLE hist6_temp(row_nbr int,
+    echo 'CREATE TABLE hist6_temp(
+    "row_nbr" int,
     "INSTRUMENT_ID"     char(30),
     "TRADE_DATE"        date,
     "avg_5day"       double,
     "avg_21day"      double);' >> ${TMP_IQ_FILE}
+    
+    echo 'CREATE TABLE hist7_temp(
+        "row_nbr" int,
+        "INSTRUMENT_ID"     char(30),
+        "TRADE_DATE"        date,
+        "avg_5mth"       double,
+        "avg_21day"       double);' >> ${TMP_IQ_FILE}
     
     #write them out
     dbisql -nogui -c=${FINTIME_OPS} -onerror continue ${TMP_IQ_FILE}
@@ -400,17 +409,22 @@ and sign(day_21-day_5) * sign(prev_day21-prev_day5) < 0;
 # 20-day moving average crosses below the 5-month moving average the entire position
 # is sold. The trades happen on the closing price of the trading day.
 q7="
+ BEGIN
+
+ truncate table hist_temp;
+ truncate table hist7_temp;
+ commit;
+
  insert hist_temp
- SELECT number(),B.INSTRUMENT_ID,B.TRADING_SYMBOL, B.TRADE_DATE,b.CLOSE_PRICE,
+ SELECT number(),B.INSTRUMENT_ID, B.TRADE_DATE,b.CLOSE_PRICE,
  IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) 
  FROM STOCK_HISTORY AS B
  left outer join SPLIT_EVENT as A
  on B.INSTRUMENT_ID = A.INSTRUMENT_ID
  AND B.TRADE_DATE < A.EFFECTIVE_DATE 
- WHERE B.INSTRUMENT_ID BETWEEN 11 and 20
- and B.TRADE_DATE >= DATEADD(DAY,-160,'2012-06-01')
- and B.TRADE_DATE <= '2012-12-01' 
- GROUP BY B.INSTRUMENT_ID,B.TRADING_SYMBOL,
+ WHERE B.INSTRUMENT_ID in (${stock10})
+ and B.TRADE_DATE >= ${maxTradeDateMinusYear}
+ GROUP BY B.INSTRUMENT_ID,
  B.TRADE_DATE, B.CLOSE_PRICE
  ORDER BY B.INSTRUMENT_ID,
  B.TRADE_DATE;
