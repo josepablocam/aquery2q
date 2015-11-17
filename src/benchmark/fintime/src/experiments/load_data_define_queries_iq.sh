@@ -84,7 +84,7 @@ fi
 # 	group into weekly, monthly and yearly aggregates. For each aggregate
 # 	period determine the low, high and average closing price value.
 # 	The output should be sorted by id and trade date.
-q0="
+export q0="
 SELECT sh.INSTRUMENT_ID,
 DATEPART(yy,sh.TRADE_DATE) AS YEAR,
 DATEPART(mm,sh.TRADE_DATE) AS MON,
@@ -92,7 +92,7 @@ DATEPART(wk,sh.TRADE_DATE) AS WEEK,
 MAX(sh.CLOSE_PRICE) AS MAX_PRICE,
 MIN(sh.CLOSE_PRICE) AS MIN_PRICE,
 AVG(sh.CLOSE_PRICE) AS AVG_PRICE
-FROM  STOCK_HISTORY sh 
+FROM STOCK_HISTORY sh 
 WHERE
 sh.TRADE_DATE BETWEEN ${startYear10}
 	and ${endYear10}
@@ -109,8 +109,9 @@ DATEPART(wk,sh.TRADE_DATE))
 # volumes are divided by the split factor) for a set of 1000 stocks to reflect the
 # split events during a specified 300 day period, assuming that events occur before
 # the first trade of the split date. These are called split-adjusted prices and volumes.
-q1="
-SELECT B.TRADING_SYMBOL, TRADE_DATE,
+# Modifications: take random list of 1000 stocks, use provided dates
+export q1="
+SELECT B.INSTRUMENT_ID, TRADE_DATE,
 B.HIGH_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) H_PRC,
 B.LOW_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) L_PRC,
 B.CLOSE_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) C_PRC,
@@ -120,11 +121,11 @@ FROM STOCK_HISTORY AS B
 	left outer join SPLIT_EVENT A
 	on B.INSTRUMENT_ID = A.INSTRUMENT_ID 
 	AND B.TRADE_DATE < A.EFFECTIVE_DATE
-WHERE  B.TRADING_SYMBOL BETWEEN 'AAA' AND 'BML'
-	AND LENGTH(B.TRADING_SYMBOL) = 3
-	and B.TRADE_DATE BETWEEN '2005-03-03'
-	and '2005-12-03' 
-GROUP BY B.TRADING_SYMBOL, 
+WHERE 
+A.INSTRUMENT_ID in (${stock1000}) AND
+B.TRADE_DATE BETWEEN ${start300Days}
+	and ${end300Days} 
+GROUP BY B.INSTRUMENT_ID, 
 TRADE_DATE ,
 B.HIGH_PRICE,
 B.LOW_PRICE,
@@ -135,55 +136,123 @@ B.Volume
 "
 
 
+# original q1="
+# SELECT B.TRADING_SYMBOL, TRADE_DATE,
+# B.HIGH_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) H_PRC,
+# B.LOW_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) L_PRC,
+# B.CLOSE_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) C_PRC,
+# B.OPEN_PRICE *IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) O_PRC,
+# B.Volume/IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) VOL
+# FROM STOCK_HISTORY AS B
+#   left outer join SPLIT_EVENT A
+#   on B.INSTRUMENT_ID = A.INSTRUMENT_ID
+#   AND B.TRADE_DATE < A.EFFECTIVE_DATE
+# WHERE  B.TRADING_SYMBOL BETWEEN 'AAA' AND 'BML'
+#   AND LENGTH(B.TRADING_SYMBOL) = 3
+#   and B.TRADE_DATE BETWEEN '2005-03-03'
+#   and '2005-12-03'
+# GROUP BY B.TRADING_SYMBOL,
+# TRADE_DATE ,
+# B.HIGH_PRICE,
+# B.LOW_PRICE,
+# B.CLOSE_PRICE,
+# B.OPEN_PRICE,
+# B.Volume
+# ;
+# "
+
 
 #********* QUERY 2 ****************
 # For each stock in a specified list of 1000 stocks, find the differences between the daily 
 # high and  daily low on the day of each split event during a specified period.
-q2="
-SELECT sh.TRADING_SYMBOL, sh.HIGH_PRICE - sh.LOW_PRICE AS D_PRICE, sh.TRADE_DATE
+# Modifications: take random list of 1000 stocks, use provided dates
+export q2="
+SELECT sh.INSTRUMENT_ID, sh.HIGH_PRICE - sh.LOW_PRICE AS D_PRICE, sh.TRADE_DATE
 FROM   STOCK_HISTORY AS sh 
 inner join SPLIT_EVENT A
 on sh.INSTRUMENT_ID = A.INSTRUMENT_ID 
 AND sh.TRADE_DATE = A.EFFECTIVE_DATE
-WHERE  sh.TRADING_SYMBOL BETWEEN 'AAA' AND 'BML'
-AND LENGTH(sh.TRADING_SYMBOL) = 3
-and sh.TRADE_DATE BETWEEN '2005-08-04'
-and '2005-10-04'
-ORDER  BY sh.TRADING_SYMBOL 
+WHERE  sh.INSTRUMENT_ID in (${stock1000})
+and sh.TRADE_DATE BETWEEN ${startPeriod}
+and ${endPeriod}
+ORDER  BY sh.INSTRUMENT_ID 
 ;
 "
+
+# q2="
+# SELECT sh.TRADING_SYMBOL, sh.HIGH_PRICE - sh.LOW_PRICE AS D_PRICE, sh.TRADE_DATE
+# FROM   STOCK_HISTORY AS sh
+# inner join SPLIT_EVENT A
+# on sh.INSTRUMENT_ID = A.INSTRUMENT_ID
+# AND sh.TRADE_DATE = A.EFFECTIVE_DATE
+# WHERE  sh.TRADING_SYMBOL BETWEEN 'AAA' AND 'BML'
+# AND LENGTH(sh.TRADING_SYMBOL) = 3
+# and sh.TRADE_DATE BETWEEN '2005-08-04'
+# and '2005-10-04'
+# ORDER  BY sh.TRADING_SYMBOL
+# ;
+# "
 
 # ********* QUERY 3 + 4 ****************
 # Calculate the value of the S&P500 and Russell 2000 index for a specified day using
 # unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on
 # the specified day
-q3="
+# Modifications: break up into 2 queries, and take random day
+export q3="
 Select ii.INDEX_NAME, AVG(sh.CLOSE_PRICE) as AVERAGE_CLOSE_PRICE
 FROM MARKET_INDEX AS ii 
 inner join INDEX_CMPSTN AS ic
-	on ii.MARKET_INDEX_ID = ic.MARKET_INDEX_ID 
+	on ii.INDEX_NAME = ic.INDEX_NAME 
 inner join STOCK_HISTORY AS sh
 on ic.INSTRUMENT_ID = sh.INSTRUMENT_ID
-and sh.TRADE_DATE = '2005-03-03'
-WHERE ii.INDEX_NAME in ('S&P 500') 
+and sh.TRADE_DATE = ${startPeriod}
+WHERE ii.INDEX_NAME in ('SP 500') 
 GROUP BY
 ii.INDEX_NAME
 ;
 "
 
-q4="
+# q3="
+# Select ii.INDEX_NAME, AVG(sh.CLOSE_PRICE) as AVERAGE_CLOSE_PRICE
+# FROM MARKET_INDEX AS ii
+# inner join INDEX_CMPSTN AS ic
+#   on ii.MARKET_INDEX_ID = ic.MARKET_INDEX_ID
+# inner join STOCK_HISTORY AS sh
+# on ic.INSTRUMENT_ID = sh.INSTRUMENT_ID
+# and sh.TRADE_DATE = '2005-03-03'
+# WHERE ii.INDEX_NAME in ('S&P 500')
+# GROUP BY
+# ii.INDEX_NAME
+# ;
+# "
+
+export q4="
 Select ii.INDEX_NAME, AVG(sh.CLOSE_PRICE) as AVERAGE_CLOSE_PRICE
 FROM MARKET_INDEX AS ii 
 inner join INDEX_CMPSTN AS ic
-	on ii.MARKET_INDEX_ID = ic.MARKET_INDEX_ID 
+	on ii.INDEX_NAME = ic.INDEX_NAME 
 inner join STOCK_HISTORY AS sh
 on ic.INSTRUMENT_ID = sh.INSTRUMENT_ID
-and sh.TRADE_DATE = '2005-03-03'
+and sh.TRADE_DATE = ${startPeriod}
 WHERE ii.INDEX_NAME in ('Russell 2000') 
 GROUP BY
 ii.INDEX_NAME
 ;
 "
+
+# q4="
+# Select ii.INDEX_NAME, AVG(sh.CLOSE_PRICE) as AVERAGE_CLOSE_PRICE
+# FROM MARKET_INDEX AS ii
+# inner join INDEX_CMPSTN AS ic
+#   on ii.MARKET_INDEX_ID = ic.MARKET_INDEX_ID
+# inner join STOCK_HISTORY AS sh
+# on ic.INSTRUMENT_ID = sh.INSTRUMENT_ID
+# and sh.TRADE_DATE = '2005-03-03'
+# WHERE ii.INDEX_NAME in ('Russell 2000')
+# GROUP BY
+# ii.INDEX_NAME
+# ;
+# "
 
 # keep running into 
 # Error calling shmget(key:800000147,size:56,flags:512): No space left on device
@@ -447,17 +516,19 @@ order by sh.TRADING_SYMBOL,
 	DATEPART(yy,TRADE_DATE)
 ;
 " 
-
-Create a sql file per query
-if [ $1  == "-create" ]
-  mkdir -p sybase_queries/
- then
-  for query_num in {0..9}
-    do
-    query_name="q${query_num}"
-    query_content="${!query_name}"
-    echo ${query_content} > iq_queries/${query_name}.sql
-    done;
+#Create a sql file per query
+if [ $# -eq 1 ]
+  then 
+  if [ $1  == "-create" ]
+    mkdir -p sybase_queries/
+   then
+    for query_num in {0..9}
+      do
+      query_name="q${query_num}"
+      query_content="${!query_name}"
+      echo ${query_content} > iq_queries/${query_name}.sql
+      done;
+  fi
 fi
 
 
