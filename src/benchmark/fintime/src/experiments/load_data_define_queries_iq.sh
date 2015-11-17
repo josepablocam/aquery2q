@@ -91,6 +91,8 @@ if [ $# -eq 1 ]
         "TRADE_DATE"        date,
         "avg_5mth"       double,
         "avg_21day"       double);' >> ${TMP_IQ_FILE}
+        
+    echo 'CREATE TABLE hist9_temp("INSTRUMENT_ID" char(30));' >> ${TMP_IQ_FILE}    
     
     #write them out
     dbisql -nogui -c=${FINTIME_OPS} -onerror continue ${TMP_IQ_FILE}
@@ -490,29 +492,27 @@ q7="
 # indicating the pair of securities corresponding to that row. [Note: coefficient
 # of correlation defined in appendix]
 q8="
-SELECT a.TRADING_SYMBOL,b.TRADING_SYMBOL, 
+SELECT a.INSTRUMENT_ID,b.INSTRUMENT_ID, 
 (Count(*) * sum(a.CLOSE_PRICE * b.CLOSE_PRICE) - sum(a.CLOSE_PRICE)
 * sum(b.CLOSE_PRICE)/sqrt(count(*) * sum(a.CLOSE_PRICE * a.CLOSE_PRICE )
 - (sum(a.CLOSE_PRICE) * sum(a.CLOSE_PRICE)))
 * sqrt(count(*) * sum(b.CLOSE_PRICE * b.CLOSE_PRICE )
 - (sum(b.CLOSE_PRICE) * sum(b.CLOSE_PRICE)))) as CORRELATION
-from (Select TRADING_SYMBOL, TRADE_DATE,CLOSE_PRICE 
+from (Select INSTRUMENT_ID, TRADE_DATE,CLOSE_PRICE 
 from 
 STOCK_HISTORY AS B 
-WHERE B.TRADING_SYMBOL BETWEEN 'AAA' AND 'AAJ'
-AND LENGTH(B.TRADING_SYMBOL) = 3
-and B.TRADE_DATE BETWEEN '2005-02-08'
-and '2007-02-07' 
+WHERE B.INSTRUMENT_ID in (${stock10})
+and B.TRADE_DATE BETWEEN ${startYear10} 
+and ${startYear10Plus2} 
 ) a,
-(Select TRADING_SYMBOL, TRADE_DATE,CLOSE_PRICE 
+(Select INSTRUMENT_ID, TRADE_DATE,CLOSE_PRICE 
 from 
 STOCK_HISTORY AS B 
-WHERE B.TRADING_SYMBOL BETWEEN 'AAA' AND 'AAJ'
-AND LENGTH(B.TRADING_SYMBOL) = 3
-and B.TRADE_DATE BETWEEN '2005-02-08'
-and '2007-02-07'   ) b
+WHERE B.INSTRUMENT_ID in (${stock10})
+and B.TRADE_DATE BETWEEN ${startYear10}
+and ${startYear10Plus2}) b
 where a.TRADE_DATE = b.TRADE_DATE
-group by a.TRADING_SYMBOL, b.TRADING_SYMBOL
+group by a.INSTRUMENT_ID, b.INSTRUMENT_ID
 order by correlation
 ;  
 "
@@ -529,29 +529,60 @@ order by correlation
 # of 0 by default). It also includes dividends that might have happened been announced prior to the
 # first trade date in the relevant 3 year period (the inner join is done on the year part)
 q9="
-SELECT sh.TRADING_SYMBOL, DATEPART(yy,TRADE_DATE) AS YEAR, 
+ truncate table hist9_temp;
+ commit;
+ INSERT hist9_temp
+ SELECT se.INSTRUMENT_ID FROM SPLIT_EVENT AS se
+ inner join INDEX_CMPSTN AS ic
+ on ic.INSTRUMENT_ID = se.INSTRUMENT_ID
+ WHERE ic.INDEX_NAME = 'Russell 2000'
+ AND DATEPART(yy, EFFECTIVE_DATE) >= DATEPART(yy, ${maxTradeDateMinus3Years});
+
+SELECT sh.INSTRUMENT_ID, DATEPART(yy,TRADE_DATE) AS YEAR, 
 SUM(dividend_value)/AVG(CLOSE_PRICE) as DIVIDEND
-FROM  MARKET_INDEX mi
-inner join INDEX_CMPSTN AS ic
-on mi.MARKET_INDEX_ID = ic.MARKET_INDEX_ID 
-inner join STOCK_HISTORY AS sh
+FROM
+STOCK_HISTORY AS sh
+inner join INDEX_CMPSTN as ic
 on ic.INSTRUMENT_ID = sh.INSTRUMENT_ID
-AND sh.TRADE_DATE BETWEEN '2005-04-04' and '2008-04-03'
+AND sh.TRADE_DATE >= ${maxTradeDateMinus3Years}
 inner join DIVIDEND_EVENT de
-on de.INSTRUMENT_ID= sh.INSTRUMENT_ID 
-AND DATEPART(yy,TRADE_DATE)=DATEPART(yy,ANNOUNCED_DATE) 
-AND de.INSTRUMENT_ID NOT IN (SELECT se.INSTRUMENT_ID
-FROM   SPLIT_EVENT se
-WHERE  sh.INSTRUMENT_ID=se.INSTRUMENT_ID 
-AND   DATEPART(yy,TRADE_DATE)=
-DATEPART(yy,EFFECTIVE_DATE)) 
-WHERE mi.INDEX_NAME ='Russell 2000' 
-GROUP  BY sh.TRADING_SYMBOL,
+on de.INSTRUMENT_ID = sh.INSTRUMENT_ID 
+AND de.INSTRUMENT_ID NOT IN (SELECT INSTRUMENT_ID
+FROM hist9_temp) 
+WHERE ic.INDEX_NAME ='Russell 2000' 
+GROUP BY sh.INSTRUMENT_ID,
 	DATEPART(yy,TRADE_DATE)
-order by sh.TRADING_SYMBOL,
+order by sh.INSTRUMENT_ID,
 	DATEPART(yy,TRADE_DATE)
 ;
 " 
+
+# Continued running out of memory with original query
+# q9="
+# SELECT sh.INSTRUMENT_ID, DATEPART(yy,TRADE_DATE) AS YEAR,
+# SUM(dividend_value)/AVG(CLOSE_PRICE) as DIVIDEND
+# FROM  MARKET_INDEX mi
+# inner join INDEX_CMPSTN AS ic
+# on mi.INDEX_NAME = ic.INDEX_NAME
+# inner join STOCK_HISTORY AS sh
+# on ic.INSTRUMENT_ID = sh.INSTRUMENT_ID
+# AND sh.TRADE_DATE >= ${maxTradeDateMinus3Years}
+# inner join DIVIDEND_EVENT de
+# on de.INSTRUMENT_ID= sh.INSTRUMENT_ID
+# AND DATEPART(yy,TRADE_DATE)=DATEPART(yy,ANNOUNCED_DATE)
+# AND de.INSTRUMENT_ID NOT IN (SELECT se.INSTRUMENT_ID
+# FROM   SPLIT_EVENT se
+# WHERE  sh.INSTRUMENT_ID=se.INSTRUMENT_ID AND
+# EFFECTIVE_DATE >= ${maxTradeDateMinus3Years}
+# AND   DATEPART(yy,TRADE_DATE)=
+# DATEPART(yy,EFFECTIVE_DATE))
+# WHERE mi.INDEX_NAME ='Russell 2000'
+# GROUP  BY sh.INSTRUMENT_ID,
+#   DATEPART(yy,TRADE_DATE)
+# order by sh.INSTRUMENT_ID,
+#   DATEPART(yy,TRADE_DATE)
+# ;
+# "
 #Create a sql file per query
 if [ $# -eq 1 ]
   then 
@@ -562,7 +593,7 @@ if [ $# -eq 1 ]
       do
       query_name="q${query_num}"
       query_content="${!query_name}"
-      echo ${query_content} > iq_queries/${query_name}.sql
+      echo ${query_content} > sybase_queries/${query_name}.sql
       done;
   fi
 fi
