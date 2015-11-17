@@ -70,8 +70,21 @@ if [ $# -eq 1 ]
       done
     done
     
+    # Create the temporary history tables used in queries
+    echo 'CREATE TABLE hist_temp(row_nbr int, 
+    "INSTRUMENT_ID" char(30),
+    "TRADE_DATE"        date,
+    "CLOSE_PRICE"       double,
+    "SPLIT_FACTOR"      double);' >> ${TMP_IQ_FILE}
+    
+    echo 'CREATE TABLE hist6_temp(row_nbr int,
+    "INSTRUMENT_ID"     char(30),
+    "TRADE_DATE"        date,
+    "avg_5day"       double,
+    "avg_21day"      double);' >> ${TMP_IQ_FILE}
+    
     #write them out
-    dbisql -nogui -c="uid=DBA;pwd=sql;dbn=fintime" -onerror continue ${TMP_IQ_FILE}
+    dbisql -nogui -c=${FINTIME_OPS} -onerror continue ${TMP_IQ_FILE}
     IFS=$OLDIFS
   fi
 fi
@@ -84,7 +97,9 @@ fi
 # 	group into weekly, monthly and yearly aggregates. For each aggregate
 # 	period determine the low, high and average closing price value.
 # 	The output should be sorted by id and trade date.
-export q0="
+q0="
+commit;
+
 SELECT sh.INSTRUMENT_ID,
 DATEPART(yy,sh.TRADE_DATE) AS YEAR,
 DATEPART(mm,sh.TRADE_DATE) AS MON,
@@ -110,7 +125,9 @@ DATEPART(wk,sh.TRADE_DATE))
 # split events during a specified 300 day period, assuming that events occur before
 # the first trade of the split date. These are called split-adjusted prices and volumes.
 # Modifications: take random list of 1000 stocks, use provided dates
-export q1="
+q1="
+commit; 
+
 SELECT B.INSTRUMENT_ID, TRADE_DATE,
 B.HIGH_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) H_PRC,
 B.LOW_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) L_PRC,
@@ -166,7 +183,9 @@ B.Volume
 # For each stock in a specified list of 1000 stocks, find the differences between the daily 
 # high and  daily low on the day of each split event during a specified period.
 # Modifications: take random list of 1000 stocks, use provided dates
-export q2="
+q2="
+commit;
+
 SELECT sh.INSTRUMENT_ID, sh.HIGH_PRICE - sh.LOW_PRICE AS D_PRICE, sh.TRADE_DATE
 FROM   STOCK_HISTORY AS sh 
 inner join SPLIT_EVENT A
@@ -198,7 +217,9 @@ ORDER  BY sh.INSTRUMENT_ID
 # unadjusted prices and the index composition of the 2 indexes (see appendix for spec) on
 # the specified day
 # Modifications: break up into 2 queries, and take random day
-export q3="
+q3="
+commit;
+
 Select ii.INDEX_NAME, AVG(sh.CLOSE_PRICE) as AVERAGE_CLOSE_PRICE
 FROM MARKET_INDEX AS ii 
 inner join INDEX_CMPSTN AS ic
@@ -226,7 +247,9 @@ ii.INDEX_NAME
 # ;
 # "
 
-export q4="
+q4="
+commit;
+
 Select ii.INDEX_NAME, AVG(sh.CLOSE_PRICE) as AVERAGE_CLOSE_PRICE
 FROM MARKET_INDEX AS ii 
 inner join INDEX_CMPSTN AS ic
@@ -254,50 +277,48 @@ ii.INDEX_NAME
 # ;
 # "
 
-# keep running into 
-# Error calling shmget(key:800000147,size:56,flags:512): No space left on device
-# when calling with 2 embedded python functions in the same select
+
 # ********* QUERY 5 ****************
 # Find the 21-day and 5-day moving average price for a specified list of
 # 1000 stocks during a 6-month period. (Use split adjusted prices)
+# Modifications: take random dates, make last date not-inclusive
 q5="
+truncate table hist_temp;
+commit;
+
 insert hist_temp
-SELECT number(),B.INSTRUMENT_ID, B.TRADING_SYMBOL,B.TRADE_DATE, B.CLOSE_PRICE,
+SELECT number(),B.INSTRUMENT_ID, B.TRADE_DATE, B.CLOSE_PRICE,
 IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) 
 FROM STOCK_HISTORY AS B
 left outer join SPLIT_EVENT as A
 on B.INSTRUMENT_ID = A.INSTRUMENT_ID
 AND B.TRADE_DATE < A.EFFECTIVE_DATE 
-WHERE B.TRADING_SYMBOL BETWEEN 'AAA' AND 'BML'
-AND LENGTH(B.TRADING_SYMBOL) = 3
-and B.TRADE_DATE >= DATEADD(DAY,-28,'2010-06-01')
-and B.TRADE_DATE <= '2010-12-01' 
-GROUP BY B.INSTRUMENT_ID, B.TRADING_SYMBOL,
+WHERE B.INSTRUMENT_ID in (${stock1000})
+and B.TRADE_DATE >= ${start6Mo}
+and B.TRADE_DATE < ${end6Mo}
+GROUP BY B.INSTRUMENT_ID,
 B.TRADE_DATE, B.CLOSE_PRICE
 ORDER BY B.INSTRUMENT_ID,
 B.TRADE_DATE;
 
-
-SELECT x.TRADING_SYMBOL, x.TRADE_DATE, AVG_5DAY , AVG_21DAY
-FROM (SELECT B.INSTRUMENT_ID, B.TRADING_SYMBOL, B.TRADE_DATE,
+SELECT x.INSTRUMENT_ID, x.TRADE_DATE, AVG_5DAY , AVG_21DAY
+FROM (SELECT B.INSTRUMENT_ID, B.TRADE_DATE,
 AVG(C.CLOSE_PRICE * B.SPLIT_FACTOR ) avg_5day
 FROM hist_temp as B 
 left outer join hist_temp as C
 on B.INSTRUMENT_ID = C.INSTRUMENT_ID
 and c.row_nbr BETWEEN b.row_nbr - 5 and b.row_nbr 
-Where B.TRADE_DATE >= '2010-06-01'
-GROUP BY B.INSTRUMENT_ID, B.TRADING_SYMBOL,
-B.TRADE_DATE) x,
-(SELECT B.INSTRUMENT_ID, B.TRADING_SYMBOL, B.TRADE_DATE,
+Where B.TRADE_DATE >= ${start6Mo}
+GROUP BY B.INSTRUMENT_ID,B.TRADE_DATE) x,
+(SELECT B.INSTRUMENT_ID, B.TRADE_DATE,
 AVG(C.CLOSE_PRICE * B.SPLIT_FACTOR ) avg_21day
 FROM hist_temp as B 
 left outer join hist_temp as C
 on B.INSTRUMENT_ID = C.INSTRUMENT_ID
 and c.row_nbr BETWEEN b.row_nbr - 21 and b.row_nbr 
 
-Where B.TRADE_DATE >= '2010-06-01'
-GROUP BY B.INSTRUMENT_ID, B.TRADING_SYMBOL,
-B.TRADE_DATE) y 
+Where B.TRADE_DATE >= ${start6Mo}
+GROUP BY B.INSTRUMENT_ID, B.TRADE_DATE) y 
 where x.INSTRUMENT_ID = y.INSTRUMENT_ID
 and x.TRADE_DATE = y.TRADE_DATE
 ;
@@ -308,60 +329,61 @@ and x.TRADE_DATE = y.TRADE_DATE
 # Find the points (specific days) when the 5-month moving average intersects 
 # the 21-day moving average for these stocks. The output is to be sorted by id and date.
 q6="
+truncate table hist_temp;
+truncate table hist6_temp;
+commit;
+
 insert hist_temp
-SELECT number(),B.INSTRUMENT_ID, B.TRADING_SYMBOL, B.TRADE_DATE,B.CLOSE_PRICE,
+SELECT number(),B.INSTRUMENT_ID, B.TRADE_DATE, B.CLOSE_PRICE,
 IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) 
 FROM STOCK_HISTORY AS B
 left outer join SPLIT_EVENT as A
 on B.INSTRUMENT_ID = A.INSTRUMENT_ID
 AND B.TRADE_DATE < A.EFFECTIVE_DATE 
-WHERE B.TRADING_SYMBOL BETWEEN 'AAA' AND 'BML'
-AND LENGTH(B.TRADING_SYMBOL) = 3
-and B.TRADE_DATE >= DATEADD(DAY,-28,'2012-06-01')
-and B.TRADE_DATE <= '2012-12-01'
-GROUP BY B.INSTRUMENT_ID,TRADING_SYMBOL,
+WHERE B.INSTRUMENT_ID in (${stock1000})
+and B.TRADE_DATE >= ${start6Mo}
+and B.TRADE_DATE <= ${end6Mo}
+GROUP BY B.INSTRUMENT_ID,
 B.TRADE_DATE, B.CLOSE_PRICE
 ORDER BY B.INSTRUMENT_ID,
 B.TRADE_DATE;
 
 Insert hist6_temp
-SELECT number(),x.INSTRUMENT_ID, x.TRADING_SYMBOL, x.TRADE_DATE, avg_5day,
+SELECT number(),x.INSTRUMENT_ID, x.TRADE_DATE, avg_5day,
 avg_21day
-FROM (SELECT B.INSTRUMENT_ID, B.TRADING_SYMBOL, B.TRADE_DATE,
+FROM (SELECT B.INSTRUMENT_ID, B.TRADE_DATE,
 AVG(C.CLOSE_PRICE * B.SPLIT_FACTOR)  avg_5day
 FROM hist_temp as B
 left outer join hist_temp as C
 on B.INSTRUMENT_ID = C.INSTRUMENT_ID
 and c.row_nbr BETWEEN b.row_nbr - 5 and b.row_nbr 
-Where B.TRADE_DATE >= '2012-06-01'
-GROUP BY B.INSTRUMENT_ID, B.TRADING_SYMBOL,
-B.TRADE_DATE) x,
-(SELECT B.INSTRUMENT_ID, B.TRADING_SYMBOL, B.TRADE_DATE,
+Where B.TRADE_DATE >= ${start6Mo}
+GROUP BY B.INSTRUMENT_ID, B.TRADE_DATE) x,
+(SELECT B.INSTRUMENT_ID, B.TRADE_DATE,
 AVG(C.CLOSE_PRICE * B.SPLIT_FACTOR) avg_21day
 FROM hist_temp as B
 left outer join hist_temp as C
 on B.INSTRUMENT_ID = C.INSTRUMENT_ID
 and c.row_nbr BETWEEN b.row_nbr - 21 and b.row_nbr 
-Where B.TRADE_DATE >= '2012-06-01'
-GROUP BY B.INSTRUMENT_ID,B.TRADING_SYMBOL,
-B.TRADE_DATE) y
+Where B.TRADE_DATE >= ${start6Mo}
+GROUP BY B.INSTRUMENT_ID, B.TRADE_DATE) y
 where x.INSTRUMENT_ID = y.INSTRUMENT_ID
 and x.TRADE_DATE = y.TRADE_DATE
 order by x.INSTRUMENT_ID, x.TRADE_DATE;
 
 
-select z.TRADING_SYMBOL, z.TRADE_DATE, DAY_5, DAY_21, PREV_DAY5, PREV_DAY21
-from (SELECT a.INSTRUMENT_ID, a.TRADING_SYMBOL, a.TRADE_DATE,  avg(b.avg_21day) as prev_day21
+select z.INSTRUMENT_ID, z.TRADE_DATE, DAY_5, DAY_21, PREV_DAY5, PREV_DAY21
+from (SELECT a.INSTRUMENT_ID, a.TRADE_DATE,  avg(b.avg_21day) as prev_day21
 from hist6_temp a, hist6_temp b
 where a.INSTRUMENT_ID = b.INSTRUMENT_ID
 and b.row_nbr between a.row_nbr - 2 and a.row_nbr - 1
-group by a.INSTRUMENT_ID, a.TRADING_SYMBOL, a.TRADE_DATE) x,
-(SELECT a.INSTRUMENT_ID, a.TRADING_SYMBOL, a.TRADE_DATE,  avg(b.avg_5day) as prev_day5
+group by a.INSTRUMENT_ID, a.TRADE_DATE) x,
+(SELECT a.INSTRUMENT_ID, a.TRADE_DATE,  avg(b.avg_5day) as prev_day5
 from hist6_temp a, hist6_temp b
 where a.INSTRUMENT_ID = b.INSTRUMENT_ID
 and b.row_nbr between a.row_nbr - 2 and a.row_nbr - 1
-group by a.INSTRUMENT_ID, a.TRADING_SYMBOL, a.TRADE_DATE) y,
-(SELECT INSTRUMENT_ID, TRADING_SYMBOL, TRADE_DATE, avg_5day as day_5, avg_21day as day_21
+group by a.INSTRUMENT_ID, a.TRADE_DATE) y,
+(SELECT INSTRUMENT_ID, TRADE_DATE, avg_5day as day_5, avg_21day as day_21
 from hist6_temp) z
 where z.INSTRUMENT_ID = x.INSTRUMENT_ID
 and z.TRADE_DATE = x.TRADE_DATE
