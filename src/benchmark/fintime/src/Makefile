@@ -31,7 +31,7 @@ benchconfig:
 	touch fintime_benchmark.config
 
 # start up requirements for each of the benchmarked systems	
-aquery: data benchconfig
+aquery: a2q data benchconfig
 	echo "Building aquery benchmark data"; \
 	cd ${EXPPATH};\
 	q make_tables.q > /dev/null;\

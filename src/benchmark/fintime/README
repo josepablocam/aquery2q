@@ -24,6 +24,12 @@ Finally, you can run the experiments with
 Note that you should provide an absolute path for outputting results, as the script
 changes directories during execution.
 
+If you're running sybase, you need to set the appropriate log directory for the
+fintime database created, you can do this by running
+after you've called the appropriate `make` commands
+
+cd experiments/tables/sybase/fintime/; export IQLOGDIR16=$(pwd);
+
 In order to run the monetdb benchmarking, you will need to build from source
 the pyapi branch, as per
 
