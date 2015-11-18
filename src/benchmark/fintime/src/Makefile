@@ -60,6 +60,10 @@ sybase: aquery
 	cd ${EXPPATH};\
 	./iq_server.sh -create # creates server and tables!
 	echo "sybase" >> fintime_benchmark.config
+	
+q: aquery
+	echo "Add q to benchmark"
+	echo "q" >> fintime_benchmark.config	
 		
 		
 		

@@ -44,6 +44,7 @@ fi
 
 # Check which systems running for this benchmark
 RUNNING_AQUERY=$(grep -Fxq "aquery" ${FINTIME_BENCH_CONFIG})$?
+RUNNING_Q=$(grep -Fxq "q" ${FINTIME_BENCH_CONFIG})$?
 RUNNING_PANDAS=$(grep -Fxq "pandas" ${FINTIME_BENCH_CONFIG})$?
 RUNNING_MONETDB=$(grep -Fxq "monetdb" ${FINTIME_BENCH_CONFIG})$?
 RUNNING_SYBASE=$(grep -Fxq "sybase" ${FINTIME_BENCH_CONFIG})$?
@@ -100,8 +101,11 @@ for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   announce "running aquery"
   q run_aquery.q -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
   
-  announce "running q"
-  q run_q.q -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
+  if [ ${RUNNING_Q} == 0 ]
+    then 
+    announce "running q"
+    q run_q.q -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
+  fi  
   
   if [ ${RUNNING_PANDAS} == 0 ]
     then
