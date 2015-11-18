@@ -4,14 +4,20 @@ http://cs.nyu.edu/shasha/fintime.html
 
 
 To reproduce:
-1 - call `make` from the src directory.
+1 - Use the Makefile provided:
   cd src/
   a) to build the default data (2000 stock ids, 4000 days):
-     make
+     skip step (b)
   b) to build with arbitrary # of stock ids
     export BENCHMARKSIZE=n
-    make
-    
+  c) call make with the name of systems you'd like to benchmark  
+    make aquery pandas monetdb sybase
+  will build the entire system (note that it is your responsibility to have
+  all requirements installed: i.e. monetdb + pyapi branch, sybase etc
+  and source necessary files (.e.g source IQ16.sh for sybase)
+  )
+  Note that aquery always builds (as does q)
+  
 Finally, you can run the experiments with
 ./run_benchmark.sh your_csv_path_for_results.csv per_query_iterations benchmark_iterations
 

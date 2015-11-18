@@ -28,7 +28,7 @@ def q0():
     
     # select relevant data set and add time columns for grouping
     pxdata = price[price['Id'].isin(stock10)]
-    pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
+    pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] <= end)]
     pxdata['week'] = pxdata['TradeDate'].map(lambda x: x.week)
     pxdata['month'] = pxdata['TradeDate'].map(lambda x: x.month)
     pxdata['year'] = pxdata['TradeDate'].map(lambda x: x.year)
@@ -59,7 +59,7 @@ def q1():
     start = start300Days
     end = start300Days + timedelta(days = 300)
     pxdata = price[price['Id'].isin(stock1000)]
-    pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
+    pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] <= end)]
     splitdata = split[split['Id'].isin(stock1000)]
     splitdata = splitdata[splitdata['SplitDate'] >= start]
     joindata = pxdata.merge(splitdata, on = 'Id', how = "inner")
@@ -145,7 +145,7 @@ def q5():
 
 # ********* QUERY 6 ****************
 # (Based on the previous query) 
-# Find the points (specific days) when the 5-month moving average intersects the 21-day 
+# Find the points (specific days) when the 5-day moving average intersects the 21-day 
 # moving average for these stocks. The output is to be sorted by id and date.
 def q6():
     start = start6Mo
@@ -273,7 +273,7 @@ def q8():
     start = startYear10
     end = startYear10 + timedelta(days = 365 * 2)
     pxdata = price[price['Id'].isin(stock10)]
-    pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] < end)]
+    pxdata = pxdata[(pxdata['TradeDate'] >= start) & (pxdata['TradeDate'] <= end)]
     pxdata = pxdata.sort_values(by = ['TradeDate'], ascending = True)
     #pxdata.set_index('TradeDate', inplace = True)
     corrdata = pxdata.pivot(index = 'TradeDate', columns = 'Id', values = 'ClosePrice')

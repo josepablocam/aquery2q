@@ -8,6 +8,7 @@ if [ $1 == "-init" ];
 	then
 		# create databases and set embedded python permission
 		# Set up monetdb config file with monetdb user
+    killall monetdbd
 		printf "user=monetdb\npassword=monetdb" > .monetdb
 		monetdbd create tables/monetdb
 		monetdbd start tables/monetdb

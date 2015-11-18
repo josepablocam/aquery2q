@@ -67,7 +67,7 @@ CREATE TEMPORARY TABLE pricedata AS
 		from price 
 		where 
 		trade_date >= ${startYear10} and 
-		trade_date < ${endYear10}
+		trade_date <= ${endYear10}
 		) p INNER JOIN stock10 s
 		USING (id)
   WITH DATA
@@ -117,7 +117,7 @@ q1="
  CREATE TEMPORARY TABLE pricedata AS
  	 SELECT *
 	 FROM price INNER JOIN stock1000 USING (id)
-	 WHERE trade_date >= ${start300Days} AND trade_date < ${end300Days}
+	 WHERE trade_date >= ${start300Days} AND trade_date <= ${end300Days}
 	 WITH DATA
  ON COMMIT PRESERVE ROWS;
  
@@ -247,7 +247,7 @@ q5="
 
 # ********* QUERY 6 ****************
 # (Based on the previous query) 
-# Find the points (specific days) when the 5-month moving average intersects 
+# Find the points (specific days) when the 5-day moving average intersects 
 # the 21-day moving average for these stocks. The output is to be sorted by id and date.
 q6="
  CREATE TEMPORARY TABLE pricedata AS
@@ -422,7 +422,7 @@ q8="
 	CREATE TEMPORARY TABLE pricedata AS
 		SELECT * FROM
 		(SELECT id, trade_date, close_price FROM price WHERE
-		trade_date >= ${startYear10} and trade_date < ${startYear10Plus2}) AS p
+		trade_date >= ${startYear10} and trade_date <= ${startYear10Plus2}) AS p
 		INNER JOIN stock10 USING (id)
 		ORDER BY id, trade_date
 		WITH DATA

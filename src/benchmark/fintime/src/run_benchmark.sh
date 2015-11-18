@@ -14,6 +14,9 @@ GOOD_PROMPT="\033[32m Benchmark:"
 BAD_PROMPT="\033[31m Benchmark:"
 NC="\033[0m"
 
+# fintime benchmark configuration file
+FINTIME_BENCH_CONFIG=./fintime_benchmark.config
+
 # path to run experiments
 RUNPATH=./experiments/
 
@@ -31,6 +34,20 @@ if [ -f $CSVOUT ]
 		warn "${CSVOUT} already exists, appending to file (careful!)"
 fi		
 
+# if benchmark configuration file doesn't exist complain
+if [ ! -f $FINTIME_BENCH_CONFIG ]
+  then
+    warn "Please `make` along with appropriate systems, see README"
+    exit 1
+fi
+
+
+# Check which systems running for this benchmark
+RUNNING_AQUERY=$(grep -Fxq "aquery" ${FINTIME_BENCH_CONFIG})$?
+RUNNING_PANDAS=$(grep -Fxq "pandas" ${FINTIME_BENCH_CONFIG})$?
+RUNNING_MONETDB=$(grep -Fxq "monetdb" ${FINTIME_BENCH_CONFIG})$?
+RUNNING_SYBASE=$(grep -Fxq "sybase" ${FINTIME_BENCH_CONFIG})$?
+
 # Running experiments from RUNPATH
 announce "Running experiments from ${RUNPATH}, output path should be absolute"
 cd ${RUNPATH}
@@ -45,8 +62,18 @@ if [ ! -f $A2Q ]
 fi
 
 # monetdb set up
-announce "Starting up monetdb"
-./monetdb_server.sh -start
+if [ ${RUNNING_MONETDB} == 0 ]
+  then
+    announce "Starting up monetdb"
+    ./monetdb_server.sh -start
+fi    
+
+# sybase set up
+if [ ${RUNNING_SYBASE} == 0 ]
+  then
+    announce "Starting up sybase"
+    ./iq_server.sh -start
+fi    
 
 announce "Compiling aquery"
 ${A2Q} -c -s -a 1 -o compiled.q definitions_aquery.a > /dev/null
@@ -68,19 +95,47 @@ for ((iter=1;iter <= BENCHMARK_ITERS;iter++)); do
   announce "Iteration ${iter} of benchmark"
   announce "Creating random benchmark parameters"
   q make_parameters.q > /dev/null
+  
+  # Both aquery and q run by default.
   announce "running aquery"
   q run_aquery.q -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
+  
   announce "running q"
   q run_q.q -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
-  announce "running pandas"
-  python run_pandas.py -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
-  announce "running monetdb + embedded python" 
-  # we need to re-"source" so that we pick up the new random parameters
-  # call with create to recreate the tables for random stock indices
-   announce "\trebuilding monetdb random parameter tables" 
-  ./load_data_define_queries_monetdb.sh -create > /dev/null
-  q run_monetdb.q -out $CSVOUT -iters $PER_QUERY_ITERS 
+  
+  if [ ${RUNNING_PANDAS} == 0 ]
+    then
+    announce "running pandas"
+    python run_pandas.py -out $CSVOUT -iters $PER_QUERY_ITERS > /dev/null
+  fi   
+   
+  if [ ${RUNNING_MONETDB} == 0 ]
+    then
+    announce "running monetdb + embedded python"
+    # call with create to recreate the tables for random stock indices
+    announce "\trebuilding monetdb random parameter tables"
+    ./load_data_define_queries_monetdb.sh -create > /dev/null
+    q run_monetdb.q -out $CSVOUT -iters $PER_QUERY_ITERS
+  fi  
+ 
+  if [ ${RUNNING_SYBASE} == 0 ]
+    then
+    announce "running sybase iq"
+    announce "\trebuilding sybase random parameter tables"
+    ./load_data_define_queries_iq.sh -create > /dev/null
+    q run_iq.q -out $CSVOUT -iters $PER_QUERY_ITERS
+  fi  
+
 done
 
 #stop monetdb server
-./monetdb_server.sh -stop
+if [ ${RUNNING_MONETDB} == 0 ]
+  then
+  ./monetdb_server.sh -stop
+fi  
+
+# stop sybase server
+if [ ${RUNNING_SYBASE} == 0 ]
+  then
+   ./iq_server.sh -stop
+fi    
