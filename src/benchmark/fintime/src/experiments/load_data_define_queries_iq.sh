@@ -131,7 +131,7 @@ if [ $# -eq 1 ]
       instrument_id char(30), 
       trade_date date, 
       avg_5day double, 
-      avg_21day double;' >> ${TMP_IQ_FILE}
+      avg_21day double);' >> ${TMP_IQ_FILE}
       
     echo 'CREATE TABLE q6_results(
       instrument_id char(30), 
@@ -261,7 +261,7 @@ q2="
 truncate table q2_results;
 commit;
 
-insert q2_results;
+insert q2_results
 SELECT sh.INSTRUMENT_ID, sh.HIGH_PRICE - sh.LOW_PRICE AS D_PRICE, sh.TRADE_DATE
 FROM   STOCK_HISTORY AS sh 
 inner join SPLIT_EVENT A
@@ -529,7 +529,6 @@ q7="
  order by x.INSTRUMENT_ID, x.TRADE_DATE;
 
 
- insert q7_results
  select z.INSTRUMENT_ID, z.TRADE_DATE, diff, td2, diff2, pre_diff into #hist7_temp
  from (SELECT a.INSTRUMENT_ID, a.TRADE_DATE,  b.avg_21day - b.avg_5mth as pre_diff
  from hist7_temp a, hist7_temp b
@@ -551,6 +550,7 @@ q7="
  and pre_diff*diff <=0
  and NOT (pre_diff=0 and diff=0);
 
+ insert q7_results
  select sum(mp2.CLOSE_PRICE * (10000/mp1.CLOSE_PRICE)) as STOCK_VALUE
  from #hist7_temp t7, STOCK_HISTORY mp1, STOCK_HISTORY mp2
  where t7.INSTRUMENT_ID = mp1.INSTRUMENT_ID 
@@ -568,6 +568,7 @@ q7="
 # of correlation defined in appendix]
 q8="
 truncate table q8_results;
+commit;
 
 insert q8_results
 SELECT a.INSTRUMENT_ID,b.INSTRUMENT_ID, 
