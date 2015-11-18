@@ -92,8 +92,67 @@ if [ $# -eq 1 ]
         "avg_5mth"       double,
         "avg_21day"       double);' >> ${TMP_IQ_FILE}
         
-    echo 'CREATE TABLE hist9_temp("INSTRUMENT_ID" char(30));' >> ${TMP_IQ_FILE}    
+    echo 'CREATE TABLE hist9_temp("INSTRUMENT_ID" char(30));' >> ${TMP_IQ_FILE}  
+
+
+    # create tables to hold query results
+    echo 'CREATE TABLE q0_results(
+      instrument_id char(30), 
+      year integer, 
+      mon integer, 
+      week integer, 
+      max_price double,
+      min_price double,
+      avg_price double);' >> ${TMP_IQ_FILE}
+      
+    echo 'CREATE TABLE q1_results(
+      instrument_id char(30), 
+      trade_date date, 
+      h_prc double, 
+      l_prc double, 
+      c_prc double,
+      o_prc double,
+      vol double);' >> ${TMP_IQ_FILE} 
+      
+    echo 'CREATE TABLE q2_results(
+      instrument_id char(30), 
+      d_price double, 
+      trade_date date);' >> ${TMP_IQ_FILE}
+      
+    echo 'CREATE TABLE q3_results(
+      index_name char(30), 
+      average_close_price double);' >> ${TMP_IQ_FILE} 
+      
+    echo 'CREATE TABLE q4_results(
+      index_name char(30), 
+      average_close_price double);' >> ${TMP_IQ_FILE}      
     
+    echo 'CREATE TABLE q5_results(
+      instrument_id char(30), 
+      trade_date date, 
+      avg_5day double, 
+      avg_21day double;' >> ${TMP_IQ_FILE}
+      
+    echo 'CREATE TABLE q6_results(
+      instrument_id char(30), 
+      trade_date date, 
+      day_5 double, 
+      day_21 double,
+      prev_day5 double,
+      prev_day21 double);' >> ${TMP_IQ_FILE}  
+    
+    echo 'CREATE TABLE q7_results(stock_value double);' >> ${TMP_IQ_FILE} 
+    
+    echo 'CREATE TABLE q8_results(
+      instrument_id_1 char(30), 
+      instrument_id_2 char(30),
+      correlation double);' >> ${TMP_IQ_FILE}
+    
+    echo 'CREATE TABLE q9_results(
+      instrument_id char(30), 
+      year integer,
+      dividend double);' >> ${TMP_IQ_FILE}    
+
     #write them out
     dbisql -nogui -c=${FINTIME_OPS} -onerror continue ${TMP_IQ_FILE}
     IFS=$OLDIFS
@@ -109,8 +168,10 @@ fi
 # 	period determine the low, high and average closing price value.
 # 	The output should be sorted by id and trade date.
 q0="
+truncate table q0_results;
 commit;
 
+insert q0_results
 SELECT sh.INSTRUMENT_ID,
 DATEPART(yy,sh.TRADE_DATE) AS YEAR,
 DATEPART(mm,sh.TRADE_DATE) AS MON,
@@ -137,8 +198,10 @@ DATEPART(wk,sh.TRADE_DATE))
 # the first trade of the split date. These are called split-adjusted prices and volumes.
 # Modifications: take random list of 1000 stocks, use provided dates
 q1="
+truncate table q1_results;
 commit; 
 
+insert q1_results
 SELECT B.INSTRUMENT_ID, TRADE_DATE,
 B.HIGH_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) H_PRC,
 B.LOW_PRICE * IFNULL(sum(A.SPLIT_FACTOR),1,sum(A.SPLIT_FACTOR)) L_PRC,
@@ -195,8 +258,10 @@ B.Volume
 # high and  daily low on the day of each split event during a specified period.
 # Modifications: take random list of 1000 stocks, use provided dates
 q2="
+truncate table q2_results;
 commit;
 
+insert q2_results;
 SELECT sh.INSTRUMENT_ID, sh.HIGH_PRICE - sh.LOW_PRICE AS D_PRICE, sh.TRADE_DATE
 FROM   STOCK_HISTORY AS sh 
 inner join SPLIT_EVENT A
@@ -229,8 +294,10 @@ ORDER  BY sh.INSTRUMENT_ID
 # the specified day
 # Modifications: break up into 2 queries, and take random day
 q3="
+truncate table q3_results;
 commit;
 
+insert q3_results
 Select ii.INDEX_NAME, AVG(sh.CLOSE_PRICE) as AVERAGE_CLOSE_PRICE
 FROM MARKET_INDEX AS ii 
 inner join INDEX_CMPSTN AS ic
@@ -259,8 +326,10 @@ ii.INDEX_NAME
 # "
 
 q4="
+truncate table q4_results;
 commit;
 
+insert q4_results
 Select ii.INDEX_NAME, AVG(sh.CLOSE_PRICE) as AVERAGE_CLOSE_PRICE
 FROM MARKET_INDEX AS ii 
 inner join INDEX_CMPSTN AS ic
@@ -294,6 +363,7 @@ ii.INDEX_NAME
 # 1000 stocks during a 6-month period. (Use split adjusted prices)
 # Modifications: take random dates, make last date not-inclusive
 q5="
+truncate table q5_results;
 truncate table hist_temp;
 commit;
 
@@ -312,6 +382,7 @@ B.TRADE_DATE, B.CLOSE_PRICE
 ORDER BY B.INSTRUMENT_ID,
 B.TRADE_DATE;
 
+insert q5_results
 SELECT x.INSTRUMENT_ID, x.TRADE_DATE, AVG_5DAY , AVG_21DAY
 FROM (SELECT B.INSTRUMENT_ID, B.TRADE_DATE,
 AVG(C.CLOSE_PRICE * B.SPLIT_FACTOR ) avg_5day
@@ -340,6 +411,7 @@ and x.TRADE_DATE = y.TRADE_DATE
 # Find the points (specific days) when the 5-month moving average intersects 
 # the 21-day moving average for these stocks. The output is to be sorted by id and date.
 q6="
+truncate table q6_results;
 truncate table hist_temp;
 truncate table hist6_temp;
 commit;
@@ -383,6 +455,7 @@ and x.TRADE_DATE = y.TRADE_DATE
 order by x.INSTRUMENT_ID, x.TRADE_DATE;
 
 
+insert q6_results
 select z.INSTRUMENT_ID, z.TRADE_DATE, DAY_5, DAY_21, PREV_DAY5, PREV_DAY21
 from (SELECT a.INSTRUMENT_ID, a.TRADE_DATE,  avg(b.avg_21day) as prev_day21
 from hist6_temp a, hist6_temp b
@@ -413,6 +486,7 @@ and sign(day_21-day_5) * sign(prev_day21-prev_day5) < 0;
 q7="
  BEGIN
 
+ truncate table q7_results;
  truncate table hist_temp;
  truncate table hist7_temp;
  commit;
@@ -455,6 +529,7 @@ q7="
  order by x.INSTRUMENT_ID, x.TRADE_DATE;
 
 
+ insert q7_results
  select z.INSTRUMENT_ID, z.TRADE_DATE, diff, td2, diff2, pre_diff into #hist7_temp
  from (SELECT a.INSTRUMENT_ID, a.TRADE_DATE,  b.avg_21day - b.avg_5mth as pre_diff
  from hist7_temp a, hist7_temp b
@@ -492,6 +567,9 @@ q7="
 # indicating the pair of securities corresponding to that row. [Note: coefficient
 # of correlation defined in appendix]
 q8="
+truncate table q8_results;
+
+insert q8_results
 SELECT a.INSTRUMENT_ID,b.INSTRUMENT_ID, 
 (Count(*) * sum(a.CLOSE_PRICE * b.CLOSE_PRICE) - sum(a.CLOSE_PRICE)
 * sum(b.CLOSE_PRICE)/sqrt(count(*) * sum(a.CLOSE_PRICE * a.CLOSE_PRICE )
@@ -530,6 +608,7 @@ order by correlation
 # first trade date in the relevant 3 year period (the inner join is done on the year part)
 q9="
  truncate table hist9_temp;
+ truncate table q9_results;
  commit;
  INSERT hist9_temp
  SELECT se.INSTRUMENT_ID FROM SPLIT_EVENT AS se
@@ -538,6 +617,7 @@ q9="
  WHERE ic.INDEX_NAME = 'Russell 2000'
  AND DATEPART(yy, EFFECTIVE_DATE) >= DATEPART(yy, ${maxTradeDateMinus3Years});
 
+insert q9_results
 SELECT sh.INSTRUMENT_ID, DATEPART(yy,TRADE_DATE) AS YEAR, 
 SUM(dividend_value)/AVG(CLOSE_PRICE) as DIVIDEND
 FROM
