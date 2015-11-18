@@ -13,7 +13,7 @@ getWeek:{1 + floor (x - firstDateOfYear x)%7}
 \
 .qtest.q0:{
 	data:select Id, TradeDate, ClosePrice from price where Id in stock10, TradeDate >= startYear10,
-	TradeDate < startYear10 + 365 * 10;
+	TradeDate <= startYear10 + 365 * 10;
 	
 	`Id`name`bucket xasc (upsert/)
 	 {[x;y;z] 
@@ -31,7 +31,7 @@ the split date. These are called split-adjusted prices and volumes.
 \
 .qtest.q1:{
 	pxdata:select from price where Id in stock1000, TradeDate >= start300Days, 
-    TradeDate < start300Days + 300;
+    TradeDate <= start300Days + 300;
 	splitdata:select from split where Id in stock1000, SplitDate >= start300Days;
   adjdata:select adjFactor:prd SplitFactor by Id, TradeDate
     from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
@@ -96,7 +96,7 @@ during a 6-month period. (Use split adjusted prices)
 /
 ********* QUERY 6 ****************
 (Based on the previous query) 
-Find the points (specific days) when the 5-month moving average intersects the 
+Find the points (specific days) when the 5-day moving average intersects the 
 21-day moving average for these stocks. The output is to be sorted by id and date.
 \
 .qtest.q6:{
@@ -163,7 +163,7 @@ defined in appendix]
 \
 .qtest.q8:{
 	pricedata:select Id, ClosePrice from `Id`TradeDate xasc price where Id in stock10, TradeDate >= startYear10,
-    TradeDate < startYear10 + 365 * 2;
+    TradeDate <= startYear10 + 365 * 2;
 	pair1:select ClosePrice1:ClosePrice by Id1:Id from pricedata;
 	pair2:`Id2`ClosePrice2 xcol pair1;
 	// full matrix, not just lower/upper triangular
