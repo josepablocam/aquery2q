@@ -130,6 +130,10 @@ void init_aq_helpers() {
                  "  outer:s value matches;\n"
                  "  $[hasneq;raze .aq.nj'[inner;outer;(count matches)#enlist p];raze {x cross y}'[inner;outer]]\n"
                  " }\n");
+  print_code("// check if tables are keyed on join keys\n"
+                 "// if so use ij instead of ej, much more peformant, same semantics in such a case\n"
+                 ".aq.iskey:{(count[k]>0)&min (k:keys x) in y}\n"
+                 ".aq.ej:{[k;t1;t2] $[(kt2:.aq.iskey[t1;k])|kt1:.aq.iskey[t2;k]; $[kt1;t1 ij t2;t2 ij t1]; ej[k;t1;t2]]}\n");
 
    print_code("\n\n// Start of code\n");
 }
@@ -1027,7 +1031,7 @@ void cg_IJUsing0(LogicalQueryNode *ij, char *joined, char *t1, char *t2) {
   IDListNode *using = ij->params.cols;
   cg_PrepareJoinUsing(t1, t2, using);
   // inner joing semantics from sql correspond to an equijoin (ej) in q
-  print_code(" %s:ej[%s ", joined, AQ_COL_DICT);
+  print_code(" %s:.aq.ej[%s ", joined, AQ_COL_DICT);
   cg_colList(using);
   print_code(";");
   cg_RenameColsJoinUsing(t1);
