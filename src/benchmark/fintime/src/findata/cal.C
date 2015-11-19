@@ -72,6 +72,8 @@ ostream &operator<< (ostream &os_, Calendar &that_)
 {
   int mo, day, year;
   that_.split(mo,day,year);
-  os_ << mo << "/" << day << "/" << year;
+  os_ << year << "-" << mo << "-" << day;
+  // the below is a pain for monetdb
+  //os_ << mo << "/" << day << "/" << year;
   return os_;
 }

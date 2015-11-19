@@ -21,10 +21,6 @@ split:("SDDI";enlist "|") 0:files`split;
 dividend:("SDFD"; enlist "|") 0:files`dividend;
 
 
-// Rewrite the files as friendly for monetdb and pandas
-{x 0:"|" 0:get y}'[value files;key files];
-
-
 /////////////////////////////////
 //                             //
 //                             //
