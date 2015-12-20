@@ -90,12 +90,28 @@ void init_aq_helpers() {
              "m)#n:`$\"_\"sv string m)]}\n",
              AQ_COL_DELIM, AQ_COL_DICT);
 
-  print_code(".aq.scbix:{[v] m[`c] iasc `s`p`g`u?(m:0!meta v)`a}; //sort "
+  print_code(".aq.scbix:{[m] iasc `s`p`g`u?exec c!a from m}; //sort "
              "column names by attribute\n"
-             "// swix below not yet implemented due to bugs occurring\n"
-             "//.aq.swix:{[v;w] w iasc .aq.scbix[v]?w@'where each type[`]=(type "
-             "each) each w} //sort where clause by attributes of cols used\n"
-             ".aq.swix:{[v;w] w}\n"
+             "// local reordering\n"
+             ".aq.swix0:{[c;w] \n"
+             " // singleton or empty, no point in reordering anything\n"
+             " $[1>=count w;\n"
+             "  w;\n"
+             "  w iasc min each c?fw@'where each type[`]=(type each) each fw:(raze/) each w\n"
+             "  ]\n"
+             " }\n"
+             ".aq.swix:{[v;ix;w]\n"
+             " m:meta v;\n"
+             " // no point in reording if we don't have attributes or only have 1 clause\n"
+             " $[(1=count w)|exec all null a from m;\n"
+             "   w;\n"
+             "   // check if we need to worry about aggregates\n"
+             "   0=count ix;\n"
+             "   .aq.swix0[.aq.scbix m;w];\n"
+             "   // otherwise reorder locally between aggregates according to safe principle\n"
+             "   raze .aq.swix0[.aq.scbix m; ] each $[0<>first lix:distinct raze 0 1+/:(),ix;0,lix;lix] cut w\n"
+             "  ]\n"
+             " }\n"
              ".aq.negsublist:{[x;y] neg[x] sublist y}\n"
              ".aq.chkattr:{[x;t] any (.aq.cd where any each flip .aq.cd like/: "
              "\"*\",/:string (),x) in exec c from meta t where not null a}\n"
@@ -186,7 +202,29 @@ void add_to_dt(char *alias, char *tbl) {
 }
 
 // order column names so that those with a faster index come first
-void sort_where_clause_by_ix(char *tbl) { print_code(" .aq.swix[%s;] ", tbl); }
+void sort_where_clause_by_ix(char *tbl, ExprNode *selection) {
+  print_code(" .aq.swix[%s;", tbl);
+  indices_of_aggregates(selection);
+  print_code("; ] ");
+}
+
+void indices_of_aggregates(ExprNode *selection) {
+  ExprNode *curr = selection;
+  int found_aggregate = 0;
+  int index = 0;
+  while (curr != NULL) {
+    if (curr->uses_agg) {
+      print_code("%d ", index);
+      found_aggregate = 1;
+    }
+    curr = curr->next_sibling;
+    index++;
+  }
+  if (!found_aggregate) {
+    print_code("()");
+  }
+}
+
 
 // account for pre-computed group expressions when projecting
 // Only used for simple groups (just a column reference, or simple calc
@@ -728,7 +766,7 @@ void cg_FilterWhereExpressions(ExprNode *selection, char *from) {
       print_code("enlist ");
       cg_ExprNode(selection);
     } else {
-      sort_where_clause_by_ix(from);
+      sort_where_clause_by_ix(from, selection);
       print_code("(");
       cg_ExprNode(selection);
       print_code(")");
