@@ -6,6 +6,7 @@
 //Creating necessary tables
 n:`int$1e6;
 Ticks:([]ID:n?`S`ACME`OTHER`CORP; date:n?.z.D; timestamp:n?.z.P; price:n?100.; ixCol:til n);
+Ticks:`date`ID xasc Ticks;
 TicksWithAttr:update ID:`g#asc ID from Ticks;
 Portfolio:([]ID:`S`ACME`OTHER`CORP; position:1e4+4?1e6)
 Packets:select from ([]src:n?100; dest:n?100; length:n?256; timestamp:.z.P+10*n?`int$1e9) where src<>dest
