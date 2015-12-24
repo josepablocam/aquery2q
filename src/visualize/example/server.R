@@ -38,15 +38,29 @@ shinyServer(function(input, output) {
       dat <- default_data
     }
       
-    # for POC we assume the first column is x-axis
-    # and second column is y-axis
-    x <- dat[,1]
-    y <- dat[,2]
+    # for POC we assume the first column is x-axs and everything else is to 
+    # be plotted as a separate series
+    cols <- names(dat)
+    base_plot <- ggplot(data = dat, aes_string(x = cols[1]))
+    
     if(input$geom == "bar") {
-        qplot(x = x, y = y, geom = "bar", stat = "identity")
+        add_ys_plot(base_plot, geom_bar, cols)
       } else {
-        qplot(x = x, y = y, geom = "line")
+        add_ys_plot(base_plot, geom_line, cols)
       }
     })
 
  })
+
+# Some helper functions
+add_ys_plot <- function(p, geom, cols) {
+  # ugly hack until I figure out aes_string
+  colors <- c("red", "blue", "yellow", "green", "black")
+  for (i in 2:length(cols)) {
+    col <- cols[i]
+    p <- p + geom(aes_string(y = col), fill = colors[i-1], stat = "identity", position = "dodge")
+  }
+  p
+}
+                  
+
