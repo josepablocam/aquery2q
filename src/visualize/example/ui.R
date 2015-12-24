@@ -19,7 +19,7 @@ shinyUI(fluidPage(
      
       # Bar or line plot
       selectInput("geom", "Plot style:", 
-                  choices = c("bar", "line"), "bar"
+                  choices = c("dot", "line"), "dot"
       ),
        # delay evaluation until user requests
       submitButton("plot")

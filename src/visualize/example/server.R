@@ -41,10 +41,10 @@ shinyServer(function(input, output) {
     # for POC we assume the first column is x-axs and everything else is to 
     # be plotted as a separate series
     cols <- names(dat)
-    base_plot <- ggplot(data = dat, aes_string(x = cols[1]))
+    base_plot <- ggplot(data = dat, aes_q(x = as.name(cols[1])))
     
-    if(input$geom == "bar") {
-        add_ys_plot(base_plot, geom_bar, cols)
+    if(input$geom == "dot") {
+        add_ys_plot(base_plot, geom_point, cols)
       } else {
         add_ys_plot(base_plot, geom_line, cols)
       }
@@ -54,13 +54,11 @@ shinyServer(function(input, output) {
 
 # Some helper functions
 add_ys_plot <- function(p, geom, cols) {
-  # ugly hack until I figure out aes_string
-  colors <- c("red", "blue", "yellow", "green", "black")
   for (i in 2:length(cols)) {
     col <- cols[i]
-    p <- p + geom(aes_string(y = col), fill = colors[i-1], stat = "identity", position = "dodge")
+    p <- p + geom(aes_q(y = as.name(col), color = col, fill = col), stat = "identity", position = "dodge")
   }
-  p
+  p + labs(x = "x-value", y = "y-value", color = "legend", fill = "legend")
 }
                   
 
