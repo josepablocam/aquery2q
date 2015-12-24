@@ -1,3 +1,6 @@
+# update library path to include dependencies folder 
+# necessary for systems without packages by default (.e.g CIMS machines)
+.libPaths(c('./Rdeps',.libPaths()))
 library(shiny)
 
 # Define UI for application

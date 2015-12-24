@@ -5,6 +5,6 @@ a2q:
 	cd ../; make;
 	
 install:
-	Rscript install_packages.R
+	mkdir -p Rdeps; Rscript install_packages.R
 	cd osx_qserver; make; 
 		
