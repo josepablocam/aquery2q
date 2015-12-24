@@ -1,0 +1,31 @@
+This is a proof of concept visualization tool for aquery.
+We use the q-R interface to query a q process from an R server that executes
+a shiny (simple web browser) application. Plotting is done with the elegant
+R ggplot2 library.
+     
+Every query in an aquery file is wrapped and stored for reexecution at command
+under a function in the .aq namespace. The first query is wrapped in .aq.q0, the second
+in .aq.q1 and so on.
+ 
+To visualize a particular query simply call .aq.qx from the R program's browser
+interface.
+ 
+ 
+INSTRUCTIONS:
+If you're missing any dependencies, it mis a good idea to call
+`make install`
+
+which installs R packages and compiles the q server code (for use in R)
+
+`make` : `make install` + compiling aquery compiler
+
+
+Once you have everything set up, you can call a simple proof of concept
+which compiles a trivial query (poc.a) and serves the browser application
+by calling
+`./run_poc.sh my_port` where you replace the my_port with the port number you 
+would like to assign to the q program
+
+
+
+
