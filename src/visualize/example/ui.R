@@ -24,13 +24,22 @@ shinyUI(fluidPage(
       selectInput("geom", "Plot style:", 
                   choices = c("dot", "line"), "dot"
       ),
-       # delay evaluation until user requests
+      
+      # Using column values to group in plotting
+      checkboxGroupInput("groupcols", label = h4("Group Columns"), 
+                         choices = list("Choice 1" = 1, "Choice 2" = 2, "Choice 3" = 3),
+                         selected = 1),
+      
+      actionButton("query_button", "Query"),
+       # plotting button
       submitButton("plot")
+      
     ),
 
     # Show a plot of the generated distribution
     mainPanel(
-      plotOutput("plot")
+      plotOutput("plot"),
+      tableOutput("data")
     )
   )
 ))

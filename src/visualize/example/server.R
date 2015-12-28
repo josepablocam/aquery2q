@@ -10,7 +10,7 @@ source("../qserver.R", chdir = TRUE)
 
 
 # server logic for plotting tool
-shinyServer(function(input, output) {
+shinyServer(function(input, output, session) {
 
   # Collect info about q connection from user input and create handle
   qHandle <- reactive({
@@ -28,21 +28,52 @@ shinyServer(function(input, output) {
   # (i.e. not plottable as default)
   default_data <- data.frame(c1 = c(1,2,3), c2 = c(10, 20, 30))
   
-  output$plot <- renderPlot({
-    # TODO: display error message if connection doesn't work
-    h <- qHandle()
-    dat <- tryCatch(execute(h, aqQuery()), error = function(e) {
+  # Avoid running query each time, instead check query_button
+  run_query <- reactive({
+    if(input$query_button == 0) {
+      return(default_data)
+    }
+    isolate({
+      print("Running query again")
+      input$query_button
+      # TODO: display error message if connection doesn't work
+      h <- qHandle()
+      dat <- tryCatch(execute(h, aqQuery()), error = function(e) {
         print(paste("Caught error, using default dataframe: ", e))
         default_data
-     })
+      })
     
-    # Default to dummy data if query result is not a dataframe
-    if(!is.data.frame(dat)) {
-      dat <- default_data
-    }
+      # Default to dummy data if query result is not a dataframe
+      if(!is.data.frame(dat)) {
+        dat <- default_data
+      }
       
+      return(dat)
+    })
+
+  })  
+  
+  # Show a bit of the data.frame head
+  output$data <- renderTable(head({run_query()}), 
+                             caption = "Head of Data",
+                             caption.placement = getOption("xtable.caption.placement", "top"),
+                             caption.width = getOption("xtable.caption.width", NULL)
+                             )
+  
+  # Update group columns
+  observe({
+    data <- run_query()
+    choices <- as.list(seq(ncol(data)))
+    names(choices) <- names(data)
+    updateCheckboxGroupInput(session, inputId = "groupcols", choices = choices)
+  })
+  
+  output$plot <- renderPlot({
     # for POC we assume the first column is x-axs and everything else is to 
     # be plotted as a separate series
+    #cols <- names(output$table)
+    #dat <- default_data
+    dat <- run_query()
     cols <- names(dat)
     base_plot <- ggplot(data = dat, aes_q(x = as.name(cols[1])))
     
@@ -52,7 +83,6 @@ shinyServer(function(input, output) {
         add_ys_plot(base_plot, geom_line, cols)
       }
     })
-
  })
 
 # Some helper functions
