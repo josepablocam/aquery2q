@@ -1,4 +1,4 @@
-This is a proof of concept visualization tool for aquery.
+This is a visualization tool for aquery.
 We use the q-R interface to query a q process from an R server that executes
 a shiny (simple web browser) application. Plotting is done with the elegant
 R ggplot2 library.
@@ -12,12 +12,36 @@ interface.
  
  
 INSTRUCTIONS:
-If you're missing any dependencies, it mis a good idea to call
-`make install`
 
-which installs R packages and compiles the q server code (for use in R)
+MAC OS-X
+---------
+All binaries necessary have been included here. You only need to have gcc48
+and R 3.* version. If you do not have these, or are unsure, you can simply run
+./install_brew.sh
 
-`make` : `make install` + compiling aquery compiler
+This script checks for these 2 dependencies and installs using homebrew (http://brew.sh/) 
+(prompting the user prior to any installs).
+If you use a different package manager, or would like to install from source, that
+is your responsibility.
+
+
+LINUX
+-----
+You will need to run
+`make`
+so as to recompile all necessary pieces. This will also download all R packages
+necessary for your system. Note that if you don't have gcc48 and R 3.* you will
+need to install these before running make. You will also need to replace
+the q-R interface related files before running `make`. 
+See http://code.kx.com/wiki/Cookbook/IntegratingWithR for more information.
+
+
+WINDOWS
+-------
+Sorry, this is not currently availble for windows.
+
+
+
 
 
 Once you have everything set up, you can call a simple proof of concept

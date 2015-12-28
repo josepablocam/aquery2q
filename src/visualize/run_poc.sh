@@ -10,19 +10,28 @@ A2Q=../a2q
 # Port for q process
 PORT=$1
 
+# if there is no folder for q, copy over what we brought 
+if [ ! -d $HOME/q/ ]
+  then
+    cp -r ./q/ $HOME/q/
+fi
+
+Q=$HOME/q/m32/q
+
 # compile aquery file
 $A2Q -a 1 -c -o poc.q poc.a
 
 # launch q process with port 
 # NOTE: (runs in background and killed upon exit of R process)
-q poc.q -p $PORT &
+$Q poc.q -p $PORT &
 # save down PID to kill
 q_pid=$!
 
 # launch R shiny application
-R -e 'shiny::runApp(appDir = "example/", launch.browser = TRUE)'
+R -e '.libPaths(c("./Rdeps",.libPaths())); shiny::runApp(appDir = "example/", launch.browser = TRUE)'
+
 
 # terminate q process
-kill -9 $q_pid
+kill $q_pid
 
 
