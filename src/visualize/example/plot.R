@@ -27,15 +27,29 @@ assemble_aes <- function(col, details) {
 }
 
 
-# Add all but first column as y series
-add_ys_plot <- function(p, cols, geom, plot_details) {
+# pick geom along with some basic defaults
+pick_geom <- function(geom_name, aes_details) {
+  switch(geom_name,
+         dot = geom_point(aes_details),
+         line = geom_line(aes_details),
+         bar = geom_bar(aes_details, stat = "identity", position = "dodge"),
+         histo = geom_histogram(aes_details, position = "dodge"),
+         area = geom_area(aes_details),
+         boxplot = geom_boxplot(aes_details)
+  )
+}
+         
 
+
+# Add all but first column as y series
+plot_all_series <- function(p, cols, geom_name, plot_details) {
   for (i in 2:length(cols)) {
     col <- cols[i]
     plot_aes <- assemble_aes(col, plot_details)
-    p <- p + geom(plot_aes, stat = "identity", position = "dodge")
+    geom <- pick_geom(geom_name, plot_aes)
+    p <- p + geom
   }
-  p + labs(x = "x-value", y = "y-value", color = "legend", fill = "legend")
+  p + labs(x = p$mapping$x, y = "y-value", color = "legend", fill = "legend")
 }
 
 

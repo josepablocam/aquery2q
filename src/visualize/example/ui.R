@@ -7,7 +7,7 @@ library(shiny)
 shinyUI(fluidPage(
 
   # Application title
-  titlePanel("Proof of Concept for AQuery visualization"),
+  titlePanel("Simple AQuery visualization"),
 
   
   # Sidebar with inputs
@@ -22,7 +22,7 @@ shinyUI(fluidPage(
      
       # Bar or line plot
       selectInput("geom", "Plot style:", 
-                  choices = c("dot", "line"), "dot"
+                  choices = c("dot", "line", "bar", "histo", "area", "boxplot"), "dot"
       ),
       
       # Using column values to group in plotting

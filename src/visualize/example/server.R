@@ -93,11 +93,8 @@ shinyServer(function(input, output, session) {
     
     y_cols <- cols[! cols %in% groupcols]
     
-    if(input$geom == "dot") {
-      add_ys_plot(base_plot, y_cols, geom_point, plot_details)
-    } else {
-      add_ys_plot(base_plot, y_cols, geom_line, plot_details)
-    }
+    # plot
+    plot_all_series(base_plot, y_cols, input$geom, plot_details)
   })
   
   # render plot
