@@ -3,6 +3,7 @@
 .libPaths(c('./Rdeps',.libPaths()))
 library(shiny)
 library(ggplot2)
+source("plot.R")
 
 
 # Load q server functionality
@@ -64,7 +65,7 @@ shinyServer(function(input, output, session) {
   # Update group columns
   observe({
     data <- run_query()
-    choices <- as.list(seq(ncol(data)))
+    choices <- as.list(names(data))
     names(choices) <- names(data)
     updateCheckboxGroupInput(session, inputId = "groupcols", choices = choices)
   })
@@ -77,12 +78,25 @@ shinyServer(function(input, output, session) {
     #dat <- default_data
     dat <- run_query()
     cols <- names(dat)
+    groupcols <- input$groupcols
     base_plot <- ggplot(data = dat, aes_q(x = as.name(cols[1])))
     
-    if(input$geom == "dot") {
-      add_ys_plot(base_plot, geom_point, cols)
+    
+    if (is.null(groupcols) || input$query_button == 0) {
+      groups <- NULL
     } else {
-      add_ys_plot(base_plot, geom_line, cols)
+      groups <- groupify(groupcols)
+    }
+    
+    # assemble aesthetics
+    plot_details <- list("group" = groups)
+    
+    y_cols <- cols[! cols %in% groupcols]
+    
+    if(input$geom == "dot") {
+      add_ys_plot(base_plot, y_cols, geom_point, plot_details)
+    } else {
+      add_ys_plot(base_plot, y_cols, geom_line, plot_details)
     }
   })
   
@@ -104,13 +118,6 @@ output$save_plot <- downloadHandler(
   })
  })
 
-# Some helper functions
-add_ys_plot <- function(p, geom, cols) {
-  for (i in 2:length(cols)) {
-    col <- cols[i]
-    p <- p + geom(aes_q(y = as.name(col), color = col, fill = col), stat = "identity", position = "dodge")
-  }
-  p + labs(x = "x-value", y = "y-value", color = "legend", fill = "legend")
-}
+
                   
 
