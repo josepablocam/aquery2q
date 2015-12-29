@@ -60,6 +60,7 @@ shinyServer(function(input, output, session) {
                              caption.width = getOption("xtable.caption.width", NULL)
                              )
   
+
   # Update group columns
   observe({
     data <- run_query()
@@ -68,7 +69,8 @@ shinyServer(function(input, output, session) {
     updateCheckboxGroupInput(session, inputId = "groupcols", choices = choices)
   })
   
-  output$plot <- renderPlot({
+  # plot function
+  plotInput <- reactive({
     # for POC we assume the first column is x-axs and everything else is to 
     # be plotted as a separate series
     #cols <- names(output$table)
@@ -78,11 +80,28 @@ shinyServer(function(input, output, session) {
     base_plot <- ggplot(data = dat, aes_q(x = as.name(cols[1])))
     
     if(input$geom == "dot") {
-        add_ys_plot(base_plot, geom_point, cols)
-      } else {
-        add_ys_plot(base_plot, geom_line, cols)
-      }
+      add_ys_plot(base_plot, geom_point, cols)
+    } else {
+      add_ys_plot(base_plot, geom_line, cols)
+    }
+  })
+  
+  # render plot
+  output$plot <- renderPlot({
+    plotInput()
     })
+
+
+# Download plot
+output$save_plot <- downloadHandler(
+  filename = "plot.png",
+  content = function(file) {
+    device <- function(..., width, height) {
+      grDevices::png(..., width = width, height = height,
+                     res = 300, units = "in")
+    }
+    ggsave(file, plot = plotInput(), device = device)
+  })
  })
 
 # Some helper functions

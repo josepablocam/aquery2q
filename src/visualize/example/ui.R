@@ -35,10 +35,12 @@ shinyUI(fluidPage(
       submitButton("plot")
       
     ),
+    
 
     # Show a plot of the generated distribution
     mainPanel(
       plotOutput("plot"),
+      downloadButton("save_plot"),
       tableOutput("data")
     )
   )
