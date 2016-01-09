@@ -28,7 +28,7 @@ $Q poc.q -p $PORT &
 q_pid=$!
 
 # launch R shiny application
-R -e '.libPaths(c("./Rdeps",.libPaths())); shiny::runApp(appDir = "example/", launch.browser = TRUE)'
+R -e '.libPaths(c("./Rdeps",.libPaths())); shiny::runApp(appDir = "R/", launch.browser = TRUE)'
 
 
 # terminate q process
