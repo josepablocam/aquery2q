@@ -39,7 +39,7 @@ char *aquery_builtins[] = {
     "maxs", "maxs",   "min",       "mins",    "mins",  "mod",     "next",
     "next", "prev", "prev", "prd",    "prds",      "reverse", "sum",   "sums",    "sums",
     "sqrt", "stddev", "make_null", "not",     "is",    "between", "in",
-    "like", "null",   "overlaps",  "enlist", "ratios"};
+    "like", "null",   "overlaps",  "enlist", "ratios", "vars", "moving"};
 
 char *q_builtins[] = {"abs", "avg", "avgs", "mavg", "count", "deltas",
                       "distinct", "_", "^", "first", "sublist", "last",
@@ -47,7 +47,8 @@ char *q_builtins[] = {"abs", "avg", "avgs", "mavg", "count", "deltas",
                       "mmin", "mod", "next", "{(neg x) xprev y}","prev", "xprev", "prd", "prds", "reverse",
                       "sum", "sums", "msum", "sqrt", "dev", "first 0#", "not",
                       "::", "within", "in", "{[x;y] x like string y}", "null",
-                      "{[x;y] not (x[1]<y[0])|y[1]<x[0]}", "enlist", "{[x;y] y%x xprev y}"};
+                      "{[x;y] not (x[1]<y[0])|y[1]<x[0]}", "enlist", "{[x;y] y%x xprev y}",
+                      "{mavg[x;y*y]-m*m:mavg[x;y:\"f\"$y]}", "{[f;w;a] f each {(x sublist y),z}[1-w;;]\\[a]}"};
 
 char *aquery_overloads[] = {"avgs", "maxs", "mins", "sums", "first", "last", "prev", "next"};
 int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);

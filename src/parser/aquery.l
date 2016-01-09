@@ -140,7 +140,8 @@ void consume_verbatim_q();
 "stddev"		{ count(); yylval.str = strdup(yytext); return STDDEV;   }
 "make_null"		{ count(); yylval.str = strdup(yytext); return MAKENULL; }
 "ratios"      { count(); yylval.str = strdup(yytext); return RATIOS; }
-		
+"vars"      { count(); yylval.str = strdup(yytext); return VARS; }
+"moving"      { count(); yylval.str = strdup(yytext); return MOVING; }
 
 
  /* Space definitions */
