@@ -2,6 +2,6 @@ Title: AQuery-Visualizer!
 Author: José Cambronero
 AuthorUrl: http://www.josecambronero.com
 License: MIT
-DisplayMode: Showcase
+DisplayMode: Normal
 Tags: aquery-viz
 Type: Shiny

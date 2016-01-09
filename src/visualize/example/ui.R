@@ -7,7 +7,7 @@ library(shiny)
 shinyUI(fluidPage(
 
   # Application title
-  titlePanel("Simple AQuery visualization"),
+  titlePanel("AQuery to Make Your Fortune"),
 
   
   # Sidebar with inputs
