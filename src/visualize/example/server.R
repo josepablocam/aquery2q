@@ -31,11 +31,16 @@ shinyServer(function(input, output, session) {
   
   # Avoid running query each time
   run_query <- reactive({
+    # establish dependency
+    input$run_query
+    # only rerun when the button is fired
+    
+    isolate({
     print("Running query again")
     # TODO: display error message if connection doesn't work
     h <- tryCatch(qHandle(), error = function(e) {
        print("Unable to connect to q session")
-       return(default_data)
+       -1
     })
     
     dat <- tryCatch(execute(h, aqQuery()), error = function(e) {
@@ -49,6 +54,7 @@ shinyServer(function(input, output, session) {
       }
       
       return(dat)
+    })
     })
 
   # Show a bit of the data.frame head
@@ -67,6 +73,24 @@ shinyServer(function(input, output, session) {
     updateCheckboxGroupInput(session, inputId = "groupcols", choices = choices)
   })
   
+  # Create tick boxes for each column (to decide what geom to use for
+  # use for each)
+
+  output$geom_choices <- renderUI({
+    if (input$single_geom) {
+      selectInput("geom1","Plot style:", choices = POSS_GEOMS, DEF_GEOM)
+    } else {
+    data <- run_query()
+    columns <- names(data)
+    # recall first column is always X column
+    y_columns <- columns[2:length(columns)]
+    
+    lapply(1:length(y_columns), function(x) {
+      selectInput(paste0("geom", x), paste(y_columns[x], "plot style:"), choices = POSS_GEOMS, DEF_GEOM)
+      })
+    }
+  })
+  
   # plot function
   plotInput <- reactive({
     # for POC we assume the first column is x-axs and everything else is to 
@@ -75,6 +99,7 @@ shinyServer(function(input, output, session) {
     #dat <- default_data
     dat <- run_query()
     cols <- names(dat)
+    ncols <- length(cols)
     groupcols <- input$groupcols
     base_plot <- ggplot(data = dat, aes_q(x = as.name(cols[1])))
     
@@ -90,8 +115,22 @@ shinyServer(function(input, output, session) {
     
     y_cols <- cols[! cols %in% groupcols]
     
-    # plot
-    plot_all_series(base_plot, y_cols, input$geom, plot_details)
+    # geoms
+    if (is.null(input$single_geom) || is.null(input$geom1)) {
+      # case: just initialized, nothing yet selected
+      geom_names <- rep("dot", ncols - 1)
+    } else if (input$single_geom) {
+      # case: all with same geom
+      geom_names <- rep(input$geom1, ncols - 1)
+    } else {
+      # case: potentially different geoms for each column
+      geom_names <- sapply(1:(ncols - 1), function(x) {
+        geom <- input[[paste0("geom", x)]]
+        ifelse(is.null(geom), DEF_GEOM, geom)
+      })
+    }
+    
+    plot_all_series(base_plot, y_cols, geom_names, plot_details)
   })
   
   # render plot

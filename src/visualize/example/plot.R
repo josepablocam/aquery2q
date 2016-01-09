@@ -1,6 +1,15 @@
 # Plotting utilities for visualization interface
 library(ggplot2)
 
+# SOME CONSTANTS USED THROUGHOUT
+#possible geoms
+POSS_GEOMS <- c("dot", "line", "bar", "histo", "area", "boxplot", "vline", "hline")
+DEF_GEOM <- "dot"
+
+
+
+
+
 # add aes
 `+.uneval` <- function(a,b) {
   `class<-`(modifyList(a,b), "uneval")
@@ -27,6 +36,9 @@ assemble_aes <- function(col, details) {
 }
 
 
+
+
+
 # pick geom along with some basic defaults
 pick_geom <- function(geom_name, aes_details) {
   switch(geom_name,
@@ -35,16 +47,20 @@ pick_geom <- function(geom_name, aes_details) {
          bar = geom_bar(aes_details, stat = "identity", position = "dodge"),
          histo = geom_histogram(aes_details, position = "dodge"),
          area = geom_area(aes_details),
-         boxplot = geom_boxplot(aes_details)
+         boxplot = geom_boxplot(aes_details),
+         vline = geom_vline(aes_string(xintercept = aes_details$y)),
+         hline = geom_hline(aes_string(yintercept = aes_details$y))
   )
 }
          
 
 
 # Add all but first column as y series
-plot_all_series <- function(p, cols, geom_name, plot_details) {
+plot_all_series <- function(p, cols, geom_names, plot_details) {
   for (i in 2:length(cols)) {
     col <- cols[i]
+    geom_name <- geom_names[i-1]
+    
     plot_aes <- assemble_aes(col, plot_details)
     geom <- pick_geom(geom_name, plot_aes)
     p <- p + geom

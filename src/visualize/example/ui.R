@@ -19,20 +19,19 @@ shinyUI(fluidPage(
       
       # Aquery information
       textInput("query", "AQuery function wrapper or q command"),
+      
+      actionButton("run_query", "Run Query"),
      
-      # Bar or line plot
-      selectInput("geom", "Plot style:", 
-                  choices = c("dot", "line", "bar", "histo", "area", "boxplot"), "dot"
-      ),
+     
+      # Check box if plot each with different geom
+      checkboxInput("single_geom", "Plot as single geom", value = TRUE),
+      
+      uiOutput("geom_choices"),
       
       # Using column values to group in plotting
       checkboxGroupInput("groupcols", label = h4("Group Columns"), 
                          choices = list("Choice 1" = 1, "Choice 2" = 2, "Choice 3" = 3),
-                         selected = 1),
-    
-       # plotting button
-      submitButton("plot")
-      
+                         selected = 1)
     ),
     
 
