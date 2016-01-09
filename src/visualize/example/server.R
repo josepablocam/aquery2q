@@ -29,19 +29,18 @@ shinyServer(function(input, output, session) {
   # (i.e. not plottable as default)
   default_data <- data.frame(c1 = c(1,2,3), c2 = c(10, 20, 30))
   
-  # Avoid running query each time, instead check query_button
+  # Avoid running query each time
   run_query <- reactive({
-    if(input$query_button == 0) {
-      return(default_data)
-    }
-    isolate({
-      print("Running query again")
-      input$query_button
-      # TODO: display error message if connection doesn't work
-      h <- qHandle()
-      dat <- tryCatch(execute(h, aqQuery()), error = function(e) {
-        print(paste("Caught error, using default dataframe: ", e))
-        default_data
+    print("Running query again")
+    # TODO: display error message if connection doesn't work
+    h <- tryCatch(qHandle(), error = function(e) {
+       print("Unable to connect to q session")
+       return(default_data)
+    })
+    
+    dat <- tryCatch(execute(h, aqQuery()), error = function(e) {
+      print(paste("Caught error, using default dataframe: ", e))
+      default_data
       })
     
       # Default to dummy data if query result is not a dataframe
@@ -52,10 +51,8 @@ shinyServer(function(input, output, session) {
       return(dat)
     })
 
-  })  
-  
   # Show a bit of the data.frame head
-  output$data <- renderTable(head({run_query()}), 
+  output$data <- renderTable(head(run_query()), 
                              caption = "Head of Data",
                              caption.placement = getOption("xtable.caption.placement", "top"),
                              caption.width = getOption("xtable.caption.width", NULL)
@@ -82,7 +79,7 @@ shinyServer(function(input, output, session) {
     base_plot <- ggplot(data = dat, aes_q(x = as.name(cols[1])))
     
     
-    if (is.null(groupcols) || input$query_button == 0) {
+    if (is.null(groupcols)) {
       groups <- NULL
     } else {
       groups <- groupify(groupcols)
