@@ -42,7 +42,7 @@ assemble_aes <- function(col, details) {
 # pick geom along with some basic defaults
 pick_geom <- function(geom_name, aes_details) {
   switch(geom_name,
-         dot = geom_point(aes_details),
+         dot = geom_point(aes_details + aes_q(shape = as.character(aes_details$y))),
          line = geom_line(aes_details),
          bar = geom_bar(aes_details, stat = "identity", position = "dodge"),
          histo = geom_histogram(aes_details, position = "dodge"),
@@ -65,7 +65,7 @@ plot_all_series <- function(p, cols, geom_names, plot_details) {
     geom <- pick_geom(geom_name, plot_aes)
     p <- p + geom
   }
-  p + labs(x = p$mapping$x, y = "y-value", color = "legend", fill = "legend")
+  p + labs(x = p$mapping$x, y = "y-value", color = "legend", fill = "legend", shape = "legend")
 }
 
 
