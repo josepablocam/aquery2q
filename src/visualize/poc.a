@@ -40,7 +40,7 @@ WITH
 SELECT * FROM FLATTEN(variances)
 
 
-// Correlation calculation for simulated data
+// Correlation of returns calculation for simulated data
 <q>
  nd:500;
  ns:10;
@@ -50,20 +50,20 @@ SELECT * FROM FLATTEN(variances)
 </q>
 
 WITH
-  stocksGrouped(ID, Price) AS (
-    SELECT ID, EndOfDayPrice
+  stocksGrouped(ID, Ret) AS (
+    SELECT ID, ratios(1, EndOfDayPrice) - 1
     FROM simprices
     ASSUMING ASC ID, ASC Date
     WHERE Date >= max(Date) - 31 * 6
     GROUP BY ID)
 
-  pairsGrouped(ID1, ID2, P1, P2) AS (
+  pairsGrouped(ID1, ID2, R1, R2) AS (
     SELECT st1.ID, st2.ID, 
-    st1.Price, st2.Price 
+    st1.Ret, st2.Ret
     FROM stocksGrouped st1, stocksGrouped st2)
   
 SELECT ID1, ID2,
-cor(P1, P2) as coef 
+cor(R1, R2) as coef 
 FROM FLATTEN(pairsGrouped)
 WHERE ID1 != ID2
 GROUP BY ID1, ID2
