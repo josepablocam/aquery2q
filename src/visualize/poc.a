@@ -6,5 +6,67 @@ INSERT INTO t VALUES(0, 0, 0)
 INSERT INTO t VALUES(1, 1, 10)
 INSERT INTO t VALUES(2, 2, 20)
 INSERT INTO t VALUES(3, 3, 30)
+
 SELECT * FROM t
+
 SELECT c1, c2 FROM t
+
+
+
+// Moving variance calculation for technology stocks
+CREATE TABLE prices (
+  Open          FLOAT,
+  High           FLOAT,
+  Low           FLOAT,
+  Close         FLOAT,
+  Volume        FLOAT,
+  EndOfDayPrice FLOAT,
+  Date          DATE,
+  ID            STRING
+)
+
+LOAD DATA INFILE "./data/tech_sample_data.csv" INTO TABLE prices
+FIELDS TERMINATED BY  ","
+
+WITH
+  variances(Date, ID, mv) AS (
+    SELECT Date, ID,
+      vars(12, ratios(1, EndOfDayPrice) - 1)
+      FROM prices
+      ASSUMING ASC Date
+      GROUP BY ID
+  )
+
+SELECT * FROM FLATTEN(variances)
+
+
+// Correlation calculation for simulated data
+<q>
+ nd:500;
+ ns:10;
+ s:`$"ticker",/:string til ns;
+ n:`int$nd*ns;
+ simprices:([]Date:raze ns#enlist 2013.01.01+til nd;ID:raze nd#'s;EndOfDayPrice:n?100.0)
+</q>
+
+WITH
+  stocksGrouped(ID, Price) AS (
+    SELECT ID, EndOfDayPrice
+    FROM simprices
+    ASSUMING ASC ID, ASC Date
+    WHERE Date >= max(Date) - 31 * 6
+    GROUP BY ID)
+
+  pairsGrouped(ID1, ID2, P1, P2) AS (
+    SELECT st1.ID, st2.ID, 
+    st1.Price, st2.Price 
+    FROM stocksGrouped st1, stocksGrouped st2)
+  
+SELECT ID1, ID2,
+cor(P1, P2) as coef 
+FROM FLATTEN(pairsGrouped)
+WHERE ID1 != ID2
+GROUP BY ID1, ID2
+
+
+
