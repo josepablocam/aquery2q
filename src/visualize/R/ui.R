@@ -20,6 +20,16 @@ shinyUI(fluidPage(
       # Aquery information
       textInput("query", "AQuery function wrapper or q command"),
       
+      selectInput("predefined_queries", "Predefined queries",
+                  choices = list("None" = -1,
+                        "Moving Variance" = 0,
+                                 "Correlation Pairs" = 1,
+                                 "Crossing Moving Averages" = 2,
+                                 "Perfect Knowledge Profit" = 3),
+                  selected = -1
+      ),
+                                 
+    
       actionButton("run_query", "Run Query"),
      
      
@@ -33,6 +43,8 @@ shinyUI(fluidPage(
                          choices = list("Choice 1" = 1, "Choice 2" = 2, "Choice 3" = 3),
                          selected = 1)
     ),
+    
+    
     
 
     # Show a plot of the generated distribution

@@ -1,14 +1,11 @@
 # Plotting utilities for visualization interface
 library(ggplot2)
+library(reshape2)
 
 # SOME CONSTANTS USED THROUGHOUT
 #possible geoms
 POSS_GEOMS <- c("dot", "line", "bar", "histo", "area", "boxplot", "vline", "hline")
 DEF_GEOM <- "dot"
-
-
-
-
 
 # add aes
 `+.uneval` <- function(a,b) {
@@ -69,6 +66,56 @@ plot_all_series <- function(p, cols, geom_names, plot_details) {
 }
 
 
-
+# Plotting predefined queries
+plot_predefined <- function(dat, query_num) {
+  if(query_num == 0) {
+    # Moving variance query
+    ggplot(dat, aes(x = Date, y = mv, group = ID)) +
+      geom_line(aes(group = ID, color = ID)) +
+      labs(x = "Date", y = "Variance", color = "Ticker" , title = "Moving Variance Query")
+  } else if(query_num == 1) {
+    # Correlation pairs query
+    ggplot(dat, aes(x = ID1, y = ID2)) + 
+      geom_point(aes(size = coef, color = coef)) +
+      labs(x = "Ticker", y = "Ticker Pair", color = "Correlation", size = "Correlation",
+           title = "Returns Correlation Pairs")
+  } else if (query_num == 2) {
+    # Crossing moving averages query
+    ggplot(dat, aes(x = Date, y = Price)) + 
+      geom_line(aes(color = "Price")) +
+      geom_line(aes(y = m21, color = "21-day avg")) + 
+      geom_line(aes(y = m5, color = "5-day avg")) +
+      geom_point(aes(y = BuySignal, color = "Buy signal", shape = "Buy signal"), size = 4) +
+      geom_point(aes(y = SellSignal, color = "Sell signal", shape = "Sell signal"), size = 4) +
+      labs(x = "Date", y = "Price", color = "Series", shape = "Indicators", title = "Crossing-moving averages trade")
+              
+  } else if (query_num == 3) {
+    # Perfect knowledge trading strategy
+    priceDat <- dat
+    # NULL out irrelevant stuff
+    priceDat$Profit <- NA
+    priceDat$SeriesName <- "Price"
+    # Profit Data
+    profitDat <- dat
+    profitDat$Price <- NA
+    profitDat$BestBuyPrice <- NA
+    profitDat$BestSellPrice <- NA
+    profitDat$SeriesName <- "Profit"
+    # Combine them into 1 data frame
+    repdat <- rbind(priceDat, profitDat)
+    # plot away!
+    ggplot(repdat, aes(x = Date)) + 
+      geom_line(aes(y = Price, color = "Price")) +
+      geom_bar(aes(y = BestBuyPrice, fill = "Best buy"), stat = "identity") +
+      geom_bar(aes(y = BestSellPrice, fill = "Best sell"), stat = "identity") + 
+      geom_area(aes(y = Profit, fill = "Profit")) +
+      facet_wrap(~ SeriesName, scales = "free_y", ncol = 1) + 
+      labs(x = "Date", y = "USD", title = "Perfect knowledge trade", color = "", fill = "Indicators") + 
+      theme(strip.text.x = element_blank())
+  }
+  else {
+    print("undefined")
+  }
+}
 
 

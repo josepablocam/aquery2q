@@ -21,7 +21,12 @@ shinyServer(function(input, output, session) {
   })
 
   aqQuery <- reactive({
-    input$query
+    if(input$predefined_queries == -1){
+      input$query
+    } else {
+      query <- paste0(".aq.q", input$predefined_queries, "[]")
+      print(query)
+    }
   })
   
   # default data frame in case not connected when launched
@@ -98,6 +103,13 @@ shinyServer(function(input, output, session) {
     #cols <- names(output$table)
     #dat <- default_data
     dat <- run_query()
+    
+    # for predefined queries, we want to make sure we don't try to plot before
+    # we have the data, so make it depend on the action button too
+    if(input$predefined_queries != -1 && input$run_query > 0) {
+      return(plot_predefined(dat, input$predefined_queries))
+    }
+    print("fell through")
     cols <- names(dat)
     ncols <- length(cols)
     groupcols <- input$groupcols
