@@ -13,6 +13,7 @@ CREATE TABLE prices (
 LOAD DATA INFILE "./data/sp500_eod_complete_data.csv" INTO TABLE prices
 FIELDS TERMINATED BY  ","
 
+<q>vars:{mavg[x;y*y]-m*m:mavg[x;y:"f"$y]}</q>
 // moving variance for technology stocks
 WITH
   variances(Date, ID, mv) AS (
@@ -132,7 +133,67 @@ WITH
   Profit
   FROM markedUp
       
-      
+
+
+/************************
+ TRADING STRATEGIES
+ ************************/
+ 
+ /*
+   Buy cheap strategy:
+   Parameters: startDate, returns threshold, holding period (in business days), amount
+   of money available for each investment date
+   Investment "loop" (every trading day):
+      - find set of stocks S with period returns < threshold (underperformers)
+      if S not empty:
+        - invest amount uniformly amongst them (we have access to M at each opportunity)
+        - at end of y days, sell entire position (we always clear out, ie. each investment
+        date is a "new portfolio")
+   Display profit/loss associated with each investment date (when bought)
+ */
+ 
+ // We can encode query parameters as functions
+ FUNCTION amt() {
+   100000
+ }
+
+ FUNCTION startDate() {
+   '01/01/2014'
+ }
+
+ FUNCTION returns_threshold() {
+   -0.02
+ }
+
+ FUNCTION holding_period() {
+   200
+ }
+
+
+WITH
+  // calculate returns over period and sell price by shifting back future prices
+  returns(Date, ID, BuyPrice, SellPrice, Ret) AS (
+    SELECT Date, ID, EndOfDayPrice, 
+    next(holding_period(), EndOfDayPrice), ratios(holding_period(), EndOfDayPrice)-1
+    FROM prices ASSUMING ASC Date 
+    GROUP BY ID
+  )
+  // select those underperformers that we are interested in
+  purchases(Date, ID, BuyPrice, SellPrice, Ret) AS (
+    SELECT * FROM FLATTEN(returns) WHERE Ret IS NOT NULL AND Ret < returns_threshold() AND Date >= startDate()
+  )
+  // Calculate uniform allocation of daily $100k for each day with opportunities
+  unifAlloc(Date, AllocAmt) AS (
+    SELECT Date, amt() / count(BuyPrice) FROM purchases GROUP BY Date
+  )
+  // Calculate Profits for each day
+  dailyProfit(Date, PnL) AS (
+    SELECT Date, sum((AllocAmt / BuyPrice) * (SellPrice - BuyPrice)) 
+    FROM purchases INNER JOIN unifAlloc USING Date
+    GROUP BY Date)
+  // Return running profits
+  SELECT Date, sums(PnL) as runningProfit from dailyProfit
+  
 
 
 
