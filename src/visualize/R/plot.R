@@ -112,6 +112,10 @@ plot_predefined <- function(dat, query_num) {
       facet_wrap(~ SeriesName, scales = "free_y", ncol = 1) + 
       labs(x = "Date", y = "USD", title = "Perfect knowledge trade", color = "", fill = "Indicators") + 
       theme(strip.text.x = element_blank())
+  } else if (query_num == BUY_CHEAP_STRATEGY) {
+    ggplot(dat, aes(x = Date, y = runningProfit)) +
+      geom_line(aes(color = "Running profit/loss")) +
+      labs(x = "Investment Date", y = "USD", title = "'Buy cheap' trading strategy", color = "")
   }
   else {
     print("undefined")

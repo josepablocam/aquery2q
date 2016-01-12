@@ -4,11 +4,18 @@
 library(shiny)
 library(ggplot2)
 source("plot.R")
+source("trading_strategies.R")
 
 
 # Load q server functionality
 source("../qserver.R", chdir = TRUE)
 
+
+# Simple function to distinguish between predefined queries that
+# take parameters and those that do not
+takes_parameters <- function(x) {
+  x >= 4
+}
 
 # server logic for plotting tool
 shinyServer(function(input, output, session) {
@@ -19,10 +26,29 @@ shinyServer(function(input, output, session) {
     port <- input$port
     open_connection(host, port)
   })
-
+  
+  
+  # pick appropriate parameter re-definition functions
+  # TODO
+  query_params <- reactive({
+    id <- input$predefined_queries
+    if (takes_parameters(id)) {
+      if(id == BUY_CHEAP_STRATEGY) {
+        buy_cheap_params(input$amt, input$startDate, input$threshold, input$period)
+      }
+    }
+  })
+  
+  
   aqQuery <- reactive({
     if(input$predefined_queries == -1){
       input$query
+    } else if (takes_parameters(input$predefined_queries)) {
+      # select appropriate one
+      params <- query_params()
+      query <- paste0(".aq.q", input$predefined_queries, "[]")
+      full_query <- paste(params, query, sep = ";")
+      print(full_query)
     } else {
       query <- paste0(".aq.q", input$predefined_queries, "[]")
       print(query)
@@ -48,6 +74,7 @@ shinyServer(function(input, output, session) {
        -1
     })
     
+
     dat <- tryCatch(execute(h, aqQuery()), error = function(e) {
       print(paste("Caught error, using default dataframe: ", e))
       default_data
@@ -96,6 +123,21 @@ shinyServer(function(input, output, session) {
     }
   })
   
+  # Create parameter menus for pre-defined trading strategies
+  output$trading_strategy_params <- renderUI({
+    if (takes_parameters(input$predefined_queries)) {
+      if (input$predefined_queries == BUY_CHEAP_STRATEGY) {
+        
+        amt_gui <- sliderInput("amt", "Amount Invested Daily", min = 100e3, max = 1e6, step = 100e3, value = 100e3)
+        period_gui <- sliderInput("period", "Holding Period (days)", min = 1, max = 100, step = 1, value = 2)
+        threshold_gui <- sliderInput("threshold", "Returns threshold (underperformance)", min = -0.10, max = 0.0, value = -0.02)
+        date_gui <- dateInput("startDate", "Start date", min = "2000-01-01", max = "2016-01-01", value = "2000-01-01")
+        list(amt_gui, period_gui, threshold_gui, date_gui)
+      }
+    }
+  })
+  
+  
   # plot function
   plotInput <- reactive({
     # for POC we assume the first column is x-axs and everything else is to 
@@ -109,7 +151,7 @@ shinyServer(function(input, output, session) {
     if(input$predefined_queries != -1 && input$run_query > 0) {
       return(plot_predefined(dat, input$predefined_queries))
     }
-    print("fell through")
+
     cols <- names(dat)
     ncols <- length(cols)
     groupcols <- input$groupcols

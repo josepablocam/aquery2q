@@ -25,11 +25,13 @@ shinyUI(fluidPage(
                         "Moving Variance" = 0,
                                  "Correlation Pairs" = 1,
                                  "Crossing Moving Averages" = 2,
-                                 "Perfect Knowledge Profit" = 3),
+                                 "Perfect Knowledge Profit" = 3,
+                                 "Trading Strategy: Buy Cheap" = 4),
                   selected = -1
       ),
                                  
-    
+      uiOutput("trading_strategy_params"),
+      
       actionButton("run_query", "Run Query"),
      
      
