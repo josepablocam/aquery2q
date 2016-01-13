@@ -673,6 +673,10 @@ IDListNode *collect_AllColsProj(LogicalQueryNode *node) {
 IDListNode *collect_AllColsGroupby(LogicalQueryNode *groupby) {
   OPTIM_PRINT_DEBUG("collecting all col refs in named expr for group by ");
   IDListNode *result = NULL;
+  if (groupby == NULL) {
+    return result;
+  }
+
   NamedExprNode *curr = groupby->params.namedexprs;
 
   while (curr != NULL) {
