@@ -6,6 +6,17 @@ format_int <- function(x) sprintf("%d", x)
 format_date <- function(x) format(x, "%Y.%m.%d")
 format_sym <- function(x) sprintf("`%s", x)
 
+
+PERFECT_STRATEGY <- 3
+perfect_params <- function(ticker, amt, dateRange) {
+  ticker <- format_sym(ticker)
+  amt <- format_float(amt)
+  startDate <- format_date(dateRange[1])
+  endDate <- format_date(dateRange[2])
+  parameters <- sprintf("ticker:{%s}; amt:{%s}; startDate:{%s}; endDate:{%s};", ticker, amt, startDate, endDate)
+  parameters
+}
+
 BUY_CHEAP_STRATEGY <- 4
 buy_cheap_params <- function(amt, startDate, threshold, period) {
   # format string parameters appropriately
@@ -20,18 +31,19 @@ buy_cheap_params <- function(amt, startDate, threshold, period) {
   parameters
 }
   
-PERFECT_STRATEGY <- 3
-perfect_params <- function(ticker, amt, dateRange) {
+TECHNICAL_STRATEGY <- 5
+technical_params <- function(ticker, amt, dateRange, windowsRange) {
   ticker <- format_sym(ticker)
-  print(paste("amount was", amt))
   amt <- format_float(amt)
   startDate <- format_date(dateRange[1])
   endDate <- format_date(dateRange[2])
-  parameters <- sprintf("ticker:{%s}; amt:{%s}; startDate:{%s}; endDate:{%s};", ticker, amt, startDate, endDate)
+  shortWindow <- format_int(windowsRange[1])
+  longWindow <- format_int(windowsRange[2])
+  parameters <- sprintf("ticker:{%s}; amt:{%s}; startDate:{%s}; endDate:{%s}; 
+                        short_window:{%s}; long_window:{%s};", 
+                        ticker, amt, startDate, endDate, shortWindow, longWindow)
   parameters
 }
-  
-  
 
   
   

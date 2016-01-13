@@ -13,10 +13,6 @@ shinyUI(fluidPage(
   # Sidebar with inputs
   sidebarLayout(
     sidebarPanel(
-      # Connection information
-      textInput("host", "Q connection hostname:", "localhost"),
-      numericInput("port", "Q connection port number: ", 7089),
-      
       # Aquery information
       textInput("query", "AQuery function wrapper or q command"),
       
@@ -26,7 +22,8 @@ shinyUI(fluidPage(
                                  "Correlation Pairs" = 1,
                                  "Crossing Moving Averages" = 2,
                                  "Trading Strategy: Perfect Knowledge" = 3,
-                                 "Trading Strategy: Buy Cheap" = 4),
+                                 "Trading Strategy: Buy Cheap" = 4,
+                                 "Trading Strategy: Crossing Moving Averages" = 5),
                   selected = -1
       ),
                                  
@@ -43,7 +40,10 @@ shinyUI(fluidPage(
       # Using column values to group in plotting
       checkboxGroupInput("groupcols", label = h4("Group Columns"), 
                          choices = list("Choice 1" = 1, "Choice 2" = 2, "Choice 3" = 3),
-                         selected = 1)
+                         selected = 1),
+      # Connection information
+      textInput("host", "Q connection hostname:", "localhost"),
+      numericInput("port", "Q connection port number: ", 7089)
     ),
     
     

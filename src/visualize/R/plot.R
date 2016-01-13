@@ -109,14 +109,47 @@ plot_predefined <- function(dat, query_num) {
       geom_line(aes(y = Price, color = "Price")) +
       geom_point(aes(y = BestBuyPrice, color = "Best buy"), size = 5) +
       geom_point(aes(y = BestSellPrice, color = "Best sell"), size = 5) + 
-      geom_area(aes(y = Profit, fill = "Running Max Profit")) +
+      geom_line(aes(y = Profit, color = "Running Max Profit")) +
       facet_wrap(~ SeriesName, scales = "free_y", ncol = 1) + 
-      labs(x = "Date", y = "USD", title = "Perfect knowledge trade", color = "", fill = "Indicators") + 
+      labs(x = "Date", y = "USD", title = "Perfect knowledge Trade Strategy", color = "", fill = "Indicators") + 
       theme(strip.text.x = element_blank())
+    
   } else if (query_num == BUY_CHEAP_STRATEGY) {
     ggplot(dat, aes(x = Date, y = runningProfit)) +
       geom_line(aes(color = "Running profit/loss")) +
-      labs(x = "Investment Date", y = "USD", title = "'Buy cheap' trading strategy", color = "")
+      labs(x = "Investment Date", y = "USD", title = "'Buy cheap' Trading Strategy", color = "")
+  }
+  else if (query_num == TECHNICAL_STRATEGY) {
+    # Perfect knowledge trading strategy
+    priceDat <- dat
+    # NULL out irrelevant stuff
+    priceDat$runningProfit <- NA
+    priceDat$SeriesName <- "Price"
+    priceDat$BuySignal <- ifelse(priceDat$Signal == "Buy", priceDat$Price, NA)
+    priceDat$SellSignal <- ifelse(priceDat$Signal == "Sell", priceDat$Price, NA)
+    print(head(priceDat))
+    
+    # Profit Data
+    profitDat <- dat
+    profitDat$Price <- NA
+    profitDat$Signal <- NA
+    profitDat$BuySignal <- NA
+    profitDat$SellSignal <- NA
+    profitDat$SeriesName <- "Profit"
+    print(head(profitDat))
+    # Combine them into 1 data frame
+    repdat <- rbind(priceDat, profitDat)
+    print(head(repdat))
+    # plot away!
+    ggplot(repdat, aes(x = Date)) + 
+      geom_line(aes(y = Price, color = "Price")) +
+      geom_point(aes(y = BuySignal, color = "Buy", shape = "Buy"), size = 2.5) +
+      geom_point(aes(y = SellSignal, color = "Sell", shape = "Sell"), size = 2.5) + 
+      geom_line(aes(y = runningProfit, color = "Running Profits")) +
+      facet_wrap(~ SeriesName, scales = "free_y", ncol = 1) + 
+      labs(x = "Date", y = "USD", title = "Technical Trading Strategy", color = "", fill = "", shape = "Action") + 
+      theme(strip.text.x = element_blank())
+    
   }
   else {
     print("undefined")
