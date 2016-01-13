@@ -211,8 +211,79 @@ WITH
   SELECT Date, sums(PnL) as runningProfit from dailyProfit
   
 
+/*
+  Technical trading:
+  Parameters: date range, amount of money for each bet, length of 2 moving averages
+  (one shorter than other), ticker
+  For a given ticker, find places where moving averages cross within date range,
+  each time that short term signal crosses above: buy, below: sell
+  In each buy we use entire amount (i.e. amount is per buy opportunity),
+  and we always close out at each sell date. The profits are reported 
+  for the given buy date.
+*/
+
+FUNCTION short_window() {
+  5
+}
+
+FUNCTION long_window() {
+  21
+}
 
 
+WITH
+  // calculate moving averages
+  mavgPrices(Date, Price, long_avg, short_avg) AS (
+    SELECT 
+    Date, 
+    EndOfDayPrice,
+    avgs(long_window(),  EndOfDayPrice),
+    avgs(short_window(),  EndOfDayPrice)
+    FROM prices
+    ASSUMING ASC Date
+    WHERE ID = ticker()
+    AND Date >= startDate() - long_window()
+    AND Date <= endDate())
+  
+  // find relevant observations (buy/sell points) iin appropriate date range
+  crosspoints(Date, Price, BuySignal, valid) AS (
+  SELECT Date, 
+  Price,
+  (prev(short_avg) <= prev(long_avg) & short_avg > long_avg),
+  maxs((prev(short_avg) <= prev(long_avg) & short_avg > long_avg))
+  FROM mavgPrices
+  WHERE
+  ((prev(short_avg) <= prev(long_avg) & short_avg > long_avg) OR
+  (prev(short_avg) >= prev(long_avg) & short_avg < long_avg)) AND
+  Date >= startDate() AND Date <= endDate())
+  
+  // Need to have bought before sold, buy/sell always alternate by definition
+  // so for buying points the PotentialProfit is the actual profit for that trade
+  profits(Date, Signal, RunningProfit) AS (
+  SELECT Date,
+  CASE 
+    WHEN BuySignal
+    THEN "Buy"
+    ELSE "Sell"
+  END,
+  sums((amt() / Price) * (next(1, Price) - Price) * BuySignal)
+  FROM crosspoints where valid)
+    
+  SELECT Date, Price, Signal, fills(RunningProfit) as runningProfit
+  FROM 
+  mavgPrices FULL OUTER JOIN profits USING Date
+  ASSUMING ASC Date
+  WHERE Date >= startDate()
+  
+  
+  
+  
+  
+  
+  
+
+  
+  
 
 
 
