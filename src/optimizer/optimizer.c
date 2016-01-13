@@ -1620,6 +1620,10 @@ char *get_table_name(LogicalQueryNode *from) {
   {
     return NULL;
   }
+  else if (from->node_type == FULL_OUTER_JOIN_USING) {
+    // FOJU is not order-preserving
+    return NULL;
+  }
   else if (from->node_type == SIMPLE_TABLE)
   {
     return from->params.name;
