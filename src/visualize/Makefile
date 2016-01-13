@@ -5,7 +5,8 @@ a2q:
 	cd ../; make;
 	
 install:
-	./install_brew.sh;
-	mkdir -p Rdeps; Rscript install_packages.R
-	cd osx_qserver; make; 
+	./install_brew.sh; # check if we have something to install packages with
+	mkdir -p Rdeps; Rscript install_packages.R; # install R dependencies
+	cp js/mode-aquery.js Rdeps/shinyAce/www/ace/; # copy syntax highlighting file for code viz
+	cd osx_qserver; make; # make R-q interface
 		

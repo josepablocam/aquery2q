@@ -2,6 +2,7 @@
 # necessary for systems without packages by default (.e.g CIMS machines)
 .libPaths(c('./Rdeps',.libPaths()))
 library(shiny)
+library(shinyAce)
 
 # Define UI for application
 shinyUI(fluidPage(
@@ -26,6 +27,9 @@ shinyUI(fluidPage(
                                  "Trading Strategy: Crossing Moving Averages" = 5),
                   selected = -1
       ),
+      aceEditor("code", mode = 'aquery', value = '// AQuery code here
+SELECT * FROM t
+  '),
                                  
       uiOutput("trading_strategy_params"),
       

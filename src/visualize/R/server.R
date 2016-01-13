@@ -2,6 +2,7 @@
 # necessary for systems without packages by default (.e.g CIMS machines)
 .libPaths(c('./Rdeps',.libPaths()))
 library(shiny)
+library(shinyAce)
 library(ggplot2)
 source("plot.R")
 source("trading_strategies.R")
