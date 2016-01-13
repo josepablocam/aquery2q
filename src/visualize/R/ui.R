@@ -25,7 +25,7 @@ shinyUI(fluidPage(
                         "Moving Variance" = 0,
                                  "Correlation Pairs" = 1,
                                  "Crossing Moving Averages" = 2,
-                                 "Perfect Knowledge Profit" = 3,
+                                 "Trading Strategy: Perfect Knowledge" = 3,
                                  "Trading Strategy: Buy Cheap" = 4),
                   selected = -1
       ),

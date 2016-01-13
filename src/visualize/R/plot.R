@@ -89,7 +89,7 @@ plot_predefined <- function(dat, query_num) {
       geom_point(aes(y = SellSignal, color = "Sell signal", shape = "Sell signal"), size = 4) +
       labs(x = "Date", y = "Price", color = "Series", shape = "Indicators", title = "Crossing-moving averages trade")
               
-  } else if (query_num == 3) {
+  } else if (query_num == PERFECT_STRATEGY) {
     # Perfect knowledge trading strategy
     priceDat <- dat
     # NULL out irrelevant stuff
@@ -103,12 +103,13 @@ plot_predefined <- function(dat, query_num) {
     profitDat$SeriesName <- "Profit"
     # Combine them into 1 data frame
     repdat <- rbind(priceDat, profitDat)
+
     # plot away!
     ggplot(repdat, aes(x = Date)) + 
       geom_line(aes(y = Price, color = "Price")) +
-      geom_bar(aes(y = BestBuyPrice, fill = "Best buy"), stat = "identity") +
-      geom_bar(aes(y = BestSellPrice, fill = "Best sell"), stat = "identity") + 
-      geom_area(aes(y = Profit, fill = "Profit")) +
+      geom_point(aes(y = BestBuyPrice, color = "Best buy"), size = 5) +
+      geom_point(aes(y = BestSellPrice, color = "Best sell"), size = 5) + 
+      geom_area(aes(y = Profit, fill = "Running Max Profit")) +
       facet_wrap(~ SeriesName, scales = "free_y", ncol = 1) + 
       labs(x = "Date", y = "USD", title = "Perfect knowledge trade", color = "", fill = "Indicators") + 
       theme(strip.text.x = element_blank())

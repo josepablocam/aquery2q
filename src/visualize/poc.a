@@ -85,18 +85,51 @@ ELSE make_null(Price)
 END as SellSignal
 FROM mavgPrices
 
+/************************
+ TRADING STRATEGIES
+ ************************/
 
-// Running maximum profit query
+
+ // We can encode query parameters as functions
+ FUNCTION amt() {
+   100000
+ }
+
+ FUNCTION startDate() {
+   '01/01/2000'
+ }
+ 
+ FUNCTION endDate() {
+   '01/01/2016'
+ }
+ 
+ FUNCTION ticker() {
+   "AAPL"
+ }
+
+ FUNCTION returns_threshold() {
+   -0.02
+ }
+
+ FUNCTION holding_period() {
+   200
+ }
+
+
+/* 
+Perfect knowledge query
+*/
+
 WITH
   runningProfit(Date, Price, RunningMinPrice, Profit) AS (
     SELECT Date, 
     EndOfDayPrice,
     mins(EndOfDayPrice), 
-    EndOfDayPrice - mins(EndOfDayPrice)
+    (EndOfDayPrice - mins(EndOfDayPrice)) * (amt / mins(EndOfDayPrice))
     FROM prices
     ASSUMING ASC Date
-    WHERE ID = "ORCL"
-    AND Date >= '01/01/2015')
+    WHERE ID = ticker()
+    AND Date >= startDate() AND Date <= endDate())
   
   markedUp(Date, Price, BestBuyPrice, BestSellPrice, Profit) AS (
     SELECT 
@@ -135,9 +168,7 @@ WITH
       
 
 
-/************************
- TRADING STRATEGIES
- ************************/
+
  
  /*
    Buy cheap strategy:
@@ -152,22 +183,7 @@ WITH
    Display profit/loss associated with each investment date (when bought)
  */
  
- // We can encode query parameters as functions
- FUNCTION amt() {
-   100000
- }
 
- FUNCTION startDate() {
-   '01/01/2014'
- }
-
- FUNCTION returns_threshold() {
-   -0.02
- }
-
- FUNCTION holding_period() {
-   200
- }
 
 
 WITH

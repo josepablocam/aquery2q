@@ -10,11 +10,21 @@ source("trading_strategies.R")
 # Load q server functionality
 source("../qserver.R", chdir = TRUE)
 
+#SP 500 tickers
+print(getwd())
+sp_tickers <- as.character(read.csv("../data/sp500_tickers.csv")$Ticker)
+sp_tickers <- sp_tickers[order(sp_tickers)]
+sp_tickers <- as.list(sp_tickers)
+names(sp_tickers) <- sp_tickers
+
+MIN_DATE <- as.Date("2000-01-01")
+MAX_DATE <- as.Date("2016-06-01")
+
 
 # Simple function to distinguish between predefined queries that
 # take parameters and those that do not
 takes_parameters <- function(x) {
-  x >= 4
+  x >= 3
 }
 
 # server logic for plotting tool
@@ -35,6 +45,10 @@ shinyServer(function(input, output, session) {
     if (takes_parameters(id)) {
       if(id == BUY_CHEAP_STRATEGY) {
         buy_cheap_params(input$amt, input$startDate, input$threshold, input$period)
+      }else if (id == PERFECT_STRATEGY) {
+        perfect_params(input$ticker, input$amt, input$date_range)
+      } else {
+        print("undefined query with parameters")
       }
     }
   })
@@ -123,17 +137,29 @@ shinyServer(function(input, output, session) {
     }
   })
   
+  # Ticker GUI
+  ticker_gui <- selectInput("ticker", "Ticker for strategy", choices = sp_tickers, selected = "A")
+  
+  
   # Create parameter menus for pre-defined trading strategies
   output$trading_strategy_params <- renderUI({
     if (takes_parameters(input$predefined_queries)) {
       if (input$predefined_queries == BUY_CHEAP_STRATEGY) {
-        
         amt_gui <- sliderInput("amt", "Amount Invested Daily", min = 100e3, max = 1e6, step = 100e3, value = 100e3)
         period_gui <- sliderInput("period", "Holding Period (days)", min = 1, max = 100, step = 1, value = 2)
         threshold_gui <- sliderInput("threshold", "Returns threshold (underperformance)", min = -0.10, max = 0.0, value = -0.02)
-        date_gui <- dateInput("startDate", "Start date", min = "2000-01-01", max = "2016-01-01", value = "2000-01-01")
-        list(amt_gui, period_gui, threshold_gui, date_gui)
+        date_gui <- dateInput("startDate", "Start date", min = MIN_DATE, max = MAX_DATE, value = MIN_DATE)
+        gui <- list(amt_gui, period_gui, threshold_gui, date_gui)
+        
+      } else if (input$predefined_queries == PERFECT_STRATEGY) {
+        amt_gui <- sliderInput("amt", "Single investment amount", min = 100e3, max = 1e6, step = 100e3, value = 100e3)
+        date_range_gui <- dateRangeInput("date_range", "Date Range for Strategy", min = MIN_DATE, max = MAX_DATE, start = MIN_DATE, end = MAX_DATE)
+        gui <- list(ticker_gui, date_range_gui, amt_gui)
+      } else {
+        print("Undefined parameter gui")
       }
+      
+      gui
     }
   })
   

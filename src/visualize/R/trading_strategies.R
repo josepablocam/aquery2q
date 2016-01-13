@@ -4,6 +4,7 @@
 format_float <- function(x) sprintf("%.2f", x)
 format_int <- function(x) sprintf("%d", x)
 format_date <- function(x) format(x, "%Y.%m.%d")
+format_sym <- function(x) sprintf("`%s", x)
 
 BUY_CHEAP_STRATEGY <- 4
 buy_cheap_params <- function(amt, startDate, threshold, period) {
@@ -18,6 +19,18 @@ buy_cheap_params <- function(amt, startDate, threshold, period) {
                         amt, startDate, threshold, period)
   parameters
 }
+  
+PERFECT_STRATEGY <- 3
+perfect_params <- function(ticker, amt, dateRange) {
+  ticker <- format_sym(ticker)
+  print(paste("amount was", amt))
+  amt <- format_float(amt)
+  startDate <- format_date(dateRange[1])
+  endDate <- format_date(dateRange[2])
+  parameters <- sprintf("ticker:{%s}; amt:{%s}; startDate:{%s}; endDate:{%s};", ticker, amt, startDate, endDate)
+  parameters
+}
+  
   
 
   
