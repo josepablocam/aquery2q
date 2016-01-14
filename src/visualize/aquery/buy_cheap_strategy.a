@@ -1,0 +1,40 @@
+// Params
+FUNCTION holding_period() {200}
+FUNCTION returns_threshold() {-0.02}
+FUNCTION amt() {100000}
+FUNCTION startDate() {'01/01/2000'}
+ 
+// Query
+WITH
+  // calculate returns over period and sell price by shifting back future prices
+  returns(Date, ID, BuyPrice, SellPrice, Ret) AS (
+    SELECT Date, ID, EndOfDayPrice, 
+    next(holding_period(), EndOfDayPrice), 
+    ratios(holding_period(), EndOfDayPrice)-1
+    FROM prices ASSUMING ASC Date 
+    GROUP BY ID
+  )
+  // select those underperformers that we are interested in
+  purchases(Date, ID, BuyPrice, SellPrice, Ret) AS (
+    SELECT * 
+    FROM FLATTEN(returns) 
+    WHERE Ret IS NOT NULL AND 
+    Ret < returns_threshold() AND 
+    Date >= startDate()
+  )
+  // Calculate uniform allocation of daily amount for each day with opportunities
+  unifAlloc(Date, AllocAmt) AS (
+    SELECT 
+    Date, amt() / count(BuyPrice) 
+    FROM purchases 
+    GROUP BY Date
+  )
+  // Calculate Profits for each day
+  dailyProfit(Date, PnL) AS (
+    SELECT Date, sum((AllocAmt / BuyPrice) * (SellPrice - BuyPrice)) 
+    FROM purchases INNER JOIN unifAlloc USING Date
+    GROUP BY Date)
+// Return running profits
+SELECT 
+Date, sums(PnL) as runningProfit 
+FROM dailyProfit

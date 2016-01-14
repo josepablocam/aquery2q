@@ -1,0 +1,25 @@
+// Correlation of returns calculation for data
+<q>
+\S 1
+corrTickers10:neg[10]?exec distinct ID from prices
+</q>
+
+WITH
+  stocksGrouped(ID, Ret) AS (
+    SELECT ID, ratios(1, EndOfDayPrice) - 1
+    FROM prices
+    ASSUMING ASC ID, ASC Date
+    WHERE ID in corrTickers10 AND
+    Date >= max(Date) - 31 * 6
+    GROUP BY ID)
+
+  pairsGrouped(ID1, ID2, R1, R2) AS (
+    SELECT st1.ID, st2.ID, 
+    st1.Ret, st2.Ret
+    FROM stocksGrouped st1, stocksGrouped st2)
+  
+SELECT ID1, ID2,
+cor(R1, R2) as coef 
+FROM FLATTEN(pairsGrouped)
+WHERE ID1 != ID2
+GROUP BY ID1, ID2

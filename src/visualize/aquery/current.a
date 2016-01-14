@@ -1,0 +1,53 @@
+// Parameters
+FUNCTION ticker() {"HP"}
+FUNCTION startDate() {'01/01/2000'}
+FUNCTION endDate() {'01/01/2016'}
+FUNCTION short_window() {30}
+FUNCTION long_window() {90}
+ 
+// Query
+WITH
+  // calculate moving averages
+  mavgPrices(Date, Price, long_avg, short_avg) AS (
+    SELECT 
+    Date, 
+    EndOfDayPrice,
+    avgs(long_window(),  EndOfDayPrice),
+    avgs(short_window(),  EndOfDayPrice)
+    FROM prices
+    ASSUMING ASC Date
+    WHERE ID = ticker()
+    AND Date >= startDate() - long_window()
+    AND Date <= endDate())
+  
+  // find relevant observations (buy/sell points) iin appropriate date range
+  crosspoints(Date, Price, BuySignal, valid) AS (
+  SELECT Date, 
+  Price,
+  (prev(short_avg) <= prev(long_avg) & short_avg > long_avg),
+  maxs((prev(short_avg) <= prev(long_avg) & short_avg > long_avg))
+  FROM mavgPrices
+  WHERE
+  ((prev(short_avg) <= prev(long_avg) & short_avg > long_avg) OR
+  (prev(short_avg) >= prev(long_avg) & short_avg < long_avg)) AND
+  Date >= startDate() AND Date <= endDate())
+  
+  // Need to have bought before sold, buy/sell always alternate by definition
+  // so for buying points the PotentialProfit is the actual profit for that trade
+  profits(Date, Signal, RunningProfit) AS (
+  SELECT Date,
+  CASE 
+    WHEN BuySignal
+    THEN "Buy"
+    ELSE "Sell"
+  END,
+  sums((amt() / Price) * (next(1, Price) - Price) * BuySignal)
+  FROM crosspoints where valid)
+    
+SELECT 
+Date, Price, Signal, 
+fills(RunningProfit) as runningProfit
+FROM 
+mavgPrices FULL OUTER JOIN profits USING Date
+ASSUMING ASC Date
+WHERE Date >= startDate()
