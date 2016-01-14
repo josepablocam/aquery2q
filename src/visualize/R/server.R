@@ -12,7 +12,6 @@ source("../qserver.R", chdir = TRUE)
 
 
 #SP 500 tickers
-print(getwd())
 sp_tickers <- as.character(read.csv("../data/sp500_tickers.csv")$Ticker)
 sp_tickers <- sp_tickers[order(sp_tickers)]
 sp_tickers <- as.list(sp_tickers)
@@ -61,7 +60,6 @@ shinyServer(function(input, output, session) {
   compiled_code <- reactive({
     input$run_query # dependency established
     code <- input$code
-    print(code)
     status <- compile(code)
     if (!compilation_ok(status)) {
       stop(compilation_error(status))
@@ -72,21 +70,15 @@ shinyServer(function(input, output, session) {
   aqQuery <- reactive({
     compiled_code()
     load_stmt <- paste('"l ', COMPILED_AQUERY_PATH, '"', sep ="")
-    base_command <- paste("system", load_stmt, ";", ".aq.q0[]") 
-    print(base_command)
-    base_command
+    command <- paste("system", load_stmt, ";") 
     
-#     if(input$predefined_queries == -1){
-#       query <- paste('system', '"', 'l',COMPILED_AQUERY_PATH, '"')
-#     } else if (takes_parameters(input$predefined_queries)) {
-#       # prepare slider based parameters
-#       params <- query_params()
-#       query <- paste('system', '"', 'l',COMPILED_AQUERY_PATH, '"')
-#       print(full_query)
-#     } else {
-#       query <- paste('system', '"', 'l',COMPILED_AQUERY_PATH, '"')
-#       print(query)
-#     }
+    # if appropriate, then allow widgets to overwrite code based parameters
+    if (takes_parameters(input$predefined_queries) && input$use_widgets) {
+      params_command <- query_params()
+      command <- paste(command, params_command)
+    }
+    
+    paste(command, ".aq.q0[]")
   })
   
   # Update code displayed
@@ -124,7 +116,7 @@ shinyServer(function(input, output, session) {
       if(!is.data.frame(dat)) {
         dat <- default_data
       }
-      print(head(dat))
+      
       return(dat)
     })
     })
@@ -168,6 +160,12 @@ shinyServer(function(input, output, session) {
   
   
   # Create parameter menus for pre-defined trading strategies
+  output$use_widgets <- renderUI({
+    if (takes_parameters(input$predefined_queries)) {
+    checkboxInput("use_widgets", label = "Visual parameters", value = FALSE)
+    }
+  })
+  
   output$trading_strategy_params <- renderUI({
     if (takes_parameters(input$predefined_queries)) {
       if (input$predefined_queries == PERFECT_STRATEGY) {
@@ -189,7 +187,9 @@ shinyServer(function(input, output, session) {
         print("Undefined parameter gui")
       }
       
-      gui
+      if(!is.null(input$use_widgets) && input$use_widgets) {
+        gui
+      }
     }
   })
   

@@ -32,7 +32,8 @@ shinyUI(fluidPage(
       actionButton("reset_query", "Reset Code"),
       actionButton("run_query", "Run Code"),
         
-      # Widget-based parameters                         
+      # Widget-based parameters   
+      uiOutput("use_widgets"),
       uiOutput("trading_strategy_params"),
 
       # Check box if plot each with different geom
