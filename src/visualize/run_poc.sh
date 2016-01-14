@@ -24,7 +24,7 @@ $A2Q -a 1 -c -o ${AQUERYDIR}/setup.q ${AQUERYDIR}/setup.a
 
 # launch q process with port (launch it with respect to R folder)
 # NOTE: (runs in background and killed upon exit of R process)
-$Q $SETUP_SCRIPT -p $PORT &
+$Q ${AQUERYDIR}/setup.q -p $PORT &
 # save down PID to kill
 q_pid=$!
 
