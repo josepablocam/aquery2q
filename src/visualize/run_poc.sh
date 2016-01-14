@@ -9,6 +9,7 @@ fi
 A2Q=../a2q
 # Port for q process
 PORT=$1
+AQUERYDIR=./aquery/
 
 # if there is no folder for q, copy over what we brought 
 if [ ! -d $HOME/q/ ]
@@ -19,11 +20,11 @@ fi
 Q=$HOME/q/m32/q
 
 # compile aquery file
-$A2Q -a 1 -c -o poc.q poc.a
+$A2Q -a 1 -c -o ${AQUERYDIR}/setup.q ${AQUERYDIR}/setup.a
 
-# launch q process with port 
+# launch q process with port (launch it with respect to R folder)
 # NOTE: (runs in background and killed upon exit of R process)
-$Q poc.q -p $PORT &
+$Q ${AQUERYDIR}/setup.q -p $PORT &
 # save down PID to kill
 q_pid=$!
 

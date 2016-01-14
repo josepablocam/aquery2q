@@ -1,0 +1,53 @@
+// Parameters
+FUNCTION ticker() {"AAPL"}
+FUNCTION startDate() {'01/01/2000'}
+FUNCTION endDate() {'01/01/2016'}
+FUNCTION amt() {100000} 
+
+// Query
+WITH
+  runningProfit(Date, Price, RunningMinPrice, Profit) AS (
+    SELECT Date, 
+    EndOfDayPrice,
+    mins(EndOfDayPrice), 
+    (EndOfDayPrice - mins(EndOfDayPrice)) * (amt / mins(EndOfDayPrice))
+    FROM prices
+    ASSUMING ASC Date
+    WHERE ID = ticker()
+    AND Date >= startDate() AND Date <= endDate())
+  
+  markedUp(Date, Price, BestBuyPrice, BestSellPrice, Profit) AS (
+    SELECT 
+    Date,
+    Price,
+    CASE 
+      WHEN Profit = max(Profit)
+        THEN
+          RunningMinPrice
+        ELSE
+          make_null(RunningMinPrice)
+    END as BestBuyPrice,
+    CASE 
+      WHEN Profit = max(Profit)
+        THEN
+          Price
+        ELSE
+          make_null(Price)
+    END as BestSellPrice,
+    Profit
+    FROM runningProfit)
+    
+SELECT
+Date,
+Price,
+CASE
+  WHEN Price = max(BestBuyPrice)
+    THEN
+      Price
+    ELSE
+      make_null(Price)
+END as BestBuyPrice,
+BestSellPrice,
+Profit
+FROM markedUp
+

@@ -2,16 +2,16 @@
 # necessary for systems without packages by default (.e.g CIMS machines)
 .libPaths(c('./Rdeps',.libPaths()))
 library(shiny)
+library(shinyAce)
 library(ggplot2)
+source("aquery_code.R")
 source("plot.R")
 source("trading_strategies.R")
-
-
 # Load q server functionality
 source("../qserver.R", chdir = TRUE)
 
+
 #SP 500 tickers
-print(getwd())
 sp_tickers <- as.character(read.csv("../data/sp500_tickers.csv")$Ticker)
 sp_tickers <- sp_tickers[order(sp_tickers)]
 sp_tickers <- as.list(sp_tickers)
@@ -56,19 +56,35 @@ shinyServer(function(input, output, session) {
   })
   
   
-  aqQuery <- reactive({
-    if(input$predefined_queries == -1){
-      input$query
-    } else if (takes_parameters(input$predefined_queries)) {
-      # select appropriate one
-      params <- query_params()
-      query <- paste0(".aq.q", input$predefined_queries, "[]")
-      full_query <- paste(params, query, sep = ";")
-      print(full_query)
-    } else {
-      query <- paste0(".aq.q", input$predefined_queries, "[]")
-      print(query)
+  
+  compiled_code <- reactive({
+    input$run_query # dependency established
+    code <- input$code
+    status <- compile(code)
+    if (!compilation_ok(status)) {
+      stop(compilation_error(status))
     }
+  })
+  
+  
+  aqQuery <- reactive({
+    compiled_code()
+    load_stmt <- paste('"l ', COMPILED_AQUERY_PATH, '"', sep ="")
+    command <- paste("system", load_stmt, ";") 
+    
+    # if appropriate, then allow widgets to overwrite code based parameters
+    if (takes_parameters(input$predefined_queries) && input$use_widgets) {
+      params_command <- query_params()
+      command <- paste(command, params_command)
+    }
+    
+    paste(command, ".aq.q0[]")
+  })
+  
+  # Update code displayed
+  observe({
+    input$reset_query  # establish dependency
+    updateAceEditor(session, editorId = "code", value = get_code(input$predefined_queries))
   })
   
   # default data frame in case not connected when launched
@@ -144,6 +160,12 @@ shinyServer(function(input, output, session) {
   
   
   # Create parameter menus for pre-defined trading strategies
+  output$use_widgets <- renderUI({
+    if (takes_parameters(input$predefined_queries)) {
+    checkboxInput("use_widgets", label = "Visual parameters", value = FALSE)
+    }
+  })
+  
   output$trading_strategy_params <- renderUI({
     if (takes_parameters(input$predefined_queries)) {
       if (input$predefined_queries == PERFECT_STRATEGY) {
@@ -165,25 +187,27 @@ shinyServer(function(input, output, session) {
         print("Undefined parameter gui")
       }
       
-      gui
+      if(!is.null(input$use_widgets) && input$use_widgets) {
+        gui
+      }
     }
   })
   
+  # wait on button
+  which_predefined_query <- eventReactive(input$run_query, {
+    input$predefined_queries
+  }, ignoreNULL = FALSE)
   
   # plot function
   plotInput <- reactive({
-    # for POC we assume the first column is x-axs and everything else is to 
+    # we assume the first column is x-axs and everything else is to 
     # be plotted as a separate series
-    #cols <- names(output$table)
-    #dat <- default_data
     dat <- run_query()
     
-    # for predefined queries, we want to make sure we don't try to plot before
-    # we have the data, so make it depend on the action button too
-    if(input$predefined_queries != -1 && input$run_query > 0) {
-      return(plot_predefined(dat, input$predefined_queries))
+    if(which_predefined_query() != -1 && input$run_query > 0) {
+      return(plot_predefined(dat, which_predefined_query()))
     }
-
+    
     cols <- names(dat)
     ncols <- length(cols)
     groupcols <- input$groupcols

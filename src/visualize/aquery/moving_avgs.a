@@ -1,0 +1,28 @@
+// Moving Average Query for a specific stock
+WITH
+  mavgPrices(Date, Price, m21, m5) AS (
+    SELECT 
+    Date, 
+    EndOfDayPrice,
+    avgs(21,  EndOfDayPrice),
+    avgs(5,  EndOfDayPrice)
+    FROM prices
+    ASSUMING ASC Date
+    WHERE ID="HP"
+    AND Date >= '01/01/2014')
+
+// some simple if-else clauses to generate points
+// for plotting signals
+SELECT Date, Price,
+m21, m5, 
+CASE (prev(m5) <= prev(m21) & m5 > m21) 
+ WHEN TRUE THEN
+   Price
+ ELSE make_null(Price)
+ END as BuySignal,
+CASE (prev(m5) >= prev(m21) & m5 < m21) 
+WHEN TRUE THEN
+  Price
+ELSE make_null(Price) 
+END as SellSignal
+FROM mavgPrices

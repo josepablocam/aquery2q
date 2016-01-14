@@ -2,6 +2,11 @@
 # necessary for systems without packages by default (.e.g CIMS machines)
 .libPaths(c('./Rdeps',.libPaths()))
 library(shiny)
+library(shinyAce)
+source('aquery_code.R')
+
+
+
 
 # Define UI for application
 shinyUI(fluidPage(
@@ -13,11 +18,8 @@ shinyUI(fluidPage(
   # Sidebar with inputs
   sidebarLayout(
     sidebarPanel(
-      # Aquery information
-      textInput("query", "AQuery function wrapper or q command"),
-      
-      selectInput("predefined_queries", "Predefined queries",
-                  choices = list("None" = -1,
+      selectInput("predefined_queries", "Queries",
+                  choices = list("Custom" = -1,
                         "Moving Variance" = 0,
                                  "Correlation Pairs" = 1,
                                  "Crossing Moving Averages" = 2,
@@ -26,12 +28,14 @@ shinyUI(fluidPage(
                                  "Trading Strategy: Crossing Moving Averages" = 5),
                   selected = -1
       ),
-                                 
+      aceEditor("code", mode = 'aquery', value = get_code(-1)),
+      actionButton("reset_query", "Reset Code"),
+      actionButton("run_query", "Run Code"),
+        
+      # Widget-based parameters   
+      uiOutput("use_widgets"),
       uiOutput("trading_strategy_params"),
-      
-      actionButton("run_query", "Run Query"),
-     
-     
+
       # Check box if plot each with different geom
       checkboxInput("single_geom", "Plot as single geom", value = TRUE),
       

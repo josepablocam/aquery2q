@@ -25,5 +25,7 @@ install.packages("xtable",  repos = repos, lib = folder, dependencies = TRUE)
 install.packages("htmltools",  repos = repos, lib = folder, dependencies = TRUE)
 install.packages("R6",  repos = repos, lib = folder, dependencies = TRUE)
 
+# install shiny ace
+install.packages("shinyAce", repos = repos, lib = folder, dependencies = TRUE)
 
 install.packages("Rcpp",  repos = repos, lib = folder, dependencies = TRUE)
