@@ -4,12 +4,12 @@
 library(shiny)
 library(shinyAce)
 library(ggplot2)
+source("aquery_code.R")
 source("plot.R")
 source("trading_strategies.R")
-
-
 # Load q server functionality
 source("../qserver.R", chdir = TRUE)
+
 
 #SP 500 tickers
 print(getwd())
@@ -57,19 +57,42 @@ shinyServer(function(input, output, session) {
   })
   
   
-  aqQuery <- reactive({
-    if(input$predefined_queries == -1){
-      input$query
-    } else if (takes_parameters(input$predefined_queries)) {
-      # select appropriate one
-      params <- query_params()
-      query <- paste0(".aq.q", input$predefined_queries, "[]")
-      full_query <- paste(params, query, sep = ";")
-      print(full_query)
-    } else {
-      query <- paste0(".aq.q", input$predefined_queries, "[]")
-      print(query)
+  
+  compiled_code <- reactive({
+    input$run_query # dependency established
+    code <- input$code
+    print(code)
+    status <- compile(code)
+    if (!compilation_ok(status)) {
+      stop(compilation_error(status))
     }
+  })
+  
+  
+  aqQuery <- reactive({
+    compiled_code()
+    load_stmt <- paste('"l ', COMPILED_AQUERY_PATH, '"', sep ="")
+    base_command <- paste("system", load_stmt, ";", ".aq.q0[]") 
+    print(base_command)
+    base_command
+    
+#     if(input$predefined_queries == -1){
+#       query <- paste('system', '"', 'l',COMPILED_AQUERY_PATH, '"')
+#     } else if (takes_parameters(input$predefined_queries)) {
+#       # prepare slider based parameters
+#       params <- query_params()
+#       query <- paste('system', '"', 'l',COMPILED_AQUERY_PATH, '"')
+#       print(full_query)
+#     } else {
+#       query <- paste('system', '"', 'l',COMPILED_AQUERY_PATH, '"')
+#       print(query)
+#     }
+  })
+  
+  # Update code displayed
+  observe({
+    input$reset_query  # establish dependency
+    updateAceEditor(session, editorId = "code", value = get_code(input$predefined_queries))
   })
   
   # default data frame in case not connected when launched
@@ -101,7 +124,7 @@ shinyServer(function(input, output, session) {
       if(!is.data.frame(dat)) {
         dat <- default_data
       }
-      
+      print(head(dat))
       return(dat)
     })
     })
