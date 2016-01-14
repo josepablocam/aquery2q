@@ -251,7 +251,7 @@ shinyServer(function(input, output, session) {
 
 # Download plot
 output$save_plot <- downloadHandler(
-  filename = "plot.png",
+  filename = "plot.pdf",
   content = function(file) {
     device <- function(..., width, height) {
       grDevices::png(..., width = width, height = height,
