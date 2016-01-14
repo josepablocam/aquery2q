@@ -1,5 +1,6 @@
 // Parameters
 FUNCTION ticker() {"AAPL"}
+FUNCTION amt() {100000}
 FUNCTION startDate() {'01/01/2000'}
 FUNCTION endDate() {'01/01/2016'}
 FUNCTION short_window() {5}
