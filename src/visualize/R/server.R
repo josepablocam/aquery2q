@@ -193,21 +193,21 @@ shinyServer(function(input, output, session) {
     }
   })
   
+  # wait on button
+  which_predefined_query <- eventReactive(input$run_query, {
+    input$predefined_queries
+  }, ignoreNULL = FALSE)
   
   # plot function
   plotInput <- reactive({
-    # for POC we assume the first column is x-axs and everything else is to 
+    # we assume the first column is x-axs and everything else is to 
     # be plotted as a separate series
-    #cols <- names(output$table)
-    #dat <- default_data
     dat <- run_query()
     
-    # for predefined queries, we want to make sure we don't try to plot before
-    # we have the data, so make it depend on the action button too
-    if(input$predefined_queries != -1 && input$run_query > 0) {
-      return(plot_predefined(dat, input$predefined_queries))
+    if(which_predefined_query() != -1 && input$run_query > 0) {
+      return(plot_predefined(dat, which_predefined_query()))
     }
-
+    
     cols <- names(dat)
     ncols <- length(cols)
     groupcols <- input$groupcols
