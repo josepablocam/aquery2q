@@ -32,10 +32,6 @@ assemble_aes <- function(col, details) {
   aes_q(y = y) + parsed_aes
 }
 
-
-
-
-
 # pick geom along with some basic defaults
 pick_geom <- function(geom_name, aes_details) {
   switch(geom_name,
@@ -81,14 +77,23 @@ plot_predefined <- function(dat, query_num) {
            title = "Returns Correlation Pairs")
   } else if (query_num == 2) {
     # Crossing moving averages query
-    ggplot(dat, aes(x = Date, y = Price)) + 
+    p <- ggplot(dat, aes(x = Date, y = Price)) + 
       geom_line(aes(color = "Price")) +
-      geom_line(aes(y = m21, color = "21-day avg")) + 
-      geom_line(aes(y = m5, color = "5-day avg")) +
+      geom_line(aes(y = m21, color = "21-day avg"), linetype = "dashed") + 
+      geom_line(aes(y = m5, color = "5-day avg"), linetype = "dashed") +
       geom_point(aes(y = BuySignal, color = "Buy signal", shape = "Buy signal"), size = 4) +
       geom_point(aes(y = SellSignal, color = "Sell signal", shape = "Sell signal"), size = 4) +
-      labs(x = "Date", y = "Price", color = "Series", shape = "Indicators", title = "Crossing-moving averages trade")
-              
+      labs(x = "Date", y = "Price", color = "", shape = "", title = "Crossing-moving averages trade")
+    
+    # to be able to merge legends
+    lines <- c("dashed", "dashed", "blank", "solid", "blank")
+    shapes <- c(NA, NA, 16, NA, 17)
+    
+    p + guides(
+      colour = guide_legend(override.aes = list(linetype=lines, shape=shapes)),
+      shape = FALSE 
+    )
+  
   } else if (query_num == PERFECT_STRATEGY) {
     # Perfect knowledge trading strategy
     priceDat <- dat
@@ -104,16 +109,24 @@ plot_predefined <- function(dat, query_num) {
     # Combine them into 1 data frame
     repdat <- rbind(priceDat, profitDat)
 
-    # plot away!
-    ggplot(repdat, aes(x = Date)) + 
+    # to be able to merge legends
+    shapes <- c(16, 16, NA, NA)
+    lines <- c("blank", "blank", "solid", "solid")
+    
+    p <- ggplot(repdat, aes(x = Date)) + 
       geom_line(aes(y = Price, color = "Price")) +
       geom_point(aes(y = BestBuyPrice, color = "Best buy"), size = 5) +
       geom_point(aes(y = BestSellPrice, color = "Best sell"), size = 5) + 
       geom_line(aes(y = Profit, color = "Running Max Profit")) +
       facet_wrap(~ SeriesName, scales = "free_y", ncol = 1) + 
-      labs(x = "Date", y = "USD", title = "Perfect knowledge Trade Strategy", color = "", fill = "Indicators") + 
+      labs(x = "Date", y = "USD", title = "Perfect knowledge Trade Strategy", color = "", fill = "") + 
       theme(strip.text.x = element_blank())
-    
+      
+    p + guides(
+        colour = guide_legend(override.aes = list(linetype=lines, shape=shapes)),
+        shape = FALSE 
+      )
+      
   } else if (query_num == BUY_CHEAP_STRATEGY) {
     ggplot(dat, aes(x = Date, y = runningProfit)) +
       geom_line(aes(color = "Running profit/loss")) +
@@ -139,9 +152,12 @@ plot_predefined <- function(dat, query_num) {
     print(head(profitDat))
     # Combine them into 1 data frame
     repdat <- rbind(priceDat, profitDat)
-    print(head(repdat))
-    # plot away!
-    ggplot(repdat, aes(x = Date)) + 
+
+    # to be able to merge legends
+    shapes <- c(17, NA, NA, 17)
+    lines <- c("blank", "solid", "solid", "blank")
+    
+    p <- ggplot(repdat, aes(x = Date)) + 
       geom_line(aes(y = Price, color = "Price")) +
       geom_point(aes(y = BuySignal, color = "Buy", shape = "Buy"), size = 2.5) +
       geom_point(aes(y = SellSignal, color = "Sell", shape = "Sell"), size = 2.5) + 
@@ -150,6 +166,10 @@ plot_predefined <- function(dat, query_num) {
       labs(x = "Date", y = "USD", title = "Technical Trading Strategy", color = "", fill = "", shape = "Action") + 
       theme(strip.text.x = element_blank())
     
+    p + guides(
+      colour = guide_legend(override.aes = list(linetype=lines, shape=shapes)),
+      shape = FALSE 
+    )
   }
   else {
     print("undefined")
