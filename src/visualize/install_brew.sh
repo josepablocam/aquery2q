@@ -56,7 +56,7 @@ if [ -z $HAS_GCC48 ] && inquire "Can I install gcc48 for you?"
 fi
 
 # Install missing R version
-if [ -z $HAS_R_3 ] && inquire "Can I install latest R for you?"
+if [ -z $HAS_R3 ] && inquire "Can I install latest R for you?"
   then
     brew tap homebrew/science
     brew install r
