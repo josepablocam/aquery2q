@@ -8,7 +8,7 @@ source("aquery_code.R")
 source("plot.R")
 source("trading_strategies.R")
 # Load q server functionality
-source("../qserver.R", chdir = TRUE)
+source("qserver.R", chdir = TRUE)
 
 
 #SP 500 tickers

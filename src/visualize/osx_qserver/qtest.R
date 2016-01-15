@@ -1,5 +1,5 @@
 
-source("qserver.R")
+source("../R/qserver.R")
 h=open_connection()
 
 execute (h,"\\l sp.q")

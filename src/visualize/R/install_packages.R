@@ -1,5 +1,5 @@
 repos='http://cran.us.r-project.org'
-folder = "./Rdeps"
+folder = "../Rdeps"
 # ggplot2 dependencies, not downloading even though dependencies = TRUE
 install.packages("ggplot2", repos = repos, lib = folder, dependencies = TRUE)
 install.packages("digest", repos = repos, lib = folder, dependencies = TRUE)

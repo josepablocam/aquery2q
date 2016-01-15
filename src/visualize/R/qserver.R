@@ -1,5 +1,5 @@
 
-dyn.load("osx_qserver/qserver.so")
+dyn.load("../osx_qserver/qserver.so")
 
 open_connection <- function(host="localhost", port=5000, user=NULL) {
          parameters <- list(host, as.integer(port), user)
