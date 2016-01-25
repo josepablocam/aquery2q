@@ -400,6 +400,11 @@ void cg_colDotAccess(ExprNode *access) {
 
 void cg_caseExpr(ExprNode *expr) {
   CG_PRINT_DEBUG("generating code for case expression\n");
+  // need to store the next argument in order to handle
+  // case expressions with a simple recursive call
+  // we restore this argument at the end of the function call
+  ExprNode *sibling = expr->next_sibling;
+  expr->next_sibling = NULL;
   ExprNode *case_clause = expr->first_child;
   ExprNode *when_clauses = case_clause->next_sibling;
   ExprNode *else_clause = when_clauses->next_sibling;
@@ -459,6 +464,8 @@ void cg_caseExpr(ExprNode *expr) {
                        // vector conditionals
     print_code(")");
   }
+  // restore sibling argument
+  expr->next_sibling = sibling;
 }
 
 int aquery_to_q_builtin_ix(char *fun) {
