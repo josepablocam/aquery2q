@@ -1,0 +1,13 @@
+// moving variance for technology stocks
+WITH
+  variances(Date, ID, mv) AS (
+    SELECT Date, ID,
+      vars(12, ratios(1, EndOfDayPrice) - 1)
+      FROM prices
+      ASSUMING ASC Date
+      WHERE ID in ("HP", "ORCL", "YHOO")
+      AND Date >= '01/01/2015'
+      GROUP BY ID
+  )
+
+SELECT * FROM FLATTEN(variances)

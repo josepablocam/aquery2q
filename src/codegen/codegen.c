@@ -100,7 +100,7 @@ void init_aq_helpers() {
              "  w;\n"
              "  w iasc min each c?fw@'where each type[`]=(type each) each fw:(raze/) each w\n"
              "  ]\n"
-             " }\n"
+             " };\n"
              ".aq.swix:{[v;ix;w]\n"
              " m:meta v;\n"
              " // no point in reording if we don't have attributes or only have 1 clause\n"
@@ -112,14 +112,14 @@ void init_aq_helpers() {
              "   // otherwise reorder locally between aggregates according to safe principle\n"
              "   raze .aq.swix0[.aq.scbix m; ] each $[0<>first lix:distinct raze 0 1+/:(),ix;0,lix;lix] cut w\n"
              "  ]\n"
-             " }\n"
-             ".aq.negsublist:{[x;y] neg[x] sublist y}\n"
+             " };\n"
+             ".aq.negsublist:{[x;y] neg[x] sublist y};\n"
              ".aq.chkattr:{[x;t] any (.aq.cd where any each flip .aq.cd like/: "
-             "\"*\",/:string (),x) in exec c from meta t where not null a}\n"
+             "\"*\",/:string (),x) in exec c from meta t where not null a};\n"
              ".aq.acctgrps:{[p;g] @[p;key[p] ix;:;key[g] raze where each c ix:where any each "
-             "c:value[p]~/:\\:value g]}\n"
+             "c:value[p]~/:\\:value g]};\n"
              " //full outer join using (definition compliant with traditional sql semantics\n"
-             "k).aq.ejix:{(=x#z:0!z)x#y:0!y} // from ej\n"
+             "k).aq.ejix:{(=x#z:0!z)x#y:0!y}; // from ej\n"
              ".aq.foju:{\n"
              "  nix:.aq.ejix[x:(),x;y:0!y;z:0!z];\n"
              "  iz:raze nix; //indices in z for equijoin\n"
@@ -128,8 +128,8 @@ void init_aq_helpers() {
              "  my:select from y where not i in iy; // records in y not in equi join\n"
              "  mz:select from z where not i in iz; // records z not in equi join\n"
              "  ejr upsert/(my;mz) // add missing records\n"
-             "  }\n"
-             ".aq.nj:{[t1;t2;p] raze {?[x,'count[x]#enlist y;z;0b;()]}[t1; ;p] each t2}\n"
+             "  };\n"
+             ".aq.nj:{[t1;t2;p] raze {?[x,'count[x]#enlist y;z;0b;()]}[t1; ;p] each t2};\n"
         );
   print_code(".aq.hj:{[t1;t2;a1;a2;p]\n"
                  "  // argument preparation\n"
@@ -146,11 +146,11 @@ void init_aq_helpers() {
                  "  inner:b bw ba xcol key matches;\n"
                  "  outer:s value matches;\n"
                  "  $[hasneq;raze .aq.nj'[inner;outer;(count matches)#enlist p];raze {x cross y}'[inner;outer]]\n"
-                 " }\n");
+                 " };\n");
   print_code("// check if tables are keyed on join keys\n"
                  "// if so use ij instead of ej, much more peformant, same semantics in such a case\n"
-                 ".aq.iskey:{(count[k]>0)&min (k:keys x) in y}\n"
-                 ".aq.ej:{[k;t1;t2] $[(kt2:.aq.iskey[t1;k])|kt1:.aq.iskey[t2;k]; $[kt1;t1 ij t2;t2 ij t1]; ej[k;t1;t2]]}\n");
+                 ".aq.iskey:{(count[k]>0)&min (k:keys x) in y};\n"
+                 ".aq.ej:{[k;t1;t2] $[(kt2:.aq.iskey[t1;k])|kt1:.aq.iskey[t2;k]; $[kt1;t1 ij t2;t2 ij t1]; ej[k;t1;t2]]};\n");
 
    print_code("\n\n// Start of code\n");
 }
@@ -401,6 +401,11 @@ void cg_colDotAccess(ExprNode *access) {
 
 void cg_caseExpr(ExprNode *expr) {
   CG_PRINT_DEBUG("generating code for case expression\n");
+  // need to store the next argument in order to handle
+  // case expressions with a simple recursive call
+  // we restore this argument at the end of the function call
+  ExprNode *sibling = expr->next_sibling;
+  expr->next_sibling = NULL;
   ExprNode *case_clause = expr->first_child;
   ExprNode *when_clauses = case_clause->next_sibling;
   ExprNode *else_clause = when_clauses->next_sibling;
@@ -460,6 +465,8 @@ void cg_caseExpr(ExprNode *expr) {
                        // vector conditionals
     print_code(")");
   }
+  // restore sibling argument
+  expr->next_sibling = sibling;
 }
 
 int aquery_to_q_builtin_ix(char *fun) {
@@ -1754,9 +1761,9 @@ void cg_CreateTableFromQuery(CreateNode *create) {
 }
 
 void cg_CreateTableFromSchema(CreateNode *create) {
-  print_code(" `%s set ", create->name);
+  print_code("show `%s set ", create->name);
   cg_CreateSchema(create->src->load.schema);
-  print_code("\n");
+  print_code(";\n");
 }
 
 void cg_CreateSchema(SchemaNode *schema) {

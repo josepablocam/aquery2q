@@ -1,0 +1,31 @@
+TRADING STRATEGY DESCRIPTIONS
+
+ 
+Hindsight strategy
+---------------
+Parameters: ticker, window of dates, amount
+Perfect knowledge. Single trade. Buy at time t, sell at time t', t' >= t
+ 
+
+Buy cheap strategy
+-------------------
+Parameters: start date, returns threshold, holding period, amount to bet each time
+Every trading day:
+find set of stocks S with period returns < threshold (underperformers)
+if S not empty:
+  - invest amount uniformly amongst them (we have access to M at each opportunity)
+  - at end of y days, sell entire position (we always clear out, ie. each investment
+        date is a "new portfolio")
+The profits are reported for the given buy date.
+
+
+Technical trading strategy
+--------------------------
+Parameters: date range, amount of money for each bet, length of 2 moving averages, ticker
+For a given ticker, find places where moving averages cross within date range,
+each time that short term signal crosses above: buy, below: sell
+In each buy we use entire amount (i.e. amount is per buy opportunity),
+and we always close out at each sell date. The profits are reported 
+for the given buy date.
+
+ 

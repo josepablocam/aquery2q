@@ -673,6 +673,10 @@ IDListNode *collect_AllColsProj(LogicalQueryNode *node) {
 IDListNode *collect_AllColsGroupby(LogicalQueryNode *groupby) {
   OPTIM_PRINT_DEBUG("collecting all col refs in named expr for group by ");
   IDListNode *result = NULL;
+  if (groupby == NULL) {
+    return result;
+  }
+
   NamedExprNode *curr = groupby->params.namedexprs;
 
   while (curr != NULL) {
@@ -1614,6 +1618,10 @@ LogicalQueryNode *optim_sort_proj(LogicalQueryNode *proj,
 char *get_table_name(LogicalQueryNode *from) {
   if (from == NULL)
   {
+    return NULL;
+  }
+  else if (from->node_type == FULL_OUTER_JOIN_USING) {
+    // FOJU is not order-preserving
     return NULL;
   }
   else if (from->node_type == SIMPLE_TABLE)
