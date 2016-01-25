@@ -1,0 +1,28 @@
+// create a table in aquery and populate it
+CREATE TABLE t(c1 INT, c2 INT)
+
+INSERT INTO t VALUES(10, 20)
+INSERT INTO t VALUES(100, 200)
+INSERT INTO t VALUES(1000, 2000)
+
+// write out this table to a file using comma to separate values
+SELECT * FROM t
+INTO OUTFILE "./test_file.csv"
+FIELDS TERMINATED BY ","
+
+// create a new table and populate with data from disk
+CREATE TABLE other(c1 INT, c2 INT)
+
+LOAD DATA INFILE "./test_file.csv"
+INTO TABLE other
+FIELDS TERMINATED BY ","
+
+// also insert data from existing table
+INSERT INTO other 
+  SELECT * FROM t
+
+// show the table (you should see the values repeated twice)
+SHOW SELECT * FROM other
+
+
+
