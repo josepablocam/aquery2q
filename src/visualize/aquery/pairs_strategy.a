@@ -1,0 +1,130 @@
+// Parameters
+FUNCTION ticker() {"AAPL"}
+// Ticker to buy in strategy (sell other)
+FUNCTION buyTicker() {"HP"}
+// Position size ($) for both sides
+FUNCTION amt() {100000}
+FUNCTION startDate() {'01/01/2001'}
+// holding period for trade
+FUNCTION holdPeriod() {31}
+// minimum correlation between pair
+FUNCTION minCorr(){0.1}
+// window to determine minimally correlated (before start of strategy)
+FUNCTION lenBefore(){31*6}
+// window to determine pairs that have become decorrelated (after start of strategy)
+FUNCTION lenAfter(){31}
+
+// Query 0: Find relevant correlation information
+WITH
+  // get relevant prices and returns for period of strategy and count observations
+  // return a nested arrable for easy crossing
+  grouped(Date, ID, Price, Returns, NumObs) AS (
+    SELECT Date, ID, EndOfDayPrice, ratios(1, EndOfDayPrice) - 1, count(Date)
+    FROM prices
+    ASSUMING ASC Date
+    WHERE Date >= startDate() - lenBefore()
+    AND Date < startDate() + lenAfter()
+    GROUP BY ID
+  )
+  // select the data for the target ticker
+  target(Date, ID, Price, Returns, NumObs) AS (
+    SELECT *
+    FROM grouped 
+    WHERE ID=ticker()
+    )
+  // cross all grouped with target stock and rename columns
+  crossed(Date, ID1, ID2, Price1, Price2, Returns1, Returns2, NumObs1, NumObs2) AS (
+    SELECT o.Date, o.ID, t.ID, o.Price, t.Price,
+    o.Returns, t.Returns, o.NumObs, t.NumObs
+    FROM grouped o, target t
+  )
+  // remove self-pairs and mismatched lengths
+  pairs(Date, ID1, ID2, Price1, Price2, Returns1, Returns2) AS (
+  SELECT Date, ID1, ID2, Price1, Price2, Returns1, Returns2
+  FROM crossed
+  WHERE ID1 != ID2
+  AND NumObs1 = NumObs2
+  )
+  // Correlation in period prior to start of strategy
+  before(ID1, ID2, preCorr) AS (
+    SELECT
+    ID1, ID2,
+    cor(Returns1, Returns2)
+    FROM FLATTEN(pairs)
+    WHERE Date >= startDate() - lenBefore()
+    AND Date <= startDate()
+    AND Returns1 IS NOT NULL
+    AND Returns2 IS NOT NULL
+    GROUP BY ID1, ID2
+  )
+  // Correlation in observation period after start of strategy
+  after(ID1, ID2, postCorr) AS (
+    SELECT
+    ID1, ID2,
+    cor(Returns1, Returns2)
+    FROM FLATTEN(pairs)
+    WHERE Date >= startDate()
+    AND Date <= startDate() + lenAfter()
+    AND Returns1 IS NOT NULL
+    AND Returns2 IS NOT NULL
+    GROUP BY ID1, ID2
+  )
+  // find opportunities based on correlation parameters
+  // User can now select from these for potentially interesting trades
+  SELECT 
+  ID1, ID2, preCorr, postCorr
+  FROM
+  before INNER JOIN after
+  USING (ID1, ID2)
+  WHERE preCorr >= minCorr()
+  AND postCorr <= minCorr()
+
+
+// Query 1: Visually evaluate prices for relevant tickers for trade
+// Display prices for pair of tickers
+SELECT 
+Date, 
+ID, EndOfDayPrice as Price,
+ID=buyTicker() as buy
+FROM prices 
+WHERE ID in (ticker(), buyTicker())
+AND Date >= startDate() - lenBefore()
+AND Date <= startDate() + lenAfter()
+
+
+// Query 2: Actually run the trade strategy
+// Run the trade
+WITH 
+  // what entry prices and number of shares
+  // can you afford on the date of entry into the trade
+  trade(Date, ID, Price) AS (
+    SELECT 
+    Date, ID, EndOfDayPrice
+    FROM prices 
+    WHERE ID in (ticker(), buyTicker()) AND
+    Date >= startDate() + lenAfter()
+    AND Date <= startDate() + lenAfter() + holdPeriod()
+    )
+  // long position: buy
+  longPosition(Date, longProfit) AS (
+    SELECT 
+    Date, (Price - first(Price)) * amt() / first(Price)
+    FROM trade 
+    WHERE ID = buyTicker()
+  )  
+  // short position: sell
+  shortPosition(Date, shortProfit) AS (
+    SELECT
+    Date, (first(Price) - Price) * amt() / first(Price)
+    FROM trade
+    WHERE ID = ticker()
+  )
+SELECT 
+Date, longProfit, shortProfit,
+longProfit + shortProfit as totalProfit
+FROM
+longPosition INNER JOIN shortPosition USING Date
+
+
+
+  
