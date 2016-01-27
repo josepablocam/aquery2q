@@ -172,6 +172,23 @@ shinyServer(function(input, output, session) {
     }
   })
   
+  # User custom plotting options, only possible when not using a predefined query
+  output$user_plot_options <- renderUI({
+    if(which_predefined_query() == -1) {
+      # Check box if plot each with different geom
+      single_geom <- checkboxInput("single_geom", "Plot as single geom", value = TRUE)
+      
+      # geom choices defined before
+      
+      # Using column values to group in plotting
+      groups <- checkboxGroupInput("groupcols", label = h4("Group Columns"), 
+                                   choices = list("Choice 1" = 1, "Choice 2" = 2, "Choice 3" = 3),
+                                   selected = 1)
+      list(single_geom, uiOutput("geom_choices"), groups)
+    }
+  })
+  
+  
   # Ticker GUI
   ticker_gui <- selectInput("ticker", "Ticker for strategy", choices = sp_tickers, selected = "AAPL")
   ticker2_gui <- selectInput("ticker2", "Buy Ticker for strategy", choices = sp_tickers, selected = "HP")
@@ -307,8 +324,18 @@ output$save_plot <- downloadHandler(
     }
     ggsave(file, plot = plotInput(), device = device)
   })
+
+
+# Download code
+output$download_code <- downloadHandler(
+  filename = "user_code.a",
+  content = function(file) {
+    write_code(input$code, file)
+  }
+)
+
+# END OF SERVER CODE
  })
 
 
-                  
 

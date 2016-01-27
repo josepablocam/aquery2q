@@ -19,17 +19,23 @@ get_code <- function(id) {
   }
 }
 
-compile <- function(code) {
-  # put code into a temporary file
-  file.create(SOURCE_AQUERY_PATH)
-  src_file <- file(SOURCE_AQUERY_PATH, open = "wr")
+# write code to a file
+write_code <- function(code, filename) {
+  file.create(filename)
+  src_file <- file(filename, open = "wr")
   writeLines(code, con = src_file)
   close(src_file)
+}
+compile <- function(code) {
+  # put code into a temporary file
+  write_code(code, SOURCE_AQUERY_PATH)
   system2("a2q", args = c("-c", "-a 1", "-o", COMPILED_AQUERY_PATH, SOURCE_AQUERY_PATH), stdout = TRUE)
 }
 
 compilation_ok <- function(x) { (length(x) == 0) || is.na(attr(x, "status")) }
 compilation_error <- function(x) { paste(attr(x, "status")[1:2], collapse ="\n") }
+
+
 
 
 
