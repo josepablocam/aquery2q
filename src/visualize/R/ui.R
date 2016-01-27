@@ -25,14 +25,16 @@ shinyUI(fluidPage(
                                  "Crossing Moving Averages" = 2,
                                  "Trading Strategy: Perfect Knowledge" = 3,
                                  "Trading Strategy: Buy Cheap" = 4,
-                                 "Trading Strategy: Crossing Moving Averages" = 5),
+                                 "Trading Strategy: Crossing Moving Averages" = 5,
+                                 "Trading Strategy: Pairs Trading" = 6),
                   selected = -1
       ),
       aceEditor("code", mode = 'aquery', value = get_code(-1)),
       actionButton("reset_query", "Reset Code"),
       actionButton("run_query", "Run Code"),
         
-      # Widget-based parameters   
+      # Widget-based parameters
+      uiOutput("pairs_trading_gui"),
       uiOutput("use_widgets"),
       uiOutput("trading_strategy_params"),
 

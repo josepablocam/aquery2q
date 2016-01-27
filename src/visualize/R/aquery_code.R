@@ -2,8 +2,8 @@
 # visual interface
 AQUERY_DIR = "../aquery/"
 PREDEF_FILE_NAMES <- c(NA, "moving_variance.a", "correlation_pairs.a", "moving_avgs.a", "hindsight_strategy.a",
-               "buy_cheap_strategy.a", "technical_strategy.a")
-names(PREDEF_FILE_NAMES) <- -1:5
+               "buy_cheap_strategy.a", "technical_strategy.a", "pairs_strategy.a")
+names(PREDEF_FILE_NAMES) <- -1:6
 SOURCE_AQUERY_PATH <- paste0(AQUERY_DIR, "current.a", collapse = "/")
 COMPILED_AQUERY_PATH <- paste0(AQUERY_DIR, "current.q", collapse = "/")
 

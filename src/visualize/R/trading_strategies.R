@@ -45,6 +45,24 @@ technical_params <- function(ticker, amt, dateRange, windowsRange) {
   parameters
 }
 
+PAIRS_STRATEGY <- 6
+pairs_params <- function(ticker, buyTicker, amt, startDate, holdPeriod, minCorr, lenBefore, lenAfter) {
+ ticker <- format_sym(ticker)
+ buyTicker <- format_sym(buyTicker)
+ amt <- format_float(amt)
+ startDate <- format_date(startDate)
+ holdPeriod <- format_int(holdPeriod)
+ minCorr <- format_float(minCorr)
+ lenBefore <- format_int(lenBefore)
+ lenAfter <- format_int(lenAfter)
+ parameters <- sprintf("ticker:{%s}; buyTicker:{%s}; amt:{%s};
+    startDate:{%s}; holdPeriod:{%s}; minCorr:{%s}; lenBefore:{%s};
+    lenAfter:{%s};", ticker, buyTicker, amt, startDate, holdPeriod,
+                       minCorr, lenBefore, lenAfter)
+ 
+ parameters
+}
+  
   
   
   
