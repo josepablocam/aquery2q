@@ -64,7 +64,7 @@ k).aq.ejix:{(=x#z:0!z)x#y:0!y}; // from ej
 
 // Start of code
 // create table statement
- `prices set ([]Open:"f"$(); High:"f"$(); Low:"f"$(); Close:"f"$(); Volume:"f"$(); EndOfDayPrice:"f"$(); ID:"s"$(); Date:"d"$())
+show `prices set ([]Open:"f"$(); High:"f"$(); Low:"f"$(); Close:"f"$(); Volume:"f"$(); EndOfDayPrice:"f"$(); ID:"s"$(); Date:"d"$());
 // load data statement
 {
  `prices set prices upsert (upper exec t from meta prices; enlist ",") 0:hsym `$"./data/sp500_eod_complete_data.csv"
