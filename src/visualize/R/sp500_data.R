@@ -1,5 +1,5 @@
 # Collect data on SP500 constituents
-
+.libPaths(c("../Rdeps", .libPaths()))
 library(quantmod)
 library(plyr)
 START_DATE <- as.Date("2000-01-01")
@@ -33,7 +33,7 @@ dat <- lapply(ls(sp500), function(x) {
 })
 
 dat <- do.call(rbind, dat)
-write.csv(dat, file = "../data/sp500_eod.csv", row.names = FALSE)
+#write.csv(dat, file = "../data/sp500_eod.csv", row.names = FALSE)
 
 
 # We want tickers that have all the dates (complete time series)
