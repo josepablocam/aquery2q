@@ -19,7 +19,7 @@ WITH
   // get relevant prices and returns for period of strategy and count observations
   // return a nested arrable for easy crossing
   grouped(Date, ID, Price, Returns, NumObs) AS (
-    SELECT Date, ID, EndOfDayPrice, ratios(1, EndOfDayPrice) - 1, count(Date)
+    SELECT Date, ID, Adjusted, ratios(1, Adjusted) - 1, count(Date)
     FROM prices
     ASSUMING ASC Date
     WHERE Date >= startDate() - lenBefore()
@@ -84,7 +84,7 @@ WITH
 // Display prices for pair of tickers
 SELECT 
 Date, 
-ID, EndOfDayPrice as Price,
+ID, Adjusted as Price,
 ID=buyTicker() as buy
 FROM prices 
 WHERE ID in (ticker(), buyTicker())
@@ -99,7 +99,7 @@ WITH
   // can you afford on the date of entry into the trade
   trade(Date, ID, Price) AS (
     SELECT 
-    Date, ID, EndOfDayPrice
+    Date, ID, Adjusted
     FROM prices 
     WHERE ID in (ticker(), buyTicker()) AND
     Date >= startDate() + lenAfter()

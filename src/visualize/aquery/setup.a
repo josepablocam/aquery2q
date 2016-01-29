@@ -4,7 +4,7 @@ CREATE TABLE prices (
   Low           FLOAT,
   Close         FLOAT,
   Volume        FLOAT,
-  EndOfDayPrice FLOAT,
+  Adjusted      FLOAT,
   ID            STRING,
   Date          DATE
 )
