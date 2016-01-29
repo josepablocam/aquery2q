@@ -29,7 +29,8 @@ write_code <- function(code, filename) {
 compile <- function(code) {
   # put code into a temporary file
   write_code(code, SOURCE_AQUERY_PATH)
-  system2("a2q", args = c("-c", "-a 1", "-o", COMPILED_AQUERY_PATH, SOURCE_AQUERY_PATH), stdout = TRUE)
+  A2Q <- Sys.getenv("A2Q")
+  system2(A2Q, args = c("-c", "-a 1", "-o", COMPILED_AQUERY_PATH, SOURCE_AQUERY_PATH), stdout = TRUE)
 }
 
 compilation_ok <- function(x) { (length(x) == 0) || is.na(attr(x, "status")) }
