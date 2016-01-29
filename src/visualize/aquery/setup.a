@@ -12,10 +12,6 @@ CREATE TABLE prices (
 LOAD DATA INFILE "./data/sp500_eod_complete_data.csv" INTO TABLE prices
 FIELDS TERMINATED BY  ","
 
-// Moving variance calculation for technology stocks
-// AQuery vars built-in currently on another branch of git, but already
-// implemented
-<q>vars:{mavg[x;y*y]-m*m:mavg[x;y:"f"$y]}</q>
 // Change folder to R/, since we want process to be running relative
 // to the same folder as shiny app
 <q>system "cd ./R/"</q>
