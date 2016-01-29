@@ -12,9 +12,9 @@ WITH
   mavgPrices(Date, Price, long_avg, short_avg) AS (
     SELECT 
     Date, 
-    EndOfDayPrice,
-    avgs(long_window(),  EndOfDayPrice),
-    avgs(short_window(),  EndOfDayPrice)
+    Adjusted,
+    avgs(long_window(),  Adjusted),
+    avgs(short_window(),  Adjusted)
     FROM prices
     ASSUMING ASC Date
     WHERE ID = ticker()

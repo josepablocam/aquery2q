@@ -1,6 +1,5 @@
 # update library path to include dependencies folder 
 # necessary for systems without packages by default (.e.g CIMS machines)
-.libPaths(c('./Rdeps',.libPaths()))
 library(shiny)
 library(shinyAce)
 source('aquery_code.R')
@@ -25,26 +24,23 @@ shinyUI(fluidPage(
                                  "Crossing Moving Averages" = 2,
                                  "Trading Strategy: Perfect Knowledge" = 3,
                                  "Trading Strategy: Buy Cheap" = 4,
-                                 "Trading Strategy: Crossing Moving Averages" = 5),
+                                 "Trading Strategy: Crossing Moving Averages" = 5,
+                                 "Trading Strategy: Pairs Trading" = 6),
                   selected = -1
       ),
       aceEditor("code", mode = 'aquery', value = get_code(-1)),
       actionButton("reset_query", "Reset Code"),
       actionButton("run_query", "Run Code"),
+      downloadButton("download_code", label = "Download code"),
+      
         
-      # Widget-based parameters   
+      # Widget-based parameters
+      uiOutput("pairs_trading_gui"),
       uiOutput("use_widgets"),
       uiOutput("trading_strategy_params"),
-
-      # Check box if plot each with different geom
-      checkboxInput("single_geom", "Plot as single geom", value = TRUE),
       
-      uiOutput("geom_choices"),
-      
-      # Using column values to group in plotting
-      checkboxGroupInput("groupcols", label = h4("Group Columns"), 
-                         choices = list("Choice 1" = 1, "Choice 2" = 2, "Choice 3" = 3),
-                         selected = 1),
+      # Custom plotting can (should) only be done when not a predefined query
+      uiOutput("user_plot_options"), 
       # Connection information
       textInput("host", "Q connection hostname:", "localhost"),
       numericInput("port", "Q connection port number: ", 7089)
@@ -56,7 +52,7 @@ shinyUI(fluidPage(
     # Show a plot of the generated distribution
     mainPanel(
       plotOutput("plot"),
-      downloadButton("save_plot"),
+      downloadButton("save_plot", label = "Download plot"),
       tableOutput("data")
     )
   )

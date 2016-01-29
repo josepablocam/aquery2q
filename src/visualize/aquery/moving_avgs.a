@@ -3,9 +3,9 @@ WITH
   mavgPrices(Date, Price, m21, m5) AS (
     SELECT 
     Date, 
-    EndOfDayPrice,
-    avgs(21,  EndOfDayPrice),
-    avgs(5,  EndOfDayPrice)
+    Adjusted,
+    avgs(21,  Adjusted),
+    avgs(5,  Adjusted)
     FROM prices
     ASSUMING ASC Date
     WHERE ID="HP"

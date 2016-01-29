@@ -2,7 +2,7 @@
 WITH
   variances(Date, ID, mv) AS (
     SELECT Date, ID,
-      vars(12, ratios(1, EndOfDayPrice) - 1)
+      vars(12, ratios(1, Adjusted) - 1)
       FROM prices
       ASSUMING ASC Date
       WHERE ID in ("HP", "ORCL", "YHOO")

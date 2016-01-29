@@ -18,33 +18,28 @@ and R 3.* version. If you do not have these, or are unsure, you can simply run
 This script checks for these 2 dependencies and installs using homebrew (http://brew.sh/) 
 (prompting the user prior to any installs).
 If you use a different package manager, or would like to install from source, that
-is your responsibility.
+is your responsibility (see instructions for LINUX, but skip (1) and (2)).
 
 
 LINUX
 -----
-You will need to run
-`make`
-so as to recompile all necessary pieces. This will also download all R packages
-necessary for your system. Note that if you don't have gcc48 and R 3.* you will
-need to install these before running make. You will also need to replace
-the q-R interface related files before running `make`. 
-See http://code.kx.com/wiki/Cookbook/IntegratingWithR for more information.
-
+1 - Replaces the q-R interface related files as needed for your system
+    http://code.kx.com/wiki/Cookbook/IntegratingWithR
+2 - Download q (replace folder in src/visualize/q)
+    https://kx.com/software-download.php
+3 - Download gcc-4.8 (symbolically link or rename as gcc48)
+4 - Download R 3.*
+5 - Make sure the both gcc48 and R are in your PATH environment variable
+6 - Call `make` to compile everything needed and download R dependencies
 
 WINDOWS
 -------
 Sorry, this is not currently available for windows.
 
 
-
-
-
-Once you have everything set up, you can call a simple proof of concept
-which compiles a trivial query (poc.a) and serves the browser application
-by calling
-`./run_poc.sh my_port` where you replace the my_port with the port number you 
-would like to assign to the q program
+Once you have everything set up, you can run the visualization app by calling
+./run_viz.sh <port-number>, where <port-number> is an open port used to a background
+q process (which executes AQuery code and communicates with R).
 
 
 

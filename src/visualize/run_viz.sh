@@ -6,7 +6,7 @@ if [ ! $# -eq 1 ]
 fi
 
 # AQuery compiler
-A2Q=../a2q
+base_dir=$(pwd); cd ../; export A2Q=$(pwd)/a2q; cd $base_dir
 # Port for q process
 PORT=$1
 AQUERYDIR=./aquery/

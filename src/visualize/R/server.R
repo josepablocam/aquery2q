@@ -1,6 +1,5 @@
 # update library path to include dependencies folder 
 # necessary for systems without packages by default (.e.g CIMS machines)
-.libPaths(c('./Rdeps',.libPaths()))
 library(shiny)
 library(shinyAce)
 library(ggplot2)
@@ -49,7 +48,9 @@ shinyServer(function(input, output, session) {
         buy_cheap_params(input$amt, input$startDate, input$threshold, input$period)
       }else if (id == TECHNICAL_STRATEGY) {
         technical_params(input$ticker, input$amt, input$date_range, input$windows_range)
-      }else {
+      } else if(id == PAIRS_STRATEGY) {
+        pairs_params(input$ticker, input$ticker2, input$amt, input$startDate, input$period, input$threshold, input$len_before, input$len_after)
+      } else {
         print("undefined query with parameters")
       }
     }
@@ -66,6 +67,19 @@ shinyServer(function(input, output, session) {
     }
   })
   
+  # Most queries just require that we run 1 command .aq.q0[]
+  # However, other strategies, like pairs correlation
+  # are more involved and thus have more interesting components that the
+  # user might want to run to tweak their strategy
+  get_query_run_command <- reactive({
+    if(input$predefined_queries != PAIRS_STRATEGY) {
+        ".aq.q0[]"
+    } else {
+     # figure out the right query to run and visualize 
+      paste0(".aq.q", input$pairs_trading_component, "[]")
+    }
+  })
+  
   
   aqQuery <- reactive({
     compiled_code()
@@ -78,7 +92,9 @@ shinyServer(function(input, output, session) {
       command <- paste(command, params_command)
     }
     
-    paste(command, ".aq.q0[]")
+    query_run_command <- get_query_run_command()
+    
+    paste(command, query_run_command)
   })
   
   # Update code displayed
@@ -155,8 +171,26 @@ shinyServer(function(input, output, session) {
     }
   })
   
+  # User custom plotting options, only possible when not using a predefined query
+  output$user_plot_options <- renderUI({
+    if(which_predefined_query() == -1) {
+      # Check box if plot each with different geom
+      single_geom <- checkboxInput("single_geom", "Plot as single geom", value = TRUE)
+      
+      # geom choices defined before
+      
+      # Using column values to group in plotting
+      groups <- checkboxGroupInput("groupcols", label = h4("Group Columns"), 
+                                   choices = list("Choice 1" = 1, "Choice 2" = 2, "Choice 3" = 3),
+                                   selected = 1)
+      list(single_geom, uiOutput("geom_choices"), groups)
+    }
+  })
+  
+  
   # Ticker GUI
-  ticker_gui <- selectInput("ticker", "Ticker for strategy", choices = sp_tickers, selected = "A")
+  ticker_gui <- selectInput("ticker", "Ticker for strategy", choices = sp_tickers, selected = "AAPL")
+  ticker2_gui <- selectInput("ticker2", "Buy Ticker for strategy", choices = sp_tickers, selected = "HP")
   
   
   # Create parameter menus for pre-defined trading strategies
@@ -183,7 +217,16 @@ shinyServer(function(input, output, session) {
         date_range_gui <- dateRangeInput("date_range", "Date Range for Strategy", min = MIN_DATE, max = MAX_DATE, start = MIN_DATE, end = MAX_DATE)
         windows_gui <- sliderInput("windows_range", label = "Moving average windows", min = 1, max = 180, value = c(5, 21))
         gui <- list(ticker_gui, date_range_gui, amt_gui, windows_gui)
-        }else {
+      } else if (input$predefined_queries == PAIRS_STRATEGY) {
+        amt_gui <- sliderInput("amt", "Amount Invested Daily", min = 100e3, max = 1e6, step = 100e3, value = 100e3)
+        # offset so that we can account for possible historical observation period
+        date_gui <- dateInput("startDate", "Start date", min = MIN_DATE + 366, max = MAX_DATE, value = MIN_DATE + 366)
+        period_gui <- sliderInput("period", "Holding Period (days)", min = 1, max = 100, step = 1, value = 31)
+        threshold_gui <- sliderInput("threshold", "Correlation threshold (minimum)", min = 0.0, max = 1.0, value = 0.1)
+        len_before_gui <- sliderInput("len_before", "Period for historical correlation (days)", min = 1, max = 365, step = 1, value = 31 * 6)
+        len_after_gui <- sliderInput("len_after", "Period for recent correlation (days)", min = 1, max = 365, step = 1, value = 31)
+        gui <- list(ticker_gui, ticker2_gui, amt_gui, date_gui, period_gui, threshold_gui, len_before_gui, len_after_gui)
+      } else {
         print("Undefined parameter gui")
       }
       
@@ -192,6 +235,22 @@ shinyServer(function(input, output, session) {
       }
     }
   })
+  
+  
+  # We have multiple query components for pair trading, as it is the most involved strategy
+  # we allow the user to visualize each of these separately by picking from a drop down menu
+  output$pairs_trading_gui <- renderUI({
+    if (input$predefined_queries == PAIRS_STRATEGY) {
+            selectInput("pairs_trading_component", label = h4("Strategy Component"), 
+              choices = list("Explore correlations" = 0, "Visualize pairs' prices" = 1, "Run trading strategy" = 2), 
+              selected = 0)
+    }
+  })
+  
+  # wait on button
+  which_pairs_component <- eventReactive(input$run_query, {
+    input$pairs_trading_component
+  }, ignoreNULL = FALSE)
   
   # wait on button
   which_predefined_query <- eventReactive(input$run_query, {
@@ -205,7 +264,12 @@ shinyServer(function(input, output, session) {
     dat <- run_query()
     
     if(which_predefined_query() != -1 && input$run_query > 0) {
-      return(plot_predefined(dat, which_predefined_query()))
+      if (which_predefined_query() != PAIRS_STRATEGY) {
+        return(plot_predefined(dat, which_predefined_query()))
+      } else {
+        # also send along info about which compoennt to plot
+        return(plot_predefined(dat, which_predefined_query(), component = which_pairs_component()))
+      }
     }
     
     cols <- names(dat)
@@ -259,8 +323,18 @@ output$save_plot <- downloadHandler(
     }
     ggsave(file, plot = plotInput(), device = device)
   })
+
+
+# Download code
+output$download_code <- downloadHandler(
+  filename = "user_code.a",
+  content = function(file) {
+    write_code(input$code, file)
+  }
+)
+
+# END OF SERVER CODE
  })
 
 
-                  
 

@@ -8,9 +8,9 @@ FUNCTION amt() {100000}
 WITH
   runningProfit(Date, Price, RunningMinPrice, Profit) AS (
     SELECT Date, 
-    EndOfDayPrice,
-    mins(EndOfDayPrice), 
-    (EndOfDayPrice - mins(EndOfDayPrice)) * (amt / mins(EndOfDayPrice))
+    Adjusted,
+    mins(Adjusted), 
+    (Adjusted - mins(Adjusted)) * (amt / mins(Adjusted))
     FROM prices
     ASSUMING ASC Date
     WHERE ID = ticker()

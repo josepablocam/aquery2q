@@ -62,8 +62,36 @@ plot_all_series <- function(p, cols, geom_names, plot_details) {
 }
 
 
+# Component specific plotting for pairs trading strategy
+plot_pairs_strategy <- function(dat, component) {
+  if(component == 0) {
+    # correlations
+    plot <- ggplot(dat, aes(x = reorder(ID1, postCorr),  y = preCorr)) + geom_point(aes(color = "Historical Correlation")) +
+                     geom_point(aes(y = postCorr, color = "Recent Correlation")) +
+            labs(x = "Pairs", y = "Correlation", color = "Correlation measure") +
+            theme(axis.text.x = element_text(angle = 90))
+    plot 
+  } else if (component == 1) {
+    # prices
+    plot <- ggplot(dat, aes(x = Date, y = Price)) + geom_line(aes(color = ID), show_guide = FALSE) +
+            facet_wrap(~ID, scales = "free_y", nrow = 2) + 
+            labs(x = "Date", y = "Price (USD)")
+    plot
+  } else {
+   # profits
+    plot <- ggplot(dat, aes(x = Date)) +
+      geom_line(aes(y = longProfit, color = "long")) +
+      geom_line(aes(y = shortProfit, color = "short")) +
+      geom_line(aes(y = totalProfit, color = "net")) + 
+      labs(x = "Exit Date", y = "Profit Assuming Given Exit Date (USD)", color = "Position", title = "Pairs Trading Strategy")
+    plot
+  }
+}
+
+
+
 # Plotting predefined queries
-plot_predefined <- function(dat, query_num) {
+plot_predefined <- function(dat, query_num, ...) {
   if(query_num == 0) {
     # Moving variance query
     ggplot(dat, aes(x = Date, y = mv, group = ID)) +
@@ -119,7 +147,7 @@ plot_predefined <- function(dat, query_num) {
       geom_point(aes(y = BestSellPrice, color = "Best sell"), size = 5) + 
       geom_line(aes(y = Profit, color = "Running Max Profit")) +
       facet_wrap(~ SeriesName, scales = "free_y", ncol = 1) + 
-      labs(x = "Date", y = "USD", title = "Perfect knowledge Trade Strategy", color = "", fill = "") + 
+      labs(x = "Date", y = "USD", title = "Perfect Knowledge Trade Strategy", color = "", fill = "") + 
       theme(strip.text.x = element_blank())
       
     p + guides(
@@ -130,7 +158,7 @@ plot_predefined <- function(dat, query_num) {
   } else if (query_num == BUY_CHEAP_STRATEGY) {
     ggplot(dat, aes(x = Date, y = runningProfit)) +
       geom_line(aes(color = "Running profit/loss")) +
-      labs(x = "Investment Date", y = "USD", title = "'Buy cheap' Trading Strategy", color = "")
+      labs(x = "Investment Date", y = "USD", title = "'Buy Cheap' Trading Strategy", color = "")
   }
   else if (query_num == TECHNICAL_STRATEGY) {
     # Perfect knowledge trading strategy
@@ -140,8 +168,7 @@ plot_predefined <- function(dat, query_num) {
     priceDat$SeriesName <- "Price"
     priceDat$BuySignal <- ifelse(priceDat$Signal == "Buy", priceDat$Price, NA)
     priceDat$SellSignal <- ifelse(priceDat$Signal == "Sell", priceDat$Price, NA)
-    print(head(priceDat))
-    
+
     # Profit Data
     profitDat <- dat
     profitDat$Price <- NA
@@ -149,7 +176,7 @@ plot_predefined <- function(dat, query_num) {
     profitDat$BuySignal <- NA
     profitDat$SellSignal <- NA
     profitDat$SeriesName <- "Profit"
-    print(head(profitDat))
+
     # Combine them into 1 data frame
     repdat <- rbind(priceDat, profitDat)
 
@@ -170,10 +197,17 @@ plot_predefined <- function(dat, query_num) {
       colour = guide_legend(override.aes = list(linetype=lines, shape=shapes)),
       shape = FALSE 
     )
+  } else if (query_num == PAIRS_STRATEGY) {
+    component <- list(...)$component
+    plot_pairs_strategy(dat, component)
   }
   else {
     print("undefined")
   }
 }
+
+
+
+
 
 

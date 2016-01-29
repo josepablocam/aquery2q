@@ -1,4 +1,4 @@
-repos='http://cran.us.r-project.org'
+repos=c("http://cran.r-project.org" , "https://cran.rstudio.com/")
 folder = "../Rdeps"
 # ggplot2 dependencies, not downloading even though dependencies = TRUE
 install.packages("ggplot2", repos = repos, lib = folder, dependencies = TRUE)
@@ -29,3 +29,11 @@ install.packages("R6",  repos = repos, lib = folder, dependencies = TRUE)
 install.packages("shinyAce", repos = repos, lib = folder, dependencies = TRUE)
 
 install.packages("Rcpp",  repos = repos, lib = folder, dependencies = TRUE)
+
+
+# install quantmod
+install.packages("quantmod", repos = repos, lib = folder, dependencies = TRUE)
+
+
+
+

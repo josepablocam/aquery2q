@@ -6,7 +6,7 @@ corrTickers10:neg[10]?exec distinct ID from prices
 
 WITH
   stocksGrouped(ID, Ret) AS (
-    SELECT ID, ratios(1, EndOfDayPrice) - 1
+    SELECT ID, ratios(1, Adjusted) - 1
     FROM prices
     ASSUMING ASC ID, ASC Date
     WHERE ID in corrTickers10 AND

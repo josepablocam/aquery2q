@@ -8,9 +8,9 @@ FUNCTION startDate() {'01/01/2000'}
 WITH
   // calculate returns over period and sell price by shifting back future prices
   returns(Date, ID, BuyPrice, SellPrice, Ret) AS (
-    SELECT Date, ID, EndOfDayPrice, 
-    next(holding_period(), EndOfDayPrice), 
-    ratios(holding_period(), EndOfDayPrice)-1
+    SELECT Date, ID, Adjusted, 
+    next(holding_period(), Adjusted), 
+    ratios(holding_period(), Adjusted)-1
     FROM prices ASSUMING ASC Date 
     GROUP BY ID
   )

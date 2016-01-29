@@ -53,6 +53,8 @@ if [ -z $HAS_GCC48 ] && inquire "Can I install gcc48 for you?"
   then
     brew tap homebrew/versions
     brew install gcc48
+    # symlink brew name to the format followed in cims
+    ln -s /usr/local/bin/gcc-4.8 /usr/local/bin/gcc48
 fi
 
 # Install missing R version
