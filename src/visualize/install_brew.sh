@@ -51,6 +51,9 @@ command -v brew >/dev/null 2>&1 || {
 # Install missing gcc48 compiler
 if [ -z $HAS_GCC48 ] && inquire "Can I install gcc48 for you?"
   then
+    # ran into pkg-config issues, so adding as fix
+    brew install pkg-config
+    # c
     brew tap homebrew/versions
     brew install gcc48
     # symlink brew name to the format followed in cims
@@ -60,9 +63,16 @@ fi
 # Install missing R version
 if [ -z $HAS_R3 ] && inquire "Can I install latest R for you?"
   then
+    # xquartz needed for R (and user might not have xcode)
+    brew tap Caskroom/cask
+    brew install Caskroom/cask/xquartz
+    # actual R installation
     brew tap homebrew/science
     brew install r
 fi
+
+# Make sure the path has the necessary paths
+export PATH=$PATH:/usr/local/bin/
 
 
 

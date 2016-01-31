@@ -11,6 +11,9 @@ INSTRUCTIONS:
 
 MAC OS-X
 ---------
+Our installation uses homebrew, so it might be best to run `brew update` prior to
+running anything here, so as to guarantee you have all the latest formulas.
+
 All binaries necessary have been included here. You only need to have gcc48
 and R 3.* version. If you do not have these, or are unsure, you can simply run
 ./install_brew.sh
