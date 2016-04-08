@@ -41,7 +41,7 @@
   // shuffle data
   .aq.par.master.shuffle0[ ;workers; ;write] ./: flip (fs;ps);
   // clean up
-  .aq.par.runAsynch[ps;{delete .aq.par.temp from `.}];
+  .aq.par.runAsynch[ps;({delete temp from `.aq.par};::)];
   };
  
 // using peach(requires that the data exist in ALL processes beforehand)
@@ -55,23 +55,38 @@
   .aq.par.runSynch[enlist dest;(write;data)];
   }  
   
-  
-// Edge extension
-.aq.par.worker.prevProcRequest:{[f;ps;def]
-  self:.aq.par.worker.getSelfName[];
-  prevProc:.aq.par.worker.getPrevName[];
-  // if not the first process in our list, request data from 
-  // if is, return empty table
-  $[self<>first ps;
-    .aq.par.runSynch[fprevProc;fs];
-    def]
- }
- 
-.aq.par.worker.edgeExtend:{[w;p;t]
-  f:{[x;y] select from x where i >= count[i] - w};
-  .aq.par.worker.prevProcRequest[f;w;0#t]
- }
- 
+    
+// Edge-Extension
+// Strategy:
+//  - Each process is instructed to read their data, and ask the process
+//    prior to it for the appropriate edge of missing data
+//  - Once the data has been extended as necessary, each process can execute
+//    an operation (f) and has a "callback" function cb, which either returns
+//    the data or stores it locally
+// args:
+//    w: maximum window size required for edge e.g. 24
+//    g: function to read data necessary e.g. {select from t}; {t}
+//    f: actual operation that required the extended data e.g. {select 24 msum c1 from t}
+//    st: a storing function, which either returns (::) or writes data locally to process
+//      e.g. {`winopresult set x}
+//    write: function to write data to process data structure
+.aq.par.master.edgeOp:{[w;r;f;st]
+  workers:.aq.par.workerNames[];
+  .aq.par.worker.edgeOp[ ;r;f;st] peach (count workers)#w
+  };
+
+// Select edge of relevant data in a given process
+// args: window, function to get/read data
+.aq.par.worker.selectEdge:{[w;r] select from r[] where i>neg[w]+last i};
+
+// Extend data and perform operation
+// args: window size to extend, function to read data, operation requiring extended data,
+// function to store data
+.aq.par.worker.edgeOp:{[w;r;f;st]
+  prevProc:.aq.par.worker.getPrevProcessName[];
+  st $[null prevProc; f r[];w _ f (raze .aq.par.runSynch[prevProc;(`.aq.par.worker.selectEdge;w;r)]),r[]]
+  };
+
 
 // Carry lookahead aggregations
 // TODO
@@ -79,6 +94,37 @@
 
 // Normal map reduce
 // TODO
+
+
+// Utilities (composites of primitives)
+// Distributed sorting
+.aq.par.util.pickSortSample:{(count .aq.par.workerNames[])?x}
+.aq.par.worker.assignProcessSort:{[sort;read;refs;ps]
+  refs:update proc:ps, isref:1b from refs;
+  sorted:sort (update proc:first 0#ps, isref:0b from read[]) upsert refs;
+  assigned:update proc:reverse fills reverse fills proc from sorted;
+  `.aq.par.temp set assigned
+  };
+.aq.par.worker.getDataToSend:{[want]
+  delete proc, isref from select from .aq.par.temp where proc=want, not isref
+ };  
+.aq.par.master.sort:{[read;sort;nm]
+  workers:.aq.par.workerNames[];
+  // select representatives from each process
+  sampled:raze {.aq.par.util.pickSortSample x[]} peach (count workers)#read;
+  // sort the sample and pick representatives as reference points
+  refs:(sort sampled) where (count sampled)#1b,(count workers)#0b;
+  // create table labeling each obs with process based on reference observations
+  .aq.par.worker.assignProcessSort[ ;read;refs;workers] peach (count workers)#sort;
+  // create functions to shuffle based on sorting order
+  fs:{[x;y] .aq.par.worker.getDataToSend x}@/:workers;
+  // make sure the temporary name we are using is empty before inserting anything
+  {x set ()} peach (count workers)#nm;
+  // shuffle based on sorting (upserting new entries)
+  .aq.par.master.shuffle[fs;workers;{x upsert y}[nm;]];
+  // sort data in each process
+  {y set x get y}[sort;] peach (count workers)#nm;
+ };
 
 
 // Create very simple sample data for experimenting
