@@ -134,7 +134,8 @@
  pars:.z.D + til 10; // partitions
  parpaths:` sv/: `:sampledb,/:(`$string pars),\:`t`;
  // we avoid symbols for simplicity
- {y set ([]c1:x?10;c2:x?10;c3:x?100.;c4:x?100)}[n;] each parpaths
+ mk:{[ct;off;path] path set ([]id:off+til ct;c1:ct?10;c2:ct?10;c3:ct?100.;c4:ct?100)};
+ mk[n;;] ./: flip (n*til count parpaths;parpaths)
  };
 
 

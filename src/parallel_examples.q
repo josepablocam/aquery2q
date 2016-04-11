@@ -67,16 +67,37 @@ query4:{
  };
 callback4:`local; 
 
-// sort based on two columns and then calculate window-based moving aggregates
+// sort based on 3 columns and then calculate window-based moving aggregates
 query5:{
   // sorting
-  read:{get `local}; sort:{`c1`c2 xasc x}; nm:`localSorted;
+  read:{get `local}; sort:{`c1`c2`id xasc x}; nm:`localSorted;
   .aq.par.master.sort[read;sort;nm];
   // window operation
-  readSorted:{get `localSorted}; mOp:{select 4 msum c1, 4 mavg c2 from x}; st:(::);
+  readSorted:{get `localSorted}; mOp:{select c1, c2, id, ms:4 msum c4, ma:4 mavg c4 from x}; st:(::);
   raze .aq.par.master.edgeOp[4;readSorted;mOp;st]
   };
 callback5:{`localMovResult set x};  
+
+
+// sort based on column in other table
+// ==> t[<t1.c1]
+query6:{
+    workers:.aq.par.workerNames[];
+    // create a random table o with a single column c1
+    // same length as local
+    makeO:{
+        system "S ",string 1+sum string .aq.par.worker.getSelfName[];
+        `o set ([]c1:(count local)?10000)
+        };
+    {x[]} peach (count .z.pd[])#makeO;
+    read:{update oc1:o.c1 from local};
+    sort:{`oc1 xasc x};
+    nm:`localOSorted;
+    .aq.par.master.sort[read;sort;nm];
+    raze{select from localOSorted} peach .z.pd[]
+ };
+callback6:{`q6result set x};
+
 
 /
 .aq.par.supermaster.execute[1b;(query1;::);callback1];
@@ -84,10 +105,10 @@ callback5:{`localMovResult set x};
 .aq.par.supermaster.execute[0b;(query3;::);callback3];
 .aq.par.supermaster.execute[1b;(query4;::);callback4];
 .aq.par.supermaster.execute[0b;(query5;::);callback5];
-
+.aq.par.supermaster.execute[0b;(query6;::);callback6];
 
 / Simple check of moving average calculation
-ref:raze .aq.par.runSynch[first .aq.par.masterNames[];({select 4 msum c1, 4 mavg c2 from `c1`c2 xasc select from t};::)]
+ref:raze .aq.par.runSynch[first .aq.par.masterNames[];({select c1, c2, id, ms:4 msum c4, ma:4 mavg c4 from `c1`c2`id xasc select from t};::)]
 ref~localMovResult
 
 
