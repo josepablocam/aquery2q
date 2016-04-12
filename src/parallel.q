@@ -100,10 +100,18 @@
 // Distributed sorting
 .aq.par.util.takeEveryN:{x where (count x)#1b,(-1+y)#0b};
 .aq.par.util.swap:{[v;a;b] @[v;a,b;:;b,a]};
-.aq.par.util.pickSortSample:{(count .aq.par.workerNames[])?x}
-.aq.par.worker.assignProcessSort:{[sort;read;refs;ps]
+.aq.par.util.sortLocalData:{[sort;read]
+  `.aq.par.temp set sort read[]
+  };
+.aq.par.util.pickSortPivots:{[read]
+  data:read[];
+  sampleN:ceiling (count data)%count .aq.par.workerNames[];
+  .aq.par.util.takeEveryN[data;sampleN]
+  };
+.aq.par.worker.assignProcessSort:{[sort;refs;ps]
    refs:update proc:ps, isref:1b from refs;
-   combined:(update proc:0#ps, isref:0b from read[]),refs;
+   // .aq.par.temp holds sorted observations from .aq.par.util.sortLocalData
+   combined:(update proc:0#ps, isref:0b from .aq.par.temp),refs;
    // swap some records so that refs are spread out throughout t
    ctComb:count combined; ctRefs:count refs; nCt:ceiling ctComb%ctRefs;
    ix:til ctComb;
@@ -117,20 +125,23 @@
  };  
 .aq.par.master.sort:{[read;sort;nm]
    workers:.aq.par.workerNames[];
-   // select representatives from each process
-   sampled:raze {.aq.par.util.pickSortSample x[]} peach (count workers)#read;
+   ctWorkers:count workers;
+   // sort local data in each process
+   .aq.par.util.sortLocalData[sort;] peach ctWorkers#read;
+   // select representatives from each process to use as pivots for sort
+   sampled:raze .aq.par.util.pickSortPivots peach ctWorkers#{.aq.par.temp};
    // sort the sample and pick representatives as reference points
-   refs:(sort sampled) where (count sampled)#1b,(count workers)#0b;
+   refs:ctWorkers sublist .aq.par.util.takeEveryN[sort sampled;ctWorkers];
    // create table labeling each obs with process based on reference observations
-   .aq.par.worker.assignProcessSort[ ;read;refs;workers] peach (count workers)#sort;
+   .aq.par.worker.assignProcessSort[ ;refs;workers] peach ctWorkers#sort;
    // create functions to shuffle based on sorting order
-   fs:{[x;y] .aq.par.worker.getDataToSend x}@/:workers;
+   shuffles:{[x;y] .aq.par.worker.getDataToSend x}@/:workers;
    // make sure the temporary name we are using is empty before inserting anything
-   {x set ()} peach (count workers)#nm;
+   {x set ()} peach ctWorkers#nm;
    // shuffle based on sorting (upserting new entries)
-   .aq.par.master.shuffle[fs;workers;{x upsert y}[nm;]];
-   // sort data in each process
-   {y set x get y}[sort;] peach (count workers)#nm;
+   .aq.par.master.shuffle[shuffles;workers;{[o;a] o upsert a}[nm;]];
+   // sort data in each process (as entries have been upserted incrementally)
+   {y set x get y}[sort;] peach ctWorkers#nm;
   };
 
 
