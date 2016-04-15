@@ -43,7 +43,7 @@ query1:{
   // now we want to query each in-memory table for the data we want
   fs:{[x;y] select from local where c1 in x}@/:value pgs;
   // shuffle and write to local data as "shuffled"
-  .aq.par.master.shuffle[fs;key pgs;{`shuffled set x}]; 
+  .aq.par.master.shuffle[fs;key pgs;{`shuffled upsert x}];
  };
 // writers simply share name of data written as callback (used to distribute across)
 // other processes
@@ -52,7 +52,8 @@ callback1:`shuffled;
 query2:{raze {select from shuffled} peach .z.pd[]};
 callback2:{`shuffled set x};
 
-query3:{raze{select from t} peach .z.pd[]}
+// we only want this from one process (otherwise will get duplicates)
+query3:{raze {select from t} peach 1#.z.pd[]}
 callback3:{`orig set x}
 
 // each process creates some local data based on dates

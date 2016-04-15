@@ -33,29 +33,34 @@
 // args:
 //    fs: list of functions to execute
 //    ps: list of destination processes (same length as sel list)
-//    write: function to write data to process data structure
+//    write: function to write data to process data structure (most likely of the form {x upsert y})
+
 .aq.par.master.shuffle:{[fs;ps;write]
-  // all workers execute each instruction (naive: results in some unnecessary data)
-  // transfer, but keeps things simple
   workers:.aq.par.workerNames[];
-  // shuffle data
-  .aq.par.master.shuffle0[ ;workers; ;write] ./: flip (fs;ps);
-  // clean up
+  // for each function and destination process
+  // instruct each process to read and write to destination process 
+  // self will correspond to handle 0 (and thus not actually send), but just copy over
+  // as desired
+  .aq.par.master.shuffle0[ ;workers;write; ] ./: flip (fs;ps);
+  // clean up potential temporary data created
   {delete temp from `.aq.par} peach .z.pd[];
   };
  
 // using peach(requires that the data exist in ALL processes beforehand)
-// but that is not unreasonable
-.aq.par.master.shuffle0:{[f;ps;dest;write]
+// but that is not unreasonable, can always create empty tables in all beforehand
+.aq.par.master.shuffle0:{[read;ps;write;dest]
   //
   if[(0=count .z.pd[])|not all .z.pd[] in .aq.par.nameToHandle ps; 
       '"error: set .z.pd, ps must be all processes"];
-  // actually run the computation
-  data:raze {x[]} peach (count ps)#f;
-  .aq.par.runSynch[enlist dest;(write;data)];
-  }  
-  
-    
+  // read data, and then write to destination process, writing done synch
+  request:{[dest;read;write] .aq.par.runSynch[dest;(write;read[])]}[;read;write];
+  // run request on each process asynch and block
+  // we want to make sure we are done writing all data destined for dest before
+  // moving to next destination process
+  raze request peach (count ps)#dest;
+  }
+
+
 // Edge-Extension
 // Strategy:
 //  - Each process is instructed to read their data, and ask the process
