@@ -23,6 +23,8 @@
 .aq.par.worker.getXPrevProcessName:{first exec name from .aq.par.connections where conntype=`worker, neg[x] xprev handle=0};
 .aq.par.worker.getPrevProcessName:{.aq.par.worker.getXPrevProcessName 1};
 .aq.par.worker.getNextProcessName:{.aq.par.worker.getXPrevProcessName -1};
+.aq.par.worker.cleanUp:{delete temp from `.aq.par};
+
 
 ////// Primitives /////////  
 // Reorder (centrally coordinated)
@@ -43,7 +45,7 @@
   // as desired
   .aq.par.master.shuffle0[ ;workers;write; ] ./: flip (fs;ps);
   // clean up potential temporary data created
-  {delete temp from `.aq.par} peach .z.pd[];
+  .aq.par.worker.cleanUp peach .z.pd[];
   };
  
 // using peach(requires that the data exist in ALL processes beforehand)
@@ -93,8 +95,38 @@
   };
 
 
-// Carry lookahead aggregations
-// TODO
+// Carry calculations
+// Strategy:
+//  - Each process is instructed to compute their intermediate results and store to
+//    temporary table
+//  - In a second pass, each process requests the last w results from the process prior to it
+//    in combines their intermediate results with this "carry".
+// args:
+//    w: window of edge to read (e.g. 1)
+//    f: intermediate result calculation (e.g. select sums c1 from t)
+//    combiner: function to adjust intermediate results with carry, takes edge values from prior
+//    process as first argument, and intermediate results of current process as second argument
+//    (e.g. {[p;c]  update c1+ad[0;`c1] from t})
+//  Example:
+//  w:1; f:{select sums c1 from t}; adjuster:{update c1+x[0;`c1] from y};st:(::)
+//  .aq.par.master.carryOp[w;f;adjuster;st]
+.aq.par.master.carryOp:{[w;f;adjuster;st]
+  workers:.aq.par.workerNames[];
+  // each process executes f in parallel
+  {`.aq.par.temp set x[]} peach (count .z.pd[])#f;
+  // carry sequence passes (sequentially) over each worker and adjusts with carry combiner
+  results:raze raze .aq.par.runSynch[ ;(`.aq.par.worker.carryOp;w;adjuster;st)] each workers;
+  .aq.par.worker.cleanUp peach .z.pd[];
+  results
+ }
+
+.aq.par.worker.carryOp:{[w;adjuster;st]
+  prevProc:.aq.par.worker.getPrevProcessName[];
+  requestEdge:(`.aq.par.worker.selectEdge;w;{`.aq.par.temp});
+  // if appropriate, request carry, adjust, store in .aq.par.temp (for following process)
+  // to access and then store with user provided function st
+  st $[null prevProc;.aq.par.temp;.aq.par.temp:adjuster[raze .aq.par.runSynch[prevProc;requestEdge];.aq.par.temp]]
+ }
 
 
 // Normal map reduce

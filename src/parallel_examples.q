@@ -100,6 +100,21 @@ query6:{
 callback6:{`q6result set x};
 
 
+// Calculate sums and prods
+query7:{
+  workers:.aq.par.workerNames[];
+  // sort data first
+  read:{get `local}; sort:{`c1`c2`id xasc x};nm:`localSorted;
+  .aq.par.master.sort[read;sort;nm];
+  // perform carry calc
+  // we fill in with zero to avoid wrapping into null
+  w:1; f:{select sums c2, mins c3, maxs c4 from localSorted};
+  adj:{[x;y] update c2:c2+x[0;`c2], c3:c3&x[0;`c3], c4:c4|x[0;`c4] from y};
+  .aq.par.master.carryOp[w;f;adj;(::)]
+  };
+callback7:{`q7result set x};
+
+
 /
 .aq.par.supermaster.execute[1b;(query1;::);callback1];
 .aq.par.supermaster.execute[0b;(query2;::);callback2];
@@ -107,11 +122,15 @@ callback6:{`q6result set x};
 .aq.par.supermaster.execute[1b;(query4;::);callback4];
 .aq.par.supermaster.execute[0b;(query5;::);callback5];
 .aq.par.supermaster.execute[0b;(query6;::);callback6];
+.aq.par.supermaster.execute[0b;(query7;::);callback7];
 
 / Simple check of moving average calculation
 ref:raze .aq.par.runSynch[first .aq.par.masterNames[];({select c1, c2, id, ms:4 msum c4, ma:4 mavg c4 from `c1`c2`id xasc select from t};::)]
 ref~localMovResult
 
+/ Simple carry calculation verification
+ref:raze .aq.par.runSynch[first .aq.par.masterNames[];({select sums c2, mins c3, maxs c4 from `c1`c2`id xasc select from t};::)]
+ref~q7result
 
 
 
