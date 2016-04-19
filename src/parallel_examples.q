@@ -114,6 +114,39 @@ query7:{
   };
 callback7:{`q7result set x};
 
+// Avg and sum by c1, c2
+query8:{
+  workers:.aq.par.workerNames[];
+  // group data first
+  read:{get `local}; grp:{select c3, c4 by c1, c2 from x};nm:`localGrouped;
+  .aq.par.master.groupby[read;grp;nm];
+  // perform the actual calc
+  raze {select c1, c2, avg each c3, sum each c4 from localGrouped} peach .z.pd[]
+  };
+callback8:{`q8result set x};
+
+// Sort and then group by last (in reality we would execute this the other way)
+// around, first group then sort (as groups are entirely intra-process)
+// so should be a much faster sort
+query9:{
+  workers:.aq.par.workerNames[];
+  // sort data first
+  read:{get `local}; sort:{`date`id xasc x}; nmSorted:`localSorted;
+  .aq.par.master.sort[read;sort;nmSorted];
+  // now let's go ahead and group by c1
+  grp:{select c3, c4 by c1 from x}; nmGrouped:`localGrouped;
+  .aq.par.master.groupby[read;grp;nmGrouped];
+  // now the actual query, write table
+  {`q9result set select c1, last each c3, last each c4 from localGrouped} peach .z.pd[]
+  };
+callback9:`q9result;
+
+query10:{
+  raze {select from q9result} peach .z.pd[]
+ };
+callback10:{`q10result set x};
+
+
 
 /
 .aq.par.supermaster.execute[1b;(query1;::);callback1];
@@ -123,15 +156,26 @@ callback7:{`q7result set x};
 .aq.par.supermaster.execute[0b;(query5;::);callback5];
 .aq.par.supermaster.execute[0b;(query6;::);callback6];
 .aq.par.supermaster.execute[0b;(query7;::);callback7];
+.aq.par.supermaster.execute[0b;(query8;::);callback8];
+.aq.par.supermaster.execute[1b;(query9;::);callback9];
+.aq.par.supermaster.execute[0b;(query10;::);callback10];
 
-/ Simple check of moving average calculation
-ref:raze .aq.par.runSynch[first .aq.par.masterNames[];({select c1, c2, id, ms:4 msum c4, ma:4 mavg c4 from `c1`c2`id xasc select from t};::)]
+/ Simple check of moving average
+\l sampledb
+ref:select `#c1, c2, id, ms:4 msum c4, ma:4 mavg c4 from `c1`c2`id xasc select from t
 ref~localMovResult
 
-/ Simple carry calculation verification
-ref:raze .aq.par.runSynch[first .aq.par.masterNames[];({select sums c2, mins c3, maxs c4 from `c1`c2`id xasc select from t};::)]
+/ Simple carry calculation
+ref:select sums c2, mins c3, maxs c4 from `c1`c2`id xasc select from t
 ref~q7result
 
+/ Simple group by
+ref:update `#c1 from 0!select avg c3, sum c4 by c1, c2 from t
+ref~q8result
+
+/ Simple sort, then group by
+ref:update `#c1 from 0!select last c3, last c4 by c1 from `date`id xasc select from t
+ref~q10result
 
 
 
