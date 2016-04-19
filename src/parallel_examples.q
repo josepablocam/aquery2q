@@ -1,6 +1,7 @@
 \l parallel.q
 PWD:first system "readlink -f ."
 
+// helper to spin up processes
 initproc:{[xtra;p] system ssr/["q parallel.q %xtra -p %p";("%xtra";"%p");(xtra;p)]}
 mkhandle:{hsym `$"localhost:",x}
 
@@ -14,7 +15,6 @@ if[count mports inter wports; '"error workers and masters must be disjoint"];
 initproc["-s -2";] each mports
 // start worker processes
 initproc["";] each wports
-
 
 // sleep two seconds to make sure processes are forked by OS before connecting
 system "sleep 2s";
@@ -190,16 +190,4 @@ ref~q11result
 / Simple sort, then group by
 ref:update `#c1 from 0!select last c3, last c4 by c1 from `date`id xasc select from t
 ref~q10result
-
-
-
-/
-Author note: "f peach args" doesn't actually distribute the function to the workers
-as it might immediately look. It allocates a call of f[arg] (one elem of the list)
-to each slave process (as indicated by .z.pd). I believe (and am trying to confirm)
-that if count[args] = count[n], and slave processes start out with 0 workload, then
-this uniquely allocates one task to each process in the order of process handles in .z.pd
-
-I have a slightly uglier call that guarantees this and behaves similar to peach otherwise
-.aq.par.runAsynchAndBlock
 
