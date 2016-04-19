@@ -56,11 +56,12 @@
       '"error: set .z.pd, ps must be all processes"];
   // read data, and then write to destination process, writing done synch
   request:{[dest;read;write] .aq.par.runSynch[dest;(write;read[])]}[;read;write];
-  // run request on each process asynch and block
   // we want to make sure we are done writing all data destined for dest before
   // moving to next destination process
-  raze request peach (count ps)#dest;
-  }
+  // requests are issued synchronously, as we want writes to take place in order
+  // of worker list
+  .aq.par.runSynch[ps;(request;dest)];
+  };
 
 
 // Edge-Extension
@@ -179,6 +180,46 @@
    .aq.par.master.shuffle[shuffles;workers;{[o;a] o upsert a}[nm;]];
    // sort data in each process (as entries have been upserted incrementally)
    {y set x get y}[sort;] peach ctWorkers#nm;
+  };
+
+// Distributed group by
+.aq.par.master.allocGroup:{[groupCounts;workers]
+  workers -1+sums differ s div 1+ceiling (last s:sums groupCounts)%count workers
+  };
+.aq.par.master.groupby:{[read;grp;nm]
+  workers:.aq.par.workerNames[];
+  ctWorkers:count workers;
+  // clean up data structures
+  .aq.par.worker.cleanUp peach .z.pd[];
+  // add up counts per group across processes
+  groupCts:(pj/) .aq.par.worker.groupby[read;] peach ctWorkers#grp;
+  // allocate groups in a way to
+  // reasonably balance number of obs per process
+  groupCts:delete aq__ct from update aq__proc:.aq.par.master.allocGroup[aq__ct;workers] from groupCts;
+  // now join this group allocation info to each processes local grouped data
+  {[x;y] .aq.par.worker.addGroupAlloc[x]}[groupCts;] peach .z.pd[];
+  // create shuffling functions
+  shuffles:{[x;y] delete aq__proc from select from .aq.par.temp where aq__proc=x}@/:workers;
+  // create special group-based append function
+  groupAppend:{[o;a] o set @[get;o;0#a],''a};
+  // group-by
+  .aq.par.master.shuffle[shuffles;workers;groupAppend[nm;]];
+  };
+
+// create temporary table with grouped data
+// return keys (different groups)
+.aq.par.worker.groupby:{[read;grp]
+  data:update aq__ct:1 from read[];
+  grouped:grp data;
+  groupcols:keys grouped;
+  valcols:cols[grouped] except groupcols;
+  groupCts:?[grouped;();0b;(groupcols,`aq__ct)!groupcols,enlist (count each;first valcols)];
+  // store a copy, avoid grouping again later
+  .aq.par.temp:delete aq__ct from grouped;
+  groupcols xkey groupCts
+  };
+.aq.par.worker.addGroupAlloc:{[alloc]
+  .aq.par.temp:.aq.par.temp lj alloc;
   };
 
 
