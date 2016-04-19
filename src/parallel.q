@@ -131,7 +131,59 @@
 
 
 // Normal map reduce
-// TODO
+// Strategy:
+//  - Each worker executes a mapper
+//  - Each reduction phase creates groups of worker processes of at most size k, and reduces
+//    their data in a single process (the last one in that group).
+//    This set of reducers constitute the set of eligibel workers for the next reduction phase
+//  - Operations must be associative and commutative, as no order of reduction is guaranteed
+// args:
+//  map: mapping function (e.g. {select sum c1 by c2 from t})
+//  reducer: reducing function e.g.{ x pj y})
+//  k: max size of each reducer group
+.aq.par.master.mapreduce:{[map;reduce;k]
+  if[k=1;'"must have at least 2 reducers per reduction group"];
+  workers:.aq.par.workerNames[];
+  // clean up data structures
+  .aq.par.worker.cleanUp peach .z.pd[];
+  // each worker executes the map function,
+  // and stores data to temp
+  {.aq.par.temp:x[]} peach (count workers)#map;
+  // reduce until all results are in a single process
+  stopWhenOne:{1<>count raze x};
+  // at each phase create reducer groups of at most size k
+  partitionReducers:cut[k;];
+  // create verb to be executed in each reduce phase
+  reduceLoop:.aq.par.master.reduce[reduce; ] partitionReducers@;
+  holdsResult:reduceLoop/[stopWhenOne;workers];
+  // get result from final reducer
+  result:first .aq.par.runSynch[holdsResult;({.aq.par.temp};::)];
+  .aq.par.worker.cleanUp peach .z.pd[];
+  result
+  };
+
+// Instruct reducers to request data from their reducer group, combine
+// and return new set of workers to partition as reducers for next step
+.aq.par.master.reduce:{[reduce;reducerGroups]
+  reducers:last each reducerGroups;
+  reducerGroupMap:reducers!reducerGroups;
+  request:(`.aq.par.worker.reduce;reduce;reducerGroupMap);
+  callback:(`.aq.par.worker.getSelfName;::);
+  // reduce in parallel and return names
+  // of new set of workers to use as reducers for next phase
+  .aq.par.runAsynchAndBlock[reducers;request;callback]
+  };
+
+// Reduce data by requesting from appropriate processes
+.aq.par.worker.reduce:{[reduce;reducerGroupMap]
+  // find processes that you should query for data to combine
+  reducerGroup:reducerGroupMap .aq.par.worker.getSelfName[];
+  //reduce if appropriate
+  if[1<count reducerGroup;
+    .aq.par.temp:(reduce/).aq.par.runSynch[reducerGroup;({.aq.par.temp};::)]
+  ];
+  };
+
 
 
 // Utilities (composites of primitives)

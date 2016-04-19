@@ -146,6 +146,17 @@ query10:{
  };
 callback10:{`q10result set x};
 
+// Avg and sum by c1, c2 (map-reduce)
+// This is a much more likely strategy than query8
+query11:{
+  map:{select s3:sum c3, ct3:count c3, s4:sum c4 by c1, c2 from local};
+  reduce:{x pj y};
+  k:2;
+  data:.aq.par.master.mapreduce[map;reduce;k];
+  select c1, c2, c3:s3%ct3, c4:s4 from data
+  };
+callback11:{`q11result set x};
+
 
 
 /
@@ -159,6 +170,8 @@ callback10:{`q10result set x};
 .aq.par.supermaster.execute[0b;(query8;::);callback8];
 .aq.par.supermaster.execute[1b;(query9;::);callback9];
 .aq.par.supermaster.execute[0b;(query10;::);callback10];
+.aq.par.supermaster.execute[0b;(query11;::);callback11];
+
 
 / Simple check of moving average
 \l sampledb
@@ -169,9 +182,10 @@ ref~localMovResult
 ref:select sums c2, mins c3, maxs c4 from `c1`c2`id xasc select from t
 ref~q7result
 
-/ Simple group by
+/ Simple group by (can be done with shuffled group-by, or map-reduce)
 ref:update `#c1 from 0!select avg c3, sum c4 by c1, c2 from t
 ref~q8result
+ref~q11result
 
 / Simple sort, then group by
 ref:update `#c1 from 0!select last c3, last c4 by c1 from `date`id xasc select from t
