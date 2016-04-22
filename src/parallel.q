@@ -171,7 +171,7 @@
 .aq.par.worker.getNextProcessName:{.aq.par.worker.getXPrevProcessName -1};
 
 // Delete temporary data created by distributed operations (stored to .aq.par.temp)
-.aq.par.worker.cleanUp:{delete temp from `.aq.par};
+.aq.par.worker.cleanUp:{![`.aq.par;();0b;(),x]}
 
 
 
@@ -199,7 +199,7 @@
   // as desired
   .aq.par.master.shuffle0[ ;workers;write; ] ./: flip (reads;dests);
   // clean up potential temporary data created
-  .aq.par.worker.cleanUp peach .z.pd[];
+  .aq.par.worker.cleanUp peach (count workers)#`temp;
   };
  
 // using peach(requires that the data exist in ALL processes beforehand)
@@ -284,7 +284,7 @@
   {`.aq.par.temp set x[]} peach (count .z.pd[])#f;
   // passes (sequentially) over each worker and adjusts with adjust function
   results:raze raze .aq.par.runSynch[ ;(`.aq.par.worker.carryOp;w;adjust;write)] each workers;
-  .aq.par.worker.cleanUp peach .z.pd[];
+  .aq.par.worker.cleanUp peach (count workers)#`temp;
   results
  };
 
@@ -319,8 +319,9 @@
   // if executes with k=1 will loop forever, since never reducing
   if[k=1;'"must have at least 2 reducers per reduction group"];
   workers:.aq.par.workerNames[];
+  ctWorkers:count workers;
   // clean up data structures
-  .aq.par.worker.cleanUp peach .z.pd[];
+  .aq.par.worker.cleanUp peach ctWorkers#`temp;
   // each worker executes the map function and stores data to temp
   {.aq.par.temp:x[]} peach (count workers)#map;
   // reduce until all results are in a single process
@@ -332,7 +333,7 @@
   holdsResult:reduceLoop/[stopWhenOne;workers];
   // get result from final reducer
   result:first .aq.par.runSynch[holdsResult;({.aq.par.temp};::)];
-  .aq.par.worker.cleanUp peach .z.pd[];
+  .aq.par.worker.cleanUp peach ctWorkers#`temp;
   result
   };
 
@@ -371,7 +372,7 @@
 
 /////////// Common query operations ///////////
 // These common query operations are written as composites of primitives
-// We implement: distributed sorting, distributed group-by
+// We implement: distributed sorting, distributed group-by, distributed-join
 
 ////// Distributed sorting //////
 // Sort data across worker processes
@@ -472,7 +473,7 @@
   workers:.aq.par.workerNames[];
   ctWorkers:count workers;
   // clean up data structures
-  .aq.par.worker.cleanUp peach .z.pd[];
+  .aq.par.worker.cleanUp peach ctWorkers#`temp;
   // add up counts per group across processes
   groupCts:(pj/) .aq.par.worker.groupby[read;] peach ctWorkers#grp;
   // allocate groups in a way to reasonably balance number of obs per process
@@ -513,12 +514,91 @@
   groupCts:?[.aq.par.temp;();0b;(groupcols,`aq__ct)!groupcols,enlist (count each;first valcols)];
   groupcols xkey groupCts
   };
+
 // Add group-process allocation information to grouped data (stored in .aq.par.temp)
 // args:
 //  alloc: table indicating allocation information for each group
 .aq.par.worker.addGroupAlloc:{[alloc]
   .aq.par.temp:.aq.par.temp lj alloc;
   };
+
+
+////// Distributed join //////
+// Perform join such that common join keys for each table are held wholely within one process
+// In contrast to group-by, we assume there is a similar number of observations
+// for each join key (most likely 1/2), so we allocate without counting observations
+// args:
+//  join: operator to use for join (ej/lj/ij) or function that takes 3-args (join-cols, table, table)
+//  jcols: columns along which we join
+//  readl: function to read table on left of join
+//  readr: function to read table on right of join
+//  nm: to write the joined table as
+.aq.par.master.join:{[join;jcols;readl;readr;nm]
+  workers:.aq.par.workerNames[];
+  ctWorkers:count workers;
+  // make sure our temporary data structures are empty
+  .aq.par.worker.cleanUp peach ctWorkers#enlist`temp`join;
+  // get values for join keys
+  ks:distinct raze .aq.par.worker.getJoinKeys[ ;(readl;readr)] peach ctWorkers#enlist jcols;
+  // allocate groups to workers
+  allocKs:jcols xkey update aq__proc:(count ks)#workers from ks;
+  // associate names with temporary shuffle data and shuffle results
+  templ:`.aq.par.join.temp.tl; tempr:`.aq.par.join.temp.tr;
+  l:`.aq.par.join.tl; r:`.aq.par.join.tr;
+  // prepare tables for joins
+  .aq.par.master.prepareJoin[ ; ;allocKs;workers; ] ./: flip((readl;readr);templ,tempr;l,r);
+  // actually perform the join now
+  joinop:(ej;lj;ij)!({ej[(),x;y;z]};{y lj x xkey z};{(x xkey y) ij x xkey z});
+  jc:$[null j:joinop[join];join;j][jcols;;];
+  // make sure join table is empty
+  {x set ()} peach ctWorkers#nm;
+  .aq.par.worker.join[jc;l;r; ] peach ctWorkers#(nm upsert);
+  // clean up temporary join data
+  .aq.par.worker.cleanUp peach ctWorkers#enlist`temp`join;
+  };
+
+// Prepare tables for join by shuffling data to appropriate process
+// args:
+//  read: function to read original data meant for join
+//  temp: temporary name for intermediate shuffling
+//  dests: destination processes for shuffle
+//  final: final name for shuffle results
+.aq.par.master.prepareJoin:{[read;temp;alloc;dests;final]
+  // add allocation info to temporary table
+  .aq.par.worker.allocKeys[;alloc;temp] peach (count dests)#read;
+  // shuffle data to right process
+  shuffle:{[x;y;z] delete aq__proc from select from x where aq__proc=y}[temp;;]@/:dests;
+  .aq.par.master.shuffle[shuffle;dests;final upsert]
+ };
+
+// Add process allocation information for join
+// args:
+//  read: function to read data meant for join
+//  allocs: table with process allocation for each key in join
+//  nm: assign results to table with this name
+.aq.par.worker.allocKeys:{[read;allocs;nm]
+  nm set read[] lj allocs
+  };
+
+// Collect possible values along join columns in both tables
+// args:
+//  jcols: columns for join (must be in both tables)
+//  reads: list of functions to read data neded
+.aq.par.worker.getJoinKeys:{[jcols;reads]
+  // much faster than distinct jcols#read[]
+  raze {[x;y] key ?[y[];();x!x;(last;`i)]}[(),jcols;] each reads
+  };
+
+// Perform join between two tables and store result
+// args:
+//  joinop: function to join, takes as arguments two tables
+//  readl: function to read left-hand-side table of join
+//  readr: function to read right-hand-side table of join
+//  write: function to write results of join
+.aq.par.worker.join:{[joinop;readl;readr;write]
+  write joinop[readl[];readr[]]
+  };
+
 
 
 /////////// Utilities ///////////
