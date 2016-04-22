@@ -394,11 +394,12 @@
    // create functions to shuffle based on sorting order
    shuffles:{[x;y] .aq.par.worker.getDataToSend x}@/:workers;
    // make sure the temporary name we are using is empty before inserting anything
-   {x set ()} peach ctWorkers#nm;
+   temp:`.aq.par.sort;
+   {x set ()} peach ctWorkers#temp;
    // shuffle based on sorting (upserting new entries)
-   .aq.par.master.shuffle[shuffles;workers;{[o;a] o upsert a}[nm;]];
+   .aq.par.master.shuffle[shuffles;workers;{[o;a] o upsert a}[temp;]];
    // sort data in each process (as entries have been upserted incrementally)
-   {y set x get y}[sort;] peach ctWorkers#nm;
+   {z set x get y}[sort;temp; ] peach ctWorkers#nm;
   };
 
 // take every nth observation in a list
@@ -545,14 +546,17 @@
   // associate names with temporary shuffle data and shuffle results
   templ:`.aq.par.join.temp.tl; tempr:`.aq.par.join.temp.tr;
   l:`.aq.par.join.tl; r:`.aq.par.join.tr;
+  joined:`.aq.par.join.joined;
   // prepare tables for joins
   .aq.par.master.prepareJoin[ ; ;allocKs;workers; ] ./: flip((readl;readr);templ,tempr;l,r);
   // actually perform the join now
   joinop:(ej;lj;ij)!({ej[(),x;y;z]};{y lj x xkey z};{(x xkey y) ij x xkey z});
   jc:$[null j:joinop[join];join;j][jcols;;];
   // make sure join table is empty
-  {x set ()} peach ctWorkers#nm;
-  .aq.par.worker.join[jc;l;r; ] peach ctWorkers#(nm upsert);
+  {x set ()} peach ctWorkers#joined;
+  .aq.par.worker.join[jc;l;r; ] peach ctWorkers#(joined upsert);
+  // move results to final name
+  {y set get x}[joined;] peach ctWorkers#nm;
   // clean up temporary join data
   .aq.par.worker.cleanUp peach ctWorkers#enlist`temp`join;
   };
