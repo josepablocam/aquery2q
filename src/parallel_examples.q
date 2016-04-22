@@ -158,6 +158,18 @@ query11:{
 callback11:{`q11result set x};
 
 
+// Group, then join (with ij)
+// And perform sum
+query12:{
+  .aq.par.master.groupby[`local;{select id, c3 by c1, c2 from x};`t1grouped];
+  .aq.par.master.groupby[`local;{select id, c4 by c1, c2 from x};`t2grouped];
+  .aq.par.master.join[ej;`c1`c2;`t1grouped;`t2grouped;`tjoined];
+  // now we want to ungroup them add columns and return result
+  `id xasc raze {select id, c1, c2, added:c3+c4 from ungroup tjoined} peach .z.pd[]
+  };
+callback12:{`q12result set x};
+
+
 
 /
 .aq.par.supermaster.execute[1b;(query1;::);callback1];
@@ -171,6 +183,7 @@ callback11:{`q11result set x};
 .aq.par.supermaster.execute[1b;(query9;::);callback9];
 .aq.par.supermaster.execute[0b;(query10;::);callback10];
 .aq.par.supermaster.execute[0b;(query11;::);callback11];
+.aq.par.supermaster.execute[0b;(query12;::);callback12];
 
 
 / Simple check of moving average
@@ -191,3 +204,5 @@ ref~q11result
 ref:update `#c1 from 0!select last c3, last c4 by c1 from `date`id xasc select from t
 ref~q10result
 
+/ Group, join, and add
+ref:`id xasc select id, c1, c2, added:c3+c4 from ungroup {ej[`c1`c2;x;x]} select id, c3, c4 by c1, c2 from select from t
