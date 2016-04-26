@@ -313,7 +313,7 @@
 //  - Operations must be associative and commutative, as no order of reduction is guaranteed
 // args:
 //  map: mapping function (e.g. {select sum c1 by c2 from t})
-//  reducer: reducing function (e.g.{ x pj y})
+//  reducer: reducing function (e.g.{ y,x pj y})
 //  k: max size of each reducer group (e.g 2)
 .aq.par.master.mapreduce:{[map;reduce;k]
   // if executes with k=1 will loop forever, since never reducing
@@ -476,7 +476,7 @@
   // clean up data structures
   .aq.par.worker.cleanUp peach ctWorkers#`temp;
   // add up counts per group across processes
-  groupCts:(pj/) .aq.par.worker.groupby[read;] peach ctWorkers#grp;
+  groupCts:{y upsert x pj y}/[.aq.par.worker.groupby[read;] peach ctWorkers#grp];
   // allocate groups in a way to reasonably balance number of obs per process
   groupCts:delete aq__ct from update aq__proc:.aq.par.master.allocGroup[aq__ct;workers] from groupCts;
   // now join this group allocation info to each processes local grouped data
@@ -484,9 +484,11 @@
   // create shuffling functions
   shuffles:{[x;y] delete aq__proc from select from .aq.par.temp where aq__proc=x}@/:workers;
   // create special group-based append function
-  groupAppend:{[o;a] o set @[get;o;0#a],''a};
+  groupAppend:{[o;a] odat:@[get;o;0#a]; o set $[0=count a;odat;odat,''a]};
   // group-by
-  .aq.par.master.shuffle[shuffles;workers;groupAppend[nm;]];
+  .aq.par.master.shuffle[shuffles;workers;groupAppend[`.aq.par.group;]];
+  {x set .aq.par.group} peach ctWorkers#nm;
+  .aq.par.worker.cleanUp peach ctWorkers#`group;
   };
 
 // Allocate groups to different worker processes (each group is entirely within a given

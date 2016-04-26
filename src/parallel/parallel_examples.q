@@ -150,7 +150,7 @@ callback10:{`q10result set x};
 // This is a much more likely strategy than query8
 query11:{
   map:{select s3:sum c3, ct3:count c3, s4:sum c4 by c1, c2 from local};
-  reduce:{x pj y};
+  reduce:{y upsert x pj y};
   k:2;
   data:.aq.par.master.mapreduce[map;reduce;k];
   select c1, c2, c3:s3%ct3, c4:s4 from data
