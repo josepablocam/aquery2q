@@ -206,3 +206,4 @@ ref~q10result
 
 / Group, join, and add
 ref:`id xasc select id, c1, c2, added:c3+c4 from ungroup {ej[`c1`c2;x;x]} select id, c3, c4 by c1, c2 from select from t
+ref~q12result
