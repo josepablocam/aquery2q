@@ -605,6 +605,31 @@
   write joinop[readl[];readr[]]
   };
 
+////// Distributed cross //////
+// Perform cross of two tables stored across processes
+// For each process, we query all other processes for the table in the right hand
+// side of the join. We then read the left hand side table locally, cross and store.
+// args:
+//  readl: function to read table on left of cross
+//  readr: function to read table on right of cross
+//  nm: to write the crossed table as
+.aq.par.master.cross:{[readl;readr;nm]
+  workers:.aq.par.workerNames[];
+  ctWorkers:count workers;
+  // avoid dead locks by running synchronous
+  .aq.par.runSynch[workers;(`.aq.par.worker.cross;readl;readr;`.aq.par.cross)];
+  {x set .aq.par.cross} peach ctWorkers#nm;
+  .aq.par.worker.cleanUp peach ctWorkers#`cross;
+  };
+
+.aq.par.worker.cross:{[readl;readr;nm]
+  workers:.aq.par.workerNames[];
+  // get all portions of data relevant from other processes
+  temp:raze .aq.par.runSynch[workers;(readr;::)];
+  // cross with lhs (local) and store
+  nm set readl[] cross temp
+  };
+
 
 
 /////////// Utilities ///////////
