@@ -583,9 +583,12 @@ first trade date in the relevant 3 year period (the inner join is done on the ye
 
 //////// Running queries ////////
 // simple wrapper to run queries
+completionOrder:`$();
 execute:{[prefix;query]
   ns:`$prefix,".",query;
-  .aq.par.supermaster.execute[0b;(ns`query;::);ns`callback]
+  q:ns`query;
+  cb:`completionOrder upsert ns[`callback]@;
+  .aq.par.supermaster.execute[0b;(q;::);cb]
   };
 
 queries:"q",/:string til 10;
