@@ -138,7 +138,18 @@
   readAndWrite peach (count .z.pd[])#nm
   };
 
+// Define a value on all workers and self
+// args:
+//  nm: name of definition
+//  def: definition
+.aq.par.master.define:{[nm;def]
+  nm set def;
+  {x set y}[;def] peach (count .z.pd[])#nm
+  };
 
+// Map partition values to workers
+// so that each partition is mapped to a single worker
+.aq.par.master.mapPartitions:{ pv (group (count pv:.Q.pv)#.aq.par.workerNames[]) }
 
 /////////// Worker functions ///////////
 // Connect to counterparts processes in other cohort
@@ -477,6 +488,9 @@
   .aq.par.worker.cleanUp peach ctWorkers#`temp;
   // add up counts per group across processes
   groupCts:{y upsert x pj y}/[.aq.par.worker.groupby[read;] peach ctWorkers#grp];
+  // sort groups so that consecutive groups are in the same process
+  // as would happen with select ... by ...
+  groupCts:(keys groupCts) xasc groupCts;
   // allocate groups in a way to reasonably balance number of obs per process
   groupCts:delete aq__ct from update aq__proc:.aq.par.master.allocGroup[aq__ct;workers] from groupCts;
   // now join this group allocation info to each processes local grouped data
