@@ -4,6 +4,7 @@
 // Queries in .qser are executed centrally from a master process
 // (note that the latter still use worker processes, but only implicitly)
 
+\l parallel.q
 // Initialization
 masters:hsym `$"localhost:",/:string 7080+til 3;
 workers:4 cut hsym `$"localhost:",/:string 7090+til 12;
@@ -95,8 +96,8 @@ the split date. These are called split-adjusted prices and volumes.
   
    // join price and split data in distributed fashion
    .aq.par.master.join[ej;`Id;`pxdata;`splitdata;`adjdata];
-   // our join guarantees that each value of a join key is
-   // solely within a single process, so each Id=x is in a process
+   // our join guarantees that we are effectively partitioned by the first
+   // column in our join
    {
      `adjdata set select adjFactor:prd SplitFactor by Id, TradeDate from adjdata 
      where TradeDate < SplitDate
@@ -583,11 +584,13 @@ first trade date in the relevant 3 year period (the inner join is done on the ye
 
 //////// Running queries ////////
 // simple wrapper to run queries
+//queryCompleted:{`completionOrder upsert x; if[20=count completionOrder;show "doneso";exit 0]};
+queryCompleted:{`completionOrder upsert x}
 completionOrder:`$();
 execute:{[prefix;query]
   ns:`$prefix,".",query;
   q:ns`query;
-  cb:`completionOrder upsert ns[`callback]@;
+  cb:queryCompleted ns[`callback]@;
   .aq.par.supermaster.execute[0b;(q;::);cb]
   };
 
@@ -597,6 +600,21 @@ queries:"q",/:string til 10;
 execute[".qpar"; ]  each queries;
 execute[".qser"; ] each queries;
 
+timer:{[iters;q]
+  show "timing query ",string[q];
+  master:first .aq.par.masterNames[];
+  cmd:"ts:",string[iters]," .aq.par.runSynch[`",string[master],";(",string[q],";::)]";
+  (system cmd)%iters
+  };
+
+getQueryNames:{` sv/:x,/:(k where not null k:key x),\:`query};
+
+/
+timings:([query:`$()] time:`float$(); mem:`float$())
+`timings upsert qpar,'timer[10; ] each qpar:getQueryNames[`.qpar];
+`timings upsert qser,'timer[10; ] each qser:getQueryNames[`.qser];
+update num:`$("."vs/:string query)@\:2 from `timings
+update sys:`$("."vs/:string query)@\:1 from `timings
 
 /
 q0ref~update `#Id from 0!q0result
@@ -609,5 +627,3 @@ q6ref~q6result
 q7ref~q7result
 (~) . (`Id1`Id2)xasc/:(q8ref; q8result)
 q9ref~q9result 
-
-

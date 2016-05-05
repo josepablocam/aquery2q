@@ -541,11 +541,13 @@
 
 
 ////// Distributed join //////
-// Perform join such that common join keys for each table are held wholely within one process
-// In contrast to group-by, we assume there is a similar number of observations
-// for each join key (most likely 1/2), so we allocate without counting observations
+// Perform join such that we effectively repartition data along first join column
+// so that all instances of a given value are held within the same process for both tables.
+// We attempt to reduce the number of groups by first combining the possible join key values
+// according to the type of join (if not one of the predefined joins, we are conservative and
+// move all data).
 // args:
-//  join: operator to use for join (ej/lj/ij) or function that takes 3-args (join-cols, table, table)
+//  join: operator to use for join (ej/lj/ij) or function that takes 3-args (cols, lhs table, rhs table)
 //  jcols: columns along which we join
 //  readl: function to read table on left of join
 //  readr: function to read table on right of join
@@ -555,19 +557,43 @@
   ctWorkers:count workers;
   // make sure our temporary data structures are empty
   .aq.par.worker.cleanUp peach ctWorkers#enlist`temp`join;
-  // get values for join keys
-  ks:distinct raze .aq.par.worker.getJoinKeys[ ;(readl;readr)] peach ctWorkers#enlist jcols;
-  // allocate groups to workers
-  allocKs:jcols xkey update aq__proc:(count ks)#workers from ks;
+  // various key operations depend on our join
+  joinDepOps:(
+    [j:(ej;lj;ij)] // pre-defined joins
+    jc:({ej[(),x;y;z]};{y lj x xkey z};{(x xkey y) ij x xkey z}); // wrapper to handle uniformly
+    lhs:(inter;{first (x;y)};inter);
+    rhs:(inter;inter;inter)
+    );
+  predefJoin:(join) in key joinDepOps;
+  jc:$[predefJoin;joinDepOps[join;`jc];join][jcols;;];
+  lhscomb:$[predefJoin;joinDepOps[join;`lhs];union];
+  rhscomb:$[predefJoin;joinDepOps[join;`rhs];union];
+
+  // get preliminary values for join keys in each table
+  klPrelim:distinct raze .aq.par.worker.getJoinKeys[ ;readl] peach ctWorkers#enlist jcols;
+  krPrelim:distinct raze .aq.par.worker.getJoinKeys[ ;readr] peach ctWorkers#enlist jcols;
+
+  // the end result of what keys we care about depends on the join type
+  // at this point, we re-partition solely by the first column in the join columns
+  partitionOn:enlist first jcols;
+  kl:distinct partitionOn#lhscomb[klPrelim;krPrelim];
+  kr:distinct partitionOn#rhscomb[klPrelim;krPrelim];
+
+  // allocate groups to workers, allocation is based on kl (note that in cases of unknown)
+  // join, this will correctly be the union of keys in both tables
+  allocKs:partitionOn xkey update aq__proc:(count kl)#workers from kl;
+
   // associate names with temporary shuffle data and shuffle results
   templ:`.aq.par.join.temp.tl; tempr:`.aq.par.join.temp.tr;
   l:`.aq.par.join.tl; r:`.aq.par.join.tr;
   joined:`.aq.par.join.joined;
-  // prepare tables for joins
-  .aq.par.master.prepareJoin[ ; ;allocKs;workers; ] ./: flip((readl;readr);templ,tempr;l,r);
+
+  // prepare tables for joins (make sure to only shuffle necessary data by using our
+  // table-specific keys to select)
+  .aq.par.master.prepareJoin[readl;templ;kl#allocKs;workers;l];
+  .aq.par.master.prepareJoin[readr;tempr;kr#allocKs;workers;r];
+
   // actually perform the join now
-  joinop:(ej;lj;ij)!({ej[(),x;y;z]};{y lj x xkey z};{(x xkey y) ij x xkey z});
-  jc:$[null j:joinop[join];join;j][jcols;;];
   // make sure join table is empty
   {x set ()} peach ctWorkers#joined;
   .aq.par.worker.join[jc;l;r; ] peach ctWorkers#(joined upsert);
@@ -600,14 +626,15 @@
   nm set read[] lj allocs
   };
 
-// Collect possible values along join columns in both tables
+// Collect possible values along join columns in a table
 // args:
-//  jcols: columns for join (must be in both tables)
-//  reads: list of functions to read data neded
-.aq.par.worker.getJoinKeys:{[jcols;reads]
+//  jcols: columns for join
+//  read: function to read data needed
+.aq.par.worker.getJoinKeys:{[jcols;read]
   // much faster than distinct jcols#read[]
-  raze {[x;y] key ?[y[];();x!x;(last;`i)]}[(),jcols;] each reads
+  key ?[read[];();jc!(jc:(),jcols);(last;`i)]
   };
+
 
 // Perform join between two tables and store result
 // args:
