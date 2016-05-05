@@ -570,8 +570,8 @@
   rhscomb:$[predefJoin;joinDepOps[join;`rhs];union];
 
   // get preliminary values for join keys in each table
-  klPrelim:distinct raze .aq.par.worker.getJoinKeys[ ;readl] peach ctWorkers#enlist jcols;
-  krPrelim:distinct raze .aq.par.worker.getJoinKeys[ ;readr] peach ctWorkers#enlist jcols;
+  klPrelim:raze .aq.par.worker.getJoinKeys[ ;readl] peach ctWorkers#enlist jcols;
+  krPrelim:raze .aq.par.worker.getJoinKeys[ ;readr] peach ctWorkers#enlist jcols;
 
   // the end result of what keys we care about depends on the join type
   // at this point, we re-partition solely by the first column in the join columns
