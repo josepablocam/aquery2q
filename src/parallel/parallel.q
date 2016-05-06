@@ -558,16 +558,12 @@
   // make sure our temporary data structures are empty
   .aq.par.worker.cleanUp peach ctWorkers#enlist`temp`join;
   // various key operations depend on our join
-  joinDepOps:(
-    [j:(ej;lj;ij)] // pre-defined joins
-    jc:({ej[(),x;y;z]};{y lj x xkey z};{(x xkey y) ij x xkey z}); // wrapper to handle uniformly
-    lhs:(inter;{first (x;y)};inter);
-    rhs:(inter;inter;inter)
-    );
-  predefJoin:(join) in key joinDepOps;
-  jc:$[predefJoin;joinDepOps[join;`jc];join][jcols;;];
-  lhscomb:$[predefJoin;joinDepOps[join;`lhs];union];
-  rhscomb:$[predefJoin;joinDepOps[join;`rhs];union];
+  joinOps:.aq.par.master.getJoinOps[join];
+  // join wrapper
+  jc:joinOps[`jc][jcols;;];
+  // key combinators
+  lhscomb:joinOps[`lhs];
+  rhscomb:joinOps[`rhs];
 
   // get preliminary values for join keys in each table
   klPrelim:raze .aq.par.worker.getJoinKeys[ ;readl] peach ctWorkers#enlist jcols;
@@ -645,6 +641,47 @@
 .aq.par.worker.join:{[joinop;readl;readr;write]
   write joinop[readl[];readr[]]
   };
+
+// Look up wrappers for various join-dependent operations such as actually joining,
+// combining keys for lhs and rhs tables
+// Allow generally wrapping operations as needed
+// args
+//  join: function for join (ej/lj/ij/3-arg function (jcols, lhs table, rhs table))
+.aq.par.master.getJoinOps:{[join]
+  joinDepOps:(
+    [j:(ej;lj;ij)] // pre-defined joins
+    jc:({ej[(),x;y;z]};{y lj x xkey z};{(x xkey y) ij x xkey z}); // wrapper to handle uniformly
+    lhs:(inter;{first (x;y)};inter);
+    rhs:(inter;inter;inter)
+  );
+  // join is one of our predefined options
+  predefJoin:(join) in key joinDepOps;
+  // if not predefined, be conservative and use union for key combinations
+  $[predefJoin;joinDepOps[join];`jc`lhs`rhs!(join;union;union)]
+  }
+
+
+////// Distributed reference-table join //////
+// It is often the case that one of the tables being used for a join is significantly smaller.
+// This can be the case with "reference" tables, which hold some basic information.
+// Rather than perform a distributed join, which shuffles information from both tables (at large cost)
+// it can be preferable to replicate the reference table in each process and then join locally in
+// each process.
+// args:
+//  join: operator to use for join (ej/lj/ij) or function that takes 3-args (cols, lhs table, rhs table)
+//  jcols: columns along which we join
+//  readl: function to read table on left of join
+//  readr: function to read table on right of join (will be replicated in each process)
+//  nm: to write the joined table as
+.aq.par.master.referenceJoin:{[join;jcols;readl;readr;nm]
+  workers:.aq.par.workerNames[];
+  ctWorkers:count workers;
+  joinOps:.aq.par.master.getJoinOps[join];
+  jc:joinOps[`jc][jcols;;];
+  localRef:raze {x[]} peach ctWorkers#readr;
+  {[j;l;r;nm] nm set j[l[];r]}[jc;readl;localRef;] peach ctWorkers#nm;
+ };
+
 
 ////// Distributed cross //////
 // Perform cross of two tables stored across processes
