@@ -616,6 +616,8 @@ timings:([query:`$()] time:`float$(); mem:`float$())
 update num:`$("."vs/:string query)@\:2 from `timings
 update sys:`$("."vs/:string query)@\:1 from `timings
 
+update ratio:qpar%qser from exec `qpar`qser#sys!time by q:num from timings
+
 /
 q0ref~update `#Id from 0!q0result
 q1ref~q1result
