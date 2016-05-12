@@ -7,7 +7,8 @@
 \l parallel.q
 // Initialization
 masters:hsym `$"localhost:",/:string 7080+til 3;
-workers:4 cut hsym `$"localhost:",/:string 7090+til 12;
+workers:hsym `$"localhost:",/:string 7090+til 30;
+workers:(count[workers] div count masters) cut workers;
 .aq.par.supermaster.init[masters;workers];
 
 // load db everywhere
