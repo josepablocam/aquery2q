@@ -4,6 +4,16 @@
 // Queries in .qser are executed centrally from a master process
 // (note that the latter still use worker processes, but only implicitly)
 
+/
+  This is a variant of parallel_fintime.q where we
+  scale up various of the queries (either by altering their parameters
+  or simply eliminating some selections) and compare performance.
+
+  In many cases,the serial version will run out of memory and not complete.
+\
+
+
+
 \l parallel.q
 // Initialization
 masters:hsym `$"localhost:",/:string 7080+til 3;
@@ -31,12 +41,14 @@ globs:{
 	Get the closing price of a set of 10 stocks for a 10-year period and group into 
   weekly, monthly and yearly aggregates. For each aggregate period determine the low, 
   high and average closing price value. The output should be sorted by id and trade date.
+
+  Modification: Increase tickers to 5000
 \
 .qpar.q0.query:{
   // perform preliminary selections and store locally in each worker
   { `t1 set select Id, TradeDate, ClosePrice from price 
-    where month in .aq.part.map[.aq.par.worker.getSelfName[]],Id in stock10, 
-    TradeDate >= startYear10,TradeDate <= startYear10 + 365 * 10
+    where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stockLarge, 
+    TradeDate >= startYear10, TradeDate <= startYear10 + 365 * 10
    } peach .z.pd[];
    
    // map reduce to calculate aggregates 
@@ -61,7 +73,7 @@ globs:{
 .qpar.q0.callback:{`q0result set x};
 
 .qser.q0.query:{
-	data:select Id, TradeDate, ClosePrice from price where Id in stock10, 
+	data:select Id, TradeDate, ClosePrice from price where Id in stockLarge, 
       TradeDate >= startYear10, TradeDate <= startYear10 + 365 * 10;
 	`Id`name`bucket xasc (upsert/)
 	 {[x;y;z] 
@@ -78,21 +90,26 @@ Adjust all prices and volumes (prices are multiplied by the split factor and vol
 are divided by the split factor) for a set of 1000 stocks to reflect the split events 
 during a specified 300 day period, assuming that events occur before the first trade of 
 the split date. These are called split-adjusted prices and volumes.
+
+Modification: Make period 1800 days (using maxTradeDate)
+Modification: Large number of ids (5000)
+
+pxdata~6mm obs
+
 \
 .qpar.q1.query:{
    // select appropriate price data and store
    {
      `pxdata set select from price 
      where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
-     Id in stock1000, TradeDate >= start300Days, 
-     TradeDate <= start300Days + 300
+     Id in stockLarge, TradeDate >= maxTradeDate-1800
    } peach .z.pd[];
   
    // select appropriate split data and store
    {
      `splitdata set select from split 
      where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
-     Id in stock1000, SplitDate >= start300Days
+     Id in stockLarge, SplitDate >= maxTradeDate-1800
    } peach .z.pd[];
   
    // join price and split data in distributed fashion
@@ -116,9 +133,9 @@ the split date. These are called split-adjusted prices and volumes.
 .qpar.q1.callback:{`q1result set x}; 
  
 .qser.q1.query:{
- 	pxdata:select from price where Id in stock1000, 
-        TradeDate >= start300Days, TradeDate <= start300Days + 300;
- 	splitdata:select from split where Id in stock1000, SplitDate >= start300Days;
+ 	pxdata:select from price where Id in stockLarge, 
+        TradeDate >= maxTradeDate-1800;
+ 	splitdata:select from split where Id in stockLarge, SplitDate >= maxTradeDate-1800;
    adjdata:select adjFactor:prd SplitFactor by Id, TradeDate 
            from ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
      0!`Id`TradeDate xasc select Id, TradeDate, HighPrice:HighPrice*1^adjFactor, 
@@ -134,20 +151,24 @@ the split date. These are called split-adjusted prices and volumes.
 For each stock in a specified list of 1000 stocks, 
 find the differences between the daily high and daily low on the day 
 of each split event during a specified period.
+
+Modification: Large number of stocks
+Modification: Remove end of specified period
+pxdata~6mm obs
 \
 .qpar.q2.query:{
   // select relevant price data and store in processes
 	{
     `pxdata set select Id, TradeDate, HighPrice, LowPrice from price 
-      where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stock1000, 
-      TradeDate within (startPeriod;endPeriod)
+      where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stockLarge, 
+      TradeDate >= maxTradeDate-1800
   } peach .z.pd[];
 
   // select relevant split data and store in processes 
 	{
     `splitdata set select Id, TradeDate:SplitDate, SplitFactor from split 
-    where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stock1000, 
-    SplitDate within (startPeriod;endPeriod)
+    where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stockLarge, 
+    SplitDate >= maxTradeDate-1800
   } peach .z.pd[];
   
   // reference join price and split data
@@ -159,10 +180,10 @@ of each split event during a specified period.
 
 
 .qser.q2.query:{
-	pxdata:select Id, TradeDate, HighPrice, LowPrice from price where Id in stock1000, 
-		TradeDate within (startPeriod;endPeriod);
-	splitdata:select Id, TradeDate:SplitDate, SplitFactor from split where Id in stock1000, 
-		SplitDate within (startPeriod;endPeriod);
+	pxdata:select Id, TradeDate, HighPrice, LowPrice from price where Id in stockLarge, 
+		TradeDate >= maxTradeDate-1800;
+	splitdata:select Id, TradeDate:SplitDate, SplitFactor from split where Id in stockLarge, 
+		SplitDate >= maxTradeDate-1800;
 	select Id, TradeDate, MaxDiff:HighPrice - LowPrice from 
     `Id`TradeDate xasc ej[`Id`TradeDate;pxdata;splitdata]
 	};
@@ -173,7 +194,9 @@ of each split event during a specified period.
 ********* QUERY 3 + 4 ****************
 Calculate the value of the S&P500 and Russell 2000 index for a specified day 
 using unadjusted prices and the index composition of the 2 indexes (see appendix 
-for spec) on the specified day
+for spec) on the specified day.
+
+Modification: 1000 stocks, and 5000 stocks (respectively)
 \
 
 // in reality it would suffice to run these 2 queries as the serial versions
@@ -188,7 +211,7 @@ for spec) on the specified day
  map:{
    select s:sum ClosePrice, c:count i from price 
    where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
-   Id in SP500, TradeDate = startPeriod
+   Id in stock1000, TradeDate = startPeriod
    };
  reduce:{[x;y] update s:s+0^y[0;`s], c:c+0^y[0;`c] from x};
  select avg_close_price:s%c from .aq.par.master.mapreduce[map;reduce;2]
@@ -197,7 +220,7 @@ for spec) on the specified day
 
 .qser.q3.query:{
   select avg_close_price:avg ClosePrice from price 
-  where Id in SP500, TradeDate = startPeriod
+  where Id in stock1000, TradeDate = startPeriod
   };
 .qser.q3.callback:{`q3ref set x}; 
 
@@ -206,7 +229,7 @@ for spec) on the specified day
  map:{
    select s:sum ClosePrice, c:count i from price 
    where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
-   Id in Russell2000, TradeDate = startPeriod
+   Id in stockLarge, TradeDate = startPeriod
    };
  reduce:{[x;y] update s:s+0^y[0;`s], c:c+0^y[0;`c] from x};
  select avg_close_price:s%c from .aq.par.master.mapreduce[map;reduce;2]
@@ -216,7 +239,7 @@ for spec) on the specified day
 
 .qser.q4.query:{
 	select avg_close_price:avg ClosePrice from price 
-  where Id in Russell2000, TradeDate = startPeriod
+  where Id in stockLarge, TradeDate = startPeriod
  };
 .qser.q4.callback:{`q4ref set x}; 
 
@@ -225,6 +248,11 @@ for spec) on the specified day
 ********* QUERY 5 ****************
 Find the 21-day and 5-day moving average price for a specified list of 1000 stocks 
 during a 6-month period. (Use split adjusted prices)
+
+Modification: larger ticker list
+Modification: Make period 1800 days (using maxTradeDate)
+
+pxdata~6mm obs
 \
 
 .qpar.q5.query:{
@@ -232,14 +260,14 @@ during a 6-month period. (Use split adjusted prices)
 	{
     `pxdata set select Id, TradeDate, ClosePrice from price 
     where month in .aq.part.map[.aq.par.worker.getSelfName[]],
-    Id in stock1000, TradeDate >= start6Mo,TradeDate < start6Mo + 31 * 6
+    Id in stockLarge, TradeDate >= maxTradeDate-1800
   } peach .z.pd[];
   
   // perform necessary split data selections
   {
     `splitdata set select Id, SplitDate, SplitFactor from split 
     where month in .aq.part.map[.aq.par.worker.getSelfName[]],
-    Id in stock1000, SplitDate >= start6Mo 
+    Id in stockLarge, SplitDate >= maxTradeDate-1800 
   } peach .z.pd[];
     
   // join price data and split data to have adjustment dta  
@@ -273,10 +301,10 @@ during a 6-month period. (Use split adjusted prices)
 .qpar.q5.callback:{`q5result set x};
 
 .qser.q5.query:{
-	pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, 
-    TradeDate >= start6Mo, TradeDate < start6Mo + 31 * 6;
-	splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
-    SplitDate >= start6Mo;
+	pxdata:select Id, TradeDate, ClosePrice from price where Id in stockLarge, 
+    TradeDate >= maxTradeDate-1800;
+	splitdata:select Id, SplitDate, SplitFactor from split where Id in stockLarge, 
+    SplitDate >= maxTradeDate-1800;
 	splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
     ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
   
@@ -291,21 +319,23 @@ during a 6-month period. (Use split adjusted prices)
 (Based on the previous query) 
 Find the points (specific days) when the 5-day moving average intersects the 
 21-day moving average for these stocks. The output is to be sorted by id and date.
-\
 
+Modification: larger ticker list
+Modification: Make period 1800 days (using maxTradeDate)
+\
 .qpar.q6.query:{
   // perform necessary price data selections
 	{
     `pxdata set select Id, TradeDate, ClosePrice from price 
     where month in .aq.part.map[.aq.par.worker.getSelfName[]],
-    Id in stock1000, TradeDate >= start6Mo,TradeDate < start6Mo + 31 * 6
+    Id in stockLarge, TradeDate >= maxTradeDate-1800
   } peach .z.pd[];
   
   // perform necessary split data selections
   {
     `splitdata set select Id, SplitDate, SplitFactor from split 
     where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
-    Id in stock1000, SplitDate >= start6Mo
+    Id in stockLarge, SplitDate >= maxTradeDate-1800 
   } peach .z.pd[];
     
   // join price and split data for adjustments  
@@ -342,10 +372,8 @@ Find the points (specific days) when the 5-day moving average intersects the
 .qpar.q6.callback:{`q6result set x};
 
 .qser.q6.query:{
-	pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, TradeDate >= start6Mo,
-	 TradeDate < start6Mo + 31 * 6;
-	splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
-    SplitDate >= start6Mo;
+	pxdata:select Id, TradeDate, ClosePrice from price where Id in stockLarge, TradeDate >= maxTradeDate-1800;
+	splitdata:select Id, SplitDate, SplitFactor from split where Id in stockLarge, SplitDate >= maxTradeDate-1800;
 	splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
     ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
   movingAvgs:update m21:21 mavg ClosePrice, m5:5 mavg ClosePrice by Id from 
@@ -368,6 +396,8 @@ price of the trading day.
 
 Modifications based on sybase benchmark: use adjusted prices, 21-day moving avg, instead
 of 20 days
+
+Modifications: larger stock list (1000)
 \
 
 .qpar.q7.query:{
@@ -378,13 +408,13 @@ of 20 days
   {
     `pxdata set select Id, TradeDate, ClosePrice from price 
       where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
-      Id in stock10, TradeDate >= -365 + max TradeDate
+      Id in stock1000, TradeDate >= -365 + max TradeDate
   } peach .z.pd[];
   
   // select relevant split data
   {
     `splitdata set select Id, SplitDate, SplitFactor from split 
-      where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stock10, 
+      where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stock1000, 
       SplitDate >= -365 + max SplitDate
   } peach .z.pd[];
 
@@ -438,10 +468,10 @@ of 20 days
 
 .qser.q7.query:{
  alloc:10000.0;
- pxdata:select Id, TradeDate, ClosePrice from price where Id in stock10, 
+ pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, 
   TradeDate >= -365 + max TradeDate;
  
- splitdata:select Id, SplitDate, SplitFactor from split where Id in stock10, 
+ splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
    SplitDate >= -365 + max SplitDate;
  
  splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
@@ -471,13 +501,15 @@ Find the pair-wise coefficients of correlation in a set of 10 securities for a
 2 year period. Sort the securities by the coefficient of correlation, indicating 
 the pair of securities corresponding to that row. [Note: coefficient of correlation
 defined in appendix]
+
+Modification: larger stock list 
 \
 
 .qpar.q8.query:{
   // select relevant price data
   {
     `pricedata set select Id, TradeDate, ClosePrice from price 
-      where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stock10, 
+      where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stock1000, 
       TradeDate >= startYear10, TradeDate <= startYear10 + 365 * 2
   } peach .z.pd[];
   // group data by Id
@@ -501,7 +533,7 @@ defined in appendix]
 
 .qser.q8.query:{
 	pricedata:`Id`TradeDate xasc select Id, TradeDate, ClosePrice from price 
-    where Id in stock10, TradeDate >= startYear10, TradeDate <= startYear10 + 365 * 2;
+    where Id in stock1000, TradeDate >= startYear10, TradeDate <= startYear10 + 365 * 2;
 	pair1:select ClosePrice1:ClosePrice by Id1:Id from pricedata;
 	// full matrix, not just lower/upper triangular
 	corrdata:pair1 cross `Id2`ClosePrice2 xcol pair1;
@@ -523,12 +555,16 @@ with a split anytime in the past three calendar years (not necessarily in the
 thus it doesn't include stocks that did not have dividends (which would have a yield
 of 0 by default). It also includes dividends that might have happened been announced prior to the
 first trade date in the relevant 3 year period (the inner join is done on the year part)
+
+
+Modification:3 years made 20 years
+Modification: larger stock list
 \
 
 .qpar.q9.query:{
   // map reduce to calculate largest trade date
   map:{
-    select TradeDate:(-365*3)+max TradeDate from price where month in .aq.part.map[.aq.par.worker.getSelfName[]]
+    select TradeDate:(-365*20)+max TradeDate from price where month in .aq.part.map[.aq.par.worker.getSelfName[]]
   };
   reduce:|;
   startDate:first exec TradeDate from .aq.par.master.mapreduce[map;reduce;2];
@@ -538,7 +574,7 @@ first trade date in the relevant 3 year period (the inner join is done on the ye
   // map reduce to calculate Id that have experienced split
   map:{
     exec Id from select distinct Id from split where 
-    month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in Russell2000, 
+    month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stockLarge, 
     (getYear SplitDate) >= startYear
   };
   reduce:{distinct x,y};
@@ -548,7 +584,7 @@ first trade date in the relevant 3 year period (the inner join is done on the ye
   // map reduce to calculate average price for non-split Ids
   map:{
     select s:sum ClosePrice, c:count i by Id, year:getYear TradeDate from price 
-    where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in Russell2000, 
+    where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stockLarge, 
     TradeDate >= startDate, not Id in hadSplits
   };
   reduce:{y upsert x pj y};
@@ -557,7 +593,7 @@ first trade date in the relevant 3 year period (the inner join is done on the ye
   // map reduce to calcualte dividend amount for non-split Ids
   map:{
     select total_divs:sum DivAmt by Id, year:getYear AnnounceDate from dividend 
-    where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in Russell2000, 
+    where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stockLarge, 
     (getYear AnnounceDate)>= startYear, not Id in hadSplits
   };
   reduce:{y upsert x pj y};
@@ -569,14 +605,14 @@ first trade date in the relevant 3 year period (the inner join is done on the ye
 .qpar.q9.callback:{`q9result set x}; 
 
 .qser.q9.query:{
-  startDate:first exec (-365*3)+TradeDate from select max TradeDate from price;
+  startDate:first exec (-365*20)+TradeDate from select max TradeDate from price;
   startYear:getYear startDate;
   .aq.par.master.define[`startDate;startDate];
   .aq.par.master.define[`startYear;startYear];
-  hadSplits:exec Id from select distinct Id from split where Id in Russell2000, (getYear SplitDate)>=startYear;
+  hadSplits:exec Id from select distinct Id from split where Id in stockLarge, (getYear SplitDate)>=startYear;
   .aq.par.master.define[`hadSplits;hadSplits];
-  nosplit:select avg_px:avg ClosePrice by Id, year:getYear TradeDate from price where Id in Russell2000, TradeDate>=startDate, not Id in hadSplits;
-  divdata:select total_divs:sum DivAmt by Id, year:`year$AnnounceDate from dividend where Id in Russell2000, (getYear AnnounceDate)>= startYear, not Id in hadSplits;
+  nosplit:select avg_px:avg ClosePrice by Id, year:getYear TradeDate from price where Id in stockLarge, TradeDate>=startDate, not Id in hadSplits;
+  divdata:select total_divs:sum DivAmt by Id, year:`year$AnnounceDate from dividend where Id in stockLarge, (getYear AnnounceDate)>= startYear, not Id in hadSplits;
   0!update yield:total_divs%avg_px from select from nosplit ij `Id`year xkey divdata
  };
 .qser.q9.callback:{`q9ref set x}; 
@@ -594,10 +630,11 @@ execute:{[prefix;query]
   };
 
 queries:"q",/:string til 10;
-
+/
 // execute our queries
 execute[".qpar"; ]  each queries;
 execute[".qser"; ] each queries;
+\
 
 timer:{[iters;q]
   show "timing query ",string[q];
@@ -607,20 +644,15 @@ timer:{[iters;q]
   };
 
 getQueryNames:{` sv/:x,/:(k where not null k:key x),\:`query};
-timings:([] query:`$(); time:`float$(); mem:`float$());
-runBenchmark:{
-   show "running benchmark, iteration:",string[x];
-  `timings upsert qpar,'timer[10; ] each qpar:getQueryNames[`.qpar];
-  `timings upsert qser,'timer[10; ] each qser:getQueryNames[`.qser];
-  };
 
 /
-runBenchmark each til 10
+timings:([query:`$()] time:`float$(); mem:`float$())
+`timings upsert qpar,'timer[10; ] each qpar:getQueryNames[`.qpar];
+`timings upsert qser,'timer[10; ] each qser:getQueryNames[`.qser];
 update num:`$("."vs/:string query)@\:2 from `timings
 update sys:`$("."vs/:string query)@\:1 from `timings
 
-summary:select avg time, avg mem by num, sys from timings;
-update ratio:qpar%qser from exec `qpar`qser#sys!time by q:num from summary
+update ratio:qpar%qser from exec `qpar`qser#sys!time by q:num from timings
 
 /
 q0ref~update `#Id from 0!q0result
@@ -632,4 +664,4 @@ q5ref~q5result
 q6ref~q6result
 q7ref~q7result
 (~) . (`Id1`Id2)xasc/:(q8ref; q8result)
-q9ref~q9result
+q9ref~q9result 
