@@ -619,7 +619,7 @@ runBenchmark each til 10
 update num:`$("."vs/:string query)@\:2 from `timings
 update sys:`$("."vs/:string query)@\:1 from `timings
 
-summary:select avg time, avg mem by num, sys from timings;
+summary:select avg time, sdtime:dev time, avg mem by num, sys from timings;
 update ratio:qpar%qser from exec `qpar`qser#sys!time by q:num from summary
 
 /
