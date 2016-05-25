@@ -25,9 +25,9 @@ workers:3 cut mkhandle each wports;
 // initialize
 .aq.par.supermaster.init[masters;workers];
 // create partitioned data
-.aq.par.createSamplePartitioned 1;
+.aq.par.createSamplePartitioned[1;`:toydb];
 // load data on all masters and workers
-.aq.par.supermaster.onAll[(system;"l ",PWD,"/sampledb")];
+.aq.par.supermaster.onAll[(system;"l ",PWD,"/toydb")];
 
 // queries (query/callback pairs) to be processed by super-master
 query1:{
@@ -187,7 +187,7 @@ callback12:{`q12result set x};
 
 
 / Simple check of moving average
-\l sampledb
+\l toydb
 ref:select `#c1, c2, id, ms:4 msum c4, ma:4 mavg c4 from `c1`c2`id xasc select from t
 ref~localMovResult
 
