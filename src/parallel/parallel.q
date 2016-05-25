@@ -57,34 +57,75 @@
   .z.pd:{`u#exec handle from .aq.par.connections where conntype=`master};
   // instruct each master to initialize
   .aq.par.runSynch'[ms;(`.aq.par.master.init; ;flip ws) each ws];
+  // initialize availability list to all masters
+  .aq.par.supermaster.availMasters:`$();
+  .aq.par.supermaster.registerAvail each .aq.par.masterNames[];
+  // initialize job queue to empty
+  .aq.par.supermaster.jobQueue:();
  };
 
-// Pick master for delegation of a query
-// current strategy is round-robin
-.aq.par.supermaster.COUNTER:0;
-.aq.par.supermaster.pickMaster:{
-  .aq.par.supermaster.COUNTER+:1;
-  first .aq.par.supermaster.COUNTER rotate .aq.par.masterNames[]
+// Job assignment
+// Assigns job to a master if any jobs still remain and masters are available for execution
+.aq.par.supermaster.assignJob:{
+  if[(0 < count .aq.par.supermaster.availMasters) & 0 < count .aq.par.supermaster.jobQueue; 
+  .aq.par.supermaster.runJob[]
+  ];
+  }
+
+// Run a job
+// Run the first job in the queue, with the first master in the list of available masters
+// remove both from their respective lists  
+.aq.par.supermaster.runJob:{
+  // take first master and adjust availability list
+  assigned:first .aq.par.supermaster.availMasters;
+  .aq.par.supermaster.availMasters:1_ .aq.par.supermaster.availMasters;
+  // take first job and adjust remaining job queue
+  job:first .aq.par.supermaster.jobQueue;
+  .aq.par.supermaster.jobQueue:1_ .aq.par.supermaster.jobQueue;
+  // execute job on assigned master
+  (job 0) . (assigned,1_job)
+  };  
+
+// Register a master as available for execution
+// args:
+//  master: availeble master  
+.aq.par.supermaster.registerAvail:{[master]
+  `.aq.par.supermaster.availMasters upsert master;
   };
 
+// Actions upon job completion
+// This is added to all callbacks, re-registers master as available and checks
+// if any jobs remain to be assigned 
+.aq.par.supermaster.completedJob:{
+  .aq.par.supermaster.registerAvail first where .aq.par.nameToHandle[]=.z.w;
+  .aq.par.supermaster.assignJob[];
+  }  
+  
 // Execute a query on a master process
+// adds to the query as a job to be executed as soon as a master is available
 // args:
 //  w: boolean, true if is writer query
 //  r: request (i.e. query) to execute
 //  cb: callback (a symbol if writer query, used to read that name and broadcast)
 //      or a function to execute with result, if reader query
 .aq.par.supermaster.execute:{[w;r;cb]
-  $[w; .aq.par.supermaster.executeWriter[r;cb]; .aq.par.supermaster.executeReader[r;cb]]
+  // extend callback with job management
+  eCb:.aq.par.supermaster.completedJob cb@;
+  // job to add to job queue
+  job:($[w;.aq.par.supermaster.executeWrite;.aq.par.supermaster.executeReader];r;eCb);
+  `.aq.par.supermaster.jobQueue upsert enlist job;
+  .aq.par.supermaster.assignJob[];
   };
 
 // Execute a writer query
+// Not intended for use directly, use .aq.par.supermaster.execute
 // args:
+//  master: master to execute query
 //  r: request to execute (must write data with name n)
 //  n: name of data written (must be able to read from this in worker processes), used
 //    to write with same name to peer processes
-.aq.par.supermaster.executeWriter:{[r;n]
-  show "executing writer query";
-  master:.aq.par.supermaster.pickMaster[];
+.aq.par.supermaster.executeWriter:{[master;r;n]
+  show "executing writer query on ",string master;
   // execute writer query
   .aq.par.runSynch[master;r];
   // now make that master broadcast the result to other masters
@@ -92,12 +133,13 @@
   };
 
 // Execute a reader query
+// Not intended for use directly, use .aq.par.supermaster.execute
 // args: request, callback to register data in super-master process
+//  master: master to execute query
 //  r: request to execute (must return data)
 //  cb: call back to be execute on result of r
-.aq.par.supermaster.executeReader:{[r;cb]
-  show "executing reader query";
-  master:.aq.par.supermaster.pickMaster[];
+.aq.par.supermaster.executeReader:{[master;r;cb]
+  show "executing reader query on ",string master;
   // execute query asynchronously along with callback;
   run:{(neg .z.w) (y; eval x)};
   .aq.par.runAsynch[master;(run;r;cb)];
