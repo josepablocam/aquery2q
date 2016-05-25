@@ -88,7 +88,7 @@
 
 // Register a master as available for execution
 // args:
-//  master: availeble master  
+//  master: available master
 .aq.par.supermaster.registerAvail:{[master]
   `.aq.par.supermaster.availMasters upsert master;
   };
@@ -96,8 +96,10 @@
 // Actions upon job completion
 // This is added to all callbacks, re-registers master as available and checks
 // if any jobs remain to be assigned 
-.aq.par.supermaster.completedJob:{
-  .aq.par.supermaster.registerAvail first where .aq.par.nameToHandle[]=.z.w;
+// args:
+//  master: newly available master
+.aq.par.supermaster.completedJob:{[master]
+  .aq.par.supermaster.registerAvail master;
   .aq.par.supermaster.assignJob[];
   }  
   
@@ -109,10 +111,8 @@
 //  cb: callback (a symbol if writer query, used to read that name and broadcast)
 //      or a function to execute with result, if reader query
 .aq.par.supermaster.execute:{[w;r;cb]
-  // extend callback with job management
-  eCb:.aq.par.supermaster.completedJob cb@;
   // job to add to job queue
-  job:($[w;.aq.par.supermaster.executeWrite;.aq.par.supermaster.executeReader];r;eCb);
+  job:($[w;.aq.par.supermaster.executeWriter;.aq.par.supermaster.executeReader];r;cb);
   `.aq.par.supermaster.jobQueue upsert enlist job;
   .aq.par.supermaster.assignJob[];
   };
@@ -130,6 +130,8 @@
   .aq.par.runSynch[master;r];
   // now make that master broadcast the result to other masters
   .aq.par.runSynch[master;(`.aq.par.master.broadcast;n)];
+  // and register job completion
+  .aq.par.supermaster.completedJob[master];
   };
 
 // Execute a reader query
@@ -140,9 +142,9 @@
 //  cb: call back to be execute on result of r
 .aq.par.supermaster.executeReader:{[master;r;cb]
   show "executing reader query on ",string master;
-  // execute query asynchronously along with callback;
-  run:{(neg .z.w) (y; eval x)};
-  .aq.par.runAsynch[master;(run;r;cb)];
+  // execute query asynchronously along with callback
+  run:{(neg .z.w) (y; eval x); (neg .z.w) (`.aq.par.supermaster.completedJob; z)};
+  .aq.par.runAsynch[master;(run;r;cb;master)];
   };
 
 // Execute a request on all masters and all workers
@@ -756,11 +758,11 @@
 // Create very simple sample data for experimenting
 // args:
 //  x: seed for random number generator
-.aq.par.createSamplePartitioned:{
- system "S ",string x;
+.aq.par.createSamplePartitioned:{[seed;path]
+ system "S ",string seed;
  n:100000; // # of obs per partition
  pars:.z.D + til 10; // partitions
- parpaths:` sv/: `:sampledb,/:(`$string pars),\:`t`;
+ parpaths:` sv/: path,/:(`$string pars),\:`t`;
  // we avoid symbols for simplicity
  mk:{[ct;off;path] path set ([]id:off+til ct;c1:ct?10;c2:ct?10;c3:ct?100.;c4:ct?100)};
  mk[n;;] ./: flip (n*til count parpaths;parpaths)
