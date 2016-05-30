@@ -235,12 +235,12 @@
 // Shuffle, Edge Extension, Carry, Map-Reduce
 // Each primitive encapsulates all parallelism in a given cohort
 
-////// Order-Preserving Shuffle data //////
+////// Order-Preserving Map //////
 // (aka. order-preserving re-partioning of data across worker processes)
 // Guarantees that writes take place in order of worker list and so maintain
 // any other underlying sort of data. (e.g. sort by date, and partition by id, would result in
 // common id entries sorted by date)
-// This precludes parallelization, so if speed is a concern, use .aq.par.master.shuffle instead
+// This precludes parallelization, so if speed is a concern, use .aq.par.master.map instead
 // Strategy:
 // For each function read in reads:
 //  - synchronously execute across workers
@@ -249,24 +249,18 @@
 //    reads: list of functions to read data needed for a given process destination
 //    dests: list of destination processes (same length as read list)
 //    write: function to write data to process data structure (most likely of the form {x upsert y})
-.aq.par.master.opShuffle:{[reads;dests;write]
+.aq.par.master.opMap:{[reads;dests;write]
   workers:.aq.par.workerNames[];
   // for each function and destination process
   // instruct each process to read and write to destination process 
   // self will correspond to handle 0 (and thus not actually send), but just copy over
   // as desired
-  .aq.par.master.opShuffle0[ ;workers;write; ] ./: flip (reads;dests);
+  .aq.par.master.opMap0[ ;workers;write; ] ./: flip (reads;dests);
   // clean up potential temporary data created
   .aq.par.worker.cleanUp peach (count workers)#`temp;
   };
  
-// using peach(requires that the data exist in ALL processes beforehand)
-// but that is not unreasonable, can always create empty tables in all beforehand
-// Execute one iteration of shuffle (i.e. one read function and one dest process)
-// Workers read, and then write to dest
-
-
-.aq.par.master.opShuffle0:{[read;workers;write;dest]
+.aq.par.master.opMap0:{[read;workers;write;dest]
   //
   if[(0=count .z.pd[])|not all .z.pd[] in .aq.par.nameToHandle workers;
       '"error: set .z.pd, workers must be all processes"];
@@ -279,7 +273,7 @@
   .aq.par.runSynch[workers;(request;dest)];
   };
 
-////// Non-Order-Preserving Shuffle data //////
+////// Non-Order-Preserving map (in-memory re-partition) //////
 // Makes no guarantees for order of writes, as workers write data in parallel
 // If order is not a concern, use this rather than the order-preserving variant, for speed.
 // Strategy:
@@ -290,10 +284,10 @@
 //    reads: list of functions to read data needed for a given process destination
 //    dests: list of destination processes (same length as read list)
 //    write: function to write data to process data structure (most likely of the form {x upsert y})
-.aq.par.master.shuffle:{[reads;dests;write]
+.aq.par.master.map:{[reads;dests;write]
   workers:.aq.par.workerNames[];
   // workers perform writes in parallel
-  .aq.par.worker.shuffle0[dests;reads; ] peach (count workers)#write;
+  .aq.par.worker.map0[dests;reads; ] peach (count workers)#write;
   // block until all workers done with their shuffle writes
   .aq.par.master.waitWhile[.aq.par.master.workNotDone];
   .aq.par.worker.cleanUp peach (count workers)#`temp;
@@ -312,7 +306,7 @@
 // Worker keeps track of destinations that need to be written to
 // callbacks update this list to allow determining if a worker is done with work
 // all writes are done asynchronously
-.aq.par.worker.shuffle0:{[dests;reads;write]
+.aq.par.worker.map0:{[dests;reads;write]
   // list of destinations acts as work list, 1 entry removed when write done
   .aq.par.worker.workList:dests;
   job:{[d;r;w]
@@ -410,33 +404,33 @@
  };
 
 
-////// Map-reduce //////
-// Normal map-reduce, nothing particular here
+////// Staged-reduce //////
+// (Optionally staged) reduce (a la map-reduce), nothing particular here
 // Strategy:
-//  - Each worker executes a mapper
+//  - Each worker executes an initial function (can be as simple as a selection)
 //  - Each reduction phase creates groups of worker processes of at most size k, and reduces
 //    their data in a single process (the last one in that group).
 //    This set of reducers constitute the set of eligible workers for the next reduction phase
 //  - Operations must be associative and commutative, as no order of reduction is guaranteed
 // args:
-//  map: mapping function (e.g. {select sum c1 by c2 from t})
+//  init: initial function function (e.g. {select sum c1 by c2 from t})
 //  reducer: reducing function (e.g.{ y,x pj y})
 //  k: max size of each reducer group (e.g 2)
-.aq.par.master.mapreduce:{[map;reduce;k]
+.aq.par.master.reduce:{[init;reduce;k]
   // if executes with k=1 will loop forever, since never reducing
   if[k=1;'"must have at least 2 reducers per reduction group"];
   workers:.aq.par.workerNames[];
   ctWorkers:count workers;
   // clean up data structures
   .aq.par.worker.cleanUp peach ctWorkers#`temp;
-  // each worker executes the map function and stores data to temp
-  {.aq.par.temp:x[]} peach (count workers)#map;
+  // each worker executes the init function and stores data to temp
+  {.aq.par.temp:x[]} peach (count workers)#init;
   // reduce until all results are in a single process
   stopWhenOne:{1<>count raze x};
   // at each phase create reducer groups of at most size k
   partitionReducers:cut[k;];
   // create verb to be executed in each reduce phase
-  reduceLoop:.aq.par.master.reduce[reduce; ] partitionReducers@;
+  reduceLoop:.aq.par.master.reduce0[reduce; ] partitionReducers@;
   holdsResult:reduceLoop/[stopWhenOne;workers];
   // get result from final reducer
   result:first .aq.par.runSynch[holdsResult;({.aq.par.temp};::)];
@@ -449,7 +443,7 @@
 // args:
 //  reduce: reduce function to combine results (commutative and associative), takes 2 args
 //  reducerGroups: groups of at most size k, each group reduces in parallel
-.aq.par.master.reduce:{[reduce;reducerGroups]
+.aq.par.master.reduce0:{[reduce;reducerGroups]
   // will hold results and actually reduce
   reducers:last each reducerGroups;
   // mapping from reducer to processes that they should query for intermediate results
@@ -504,7 +498,7 @@
    temp:`.aq.par.sort;
    {x set ()} peach ctWorkers#temp;
    // shuffle based on sorting (upserting new entries)
-   .aq.par.master.shuffle[shuffles;workers;{[o;a] o upsert a}[temp;]];
+   .aq.par.master.map[shuffles;workers;{[o;a] o upsert a}[temp;]];
    // sort data in each process (as entries have been upserted incrementally)
    {z set x get y}[sort;temp; ] peach ctWorkers#nm;
   };
@@ -596,7 +590,7 @@
   // create special group-based append function
   groupAppend:{[o;a] odat:@[get;o;0#a]; o set $[0=count a;odat;odat,''a]};
   // group-by
-  .aq.par.master.shuffle[shuffles;workers;groupAppend[`.aq.par.group;]];
+  .aq.par.master.map[shuffles;workers;groupAppend[`.aq.par.group;]];
   {x set .aq.par.group} peach ctWorkers#nm;
   .aq.par.worker.cleanUp peach ctWorkers#`group;
   };
@@ -706,7 +700,7 @@
   .aq.par.worker.allocKeys[;alloc;temp] peach (count dests)#read;
   // shuffle data to right process
   shuffle:{[x;y;z] delete aq__proc from select from x where aq__proc=y}[temp;;]@/:dests;
-  .aq.par.master.shuffle[shuffle;dests;final upsert]
+  .aq.par.master.map[shuffle;dests;final upsert]
  };
 
 // Add process allocation information for join

@@ -43,7 +43,7 @@ query1:{
   // now we want to query each in-memory table for the data we want
   fs:{[x;y] select from local where c1 in x}@/:value pgs;
   // shuffle and write to local data as "shuffled"
-  .aq.par.master.shuffle[fs;key pgs;{`shuffled upsert x}];
+  .aq.par.master.map[fs;key pgs;{`shuffled upsert x}];
  };
 // writers simply share name of data written as callback (used to distribute across)
 // other processes
@@ -150,10 +150,10 @@ callback10:{`q10result set x};
 // Avg and sum by c1, c2 (map-reduce)
 // This is a much more likely strategy than query8
 query11:{
-  map:{select s3:sum c3, ct3:count c3, s4:sum c4 by c1, c2 from local};
+  init:{select s3:sum c3, ct3:count c3, s4:sum c4 by c1, c2 from local};
   reduce:{y upsert x pj y};
   k:2;
-  data:.aq.par.master.mapreduce[map;reduce;k];
+  data:.aq.par.master.reduce[init;reduce;k];
   select c1, c2, c3:s3%ct3, c4:s4 from data
   };
 callback11:{`q11result set x};

@@ -40,7 +40,7 @@ globs:{
    } peach .z.pd[];
    
    // map reduce to calculate aggregates 
-   map:{
+   init:{
        raze {[x;y;z] 
        select low:min ClosePrice, high:max ClosePrice, 
        sCp:sum ClosePrice, cCp:sum not null ClosePrice 
@@ -53,7 +53,7 @@ globs:{
               sCp:sCp^sCp+gety[`sCp], cCp:cCp^cCp+gety[`cCp] from x;
      y upsert adjusted
      };
-    result:update mean:sCp%cCp from .aq.par.master.mapreduce[map;reduce;3];
+    result:update mean:sCp%cCp from .aq.par.master.reduce[init;reduce;3];
 
     // remove temporary columns and sort
    `Id`name`bucket xasc delete sCp,cCp from result
@@ -185,13 +185,13 @@ for spec) on the specified day
 // semantics). So this represents the most general case, where we blindly apply map-reduce
 
 .qpar.q3.query:{
- map:{
+ init:{
    select s:sum ClosePrice, c:count i from price 
    where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
    Id in SP500, TradeDate = startPeriod
    };
  reduce:{[x;y] update s:s+0^y[0;`s], c:c+0^y[0;`c] from x};
- select avg_close_price:s%c from .aq.par.master.mapreduce[map;reduce;2]
+ select avg_close_price:s%c from .aq.par.master.reduce[init;reduce;2]
  };
 .qpar.q3.callback:{`q3result set x};
 
@@ -203,13 +203,13 @@ for spec) on the specified day
 
 
 .qpar.q4.query:{
- map:{
+ init:{
    select s:sum ClosePrice, c:count i from price 
    where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
    Id in Russell2000, TradeDate = startPeriod
    };
  reduce:{[x;y] update s:s+0^y[0;`s], c:c+0^y[0;`c] from x};
- select avg_close_price:s%c from .aq.par.master.mapreduce[map;reduce;2]
+ select avg_close_price:s%c from .aq.par.master.reduce[init;reduce;2]
  };
 .qpar.q4.callback:{`q4result set x};
 
@@ -426,12 +426,12 @@ of 20 days
     `latestPxs set select Id, ClosePrice from ungroup adjpxdata 
     where TradeDate=max TradeDate
   } peach .z.pd[];
-  map:{
+  init:{
     select stock_value:sum alloc^result * ?[stillInvested;ClosePrice;1] from 
     latestPxs lj `Id xkey simulated
   };
   reduce:{x+y};
-  .aq.par.master.mapreduce[map;reduce;2]
+  .aq.par.master.reduce[init;reduce;2]
   };
 .qpar.q7.callback:{`q7result set x};
   
@@ -527,41 +527,41 @@ first trade date in the relevant 3 year period (the inner join is done on the ye
 
 .qpar.q9.query:{
   // map reduce to calculate largest trade date
-  map:{
+  init:{
     select TradeDate:(-365*3)+max TradeDate from price where month in .aq.part.map[.aq.par.worker.getSelfName[]]
   };
   reduce:|;
-  startDate:first exec TradeDate from .aq.par.master.mapreduce[map;reduce;2];
+  startDate:first exec TradeDate from .aq.par.master.reduce[init;reduce;2];
   .aq.par.master.define[`startDate;startDate];
   .aq.par.master.define[`startYear;getYear startDate];
   
   // map reduce to calculate Id that have experienced split
-  map:{
+  init:{
     exec Id from select distinct Id from split where 
     month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in Russell2000, 
     (getYear SplitDate) >= startYear
   };
   reduce:{distinct x,y};
-  hadSplits:.aq.par.master.mapreduce[map;reduce;2];
+  hadSplits:.aq.par.master.reduce[init;reduce;2];
   .aq.par.master.define[`hadSplits;hadSplits];
   
   // map reduce to calculate average price for non-split Ids
-  map:{
+  init:{
     select s:sum ClosePrice, c:count i by Id, year:getYear TradeDate from price 
     where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in Russell2000, 
     TradeDate >= startDate, not Id in hadSplits
   };
   reduce:{y upsert x pj y};
-  nosplit:select Id, year, avg_px:s% c from .aq.par.master.mapreduce[map;reduce;2];
+  nosplit:select Id, year, avg_px:s% c from .aq.par.master.reduce[init;reduce;2];
   
   // map reduce to calcualte dividend amount for non-split Ids
-  map:{
+  init:{
     select total_divs:sum DivAmt by Id, year:getYear AnnounceDate from dividend 
     where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in Russell2000, 
     (getYear AnnounceDate)>= startYear, not Id in hadSplits
   };
   reduce:{y upsert x pj y};
-  divdata:.aq.par.master.mapreduce[map;reduce;2];
+  divdata:.aq.par.master.reduce[init;reduce;2];
   
   // join locally in master and return results
   0!update yield:total_divs%avg_px from select from nosplit ij `Id`year xkey divdata
