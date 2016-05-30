@@ -125,21 +125,22 @@ query8:{
   };
 callback8:{`q8result set x};
 
-// Sort and then group by last (in reality we would execute this the other way)
-// around, first group then sort (as groups are entirely intra-process)
-// so should be a much faster sort
+
 query9:{
   workers:.aq.par.workerNames[];
-  // sort data first
-  read:{get `local}; sort:{`date`id xasc x}; nmSorted:`localSorted;
-  .aq.par.master.sort[read;sort;nmSorted];
-  // now let's go ahead and group by c1
-  grp:{select c3, c4 by c1 from x}; nmGrouped:`localGrouped;
+  // group
+  read:`local;
+  grp:{select date, id, c3, c4 by c1 from x};
+  nmGrouped:`localGrouped;
   .aq.par.master.groupby[read;grp;nmGrouped];
+  // now sort within each group
+  {`localGrouped set update ix:{i iasc x i:iasc y}'[date;id] from localGrouped} peach .z.pd[];
+  {`localGrouped set update c3:c3@'ix, c4:c4@'ix from localGrouped} peach .z.pd[];
   // now the actual query, write table
   {`q9result set select c1, last each c3, last each c4 from localGrouped} peach .z.pd[]
   };
 callback9:`q9result;
+
 
 query10:{
   raze {select from q9result} peach .z.pd[]
@@ -163,6 +164,11 @@ callback11:{`q11result set x};
 query12:{
   .aq.par.master.groupby[`local;{select id, c3 by c1, c2 from x};`t1grouped];
   .aq.par.master.groupby[`local;{select id, c4 by c1, c2 from x};`t2grouped];
+  // sorted by id
+  {`t1grouped set update ix:iasc each id from t1grouped} peach .z.pd[];
+  {`t2grouped set update ix:iasc each id from t2grouped} peach .z.pd[];
+  {`t1grouped set update id:id@'ix, c3:c3@'ix from t1grouped} peach .z.pd[];
+  {`t2grouped set update id:id@'ix, c4:c4@'ix from t2grouped} peach .z.pd[];
   .aq.par.master.join[ej;`c1`c2;`t1grouped;`t2grouped;`tjoined];
   // now we want to ungroup them add columns and return result
   `id xasc raze {select id, c1, c2, added:c3+c4 from ungroup tjoined} peach .z.pd[]
@@ -205,5 +211,5 @@ ref:update `#c1 from 0!select last c3, last c4 by c1 from `date`id xasc select f
 ref~q10result
 
 / Group, join, and add
-ref:`id xasc select id, c1, c2, added:c3+c4 from ungroup {ej[`c1`c2;x;x]} select id, c3, c4 by c1, c2 from select from t
+ref:`id xasc select id, c1, c2, added:c3+c4 from ungroup {ej[`c1`c2;x;`c1`c2`id2 xcol x]} select id, c3, c4 by c1, c2 from select from t
 ref~q12result
