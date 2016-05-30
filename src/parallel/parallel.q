@@ -235,24 +235,27 @@
 // Shuffle, Edge Extension, Carry, Map-Reduce
 // Each primitive encapsulates all parallelism in a given cohort
 
-////// Shuffle data //////
-// (aka. reordering data across worker processes)
+////// Order-Preserving Shuffle data //////
+// (aka. order-preserving re-partioning of data across worker processes)
+// Guarantees that writes take place in order of worker list and so maintain
+// any other underlying sort of data. (e.g. sort by date, and partition by id, would result in
+// common id entries sorted by date)
+// This precludes parallelization, so if speed is a concern, use .aq.par.master.shuffle instead
 // Strategy:
 // For each function read in reads:
-//  - asynchronously execute across workers
+//  - synchronously execute across workers
 //  - instruct processes to write results of read to respective process in dests
 // args:
 //    reads: list of functions to read data needed for a given process destination
 //    dests: list of destination processes (same length as read list)
 //    write: function to write data to process data structure (most likely of the form {x upsert y})
-
-.aq.par.master.shuffle:{[reads;dests;write]
+.aq.par.master.opShuffle:{[reads;dests;write]
   workers:.aq.par.workerNames[];
   // for each function and destination process
   // instruct each process to read and write to destination process 
   // self will correspond to handle 0 (and thus not actually send), but just copy over
   // as desired
-  .aq.par.master.shuffle0[ ;workers;write; ] ./: flip (reads;dests);
+  .aq.par.master.opShuffle0[ ;workers;write; ] ./: flip (reads;dests);
   // clean up potential temporary data created
   .aq.par.worker.cleanUp peach (count workers)#`temp;
   };
@@ -261,7 +264,9 @@
 // but that is not unreasonable, can always create empty tables in all beforehand
 // Execute one iteration of shuffle (i.e. one read function and one dest process)
 // Workers read, and then write to dest
-.aq.par.master.shuffle0:{[read;workers;write;dest]
+
+
+.aq.par.master.opShuffle0:{[read;workers;write;dest]
   //
   if[(0=count .z.pd[])|not all .z.pd[] in .aq.par.nameToHandle workers;
       '"error: set .z.pd, workers must be all processes"];
@@ -274,6 +279,53 @@
   .aq.par.runSynch[workers;(request;dest)];
   };
 
+////// Non-Order-Preserving Shuffle data //////
+// Makes no guarantees for order of writes, as workers write data in parallel
+// If order is not a concern, use this rather than the order-preserving variant, for speed.
+// Strategy:
+// For each worker (in parallel):
+//  - select data for a destination, and send asynchronously
+//  master blocks until all writes are done
+// args:
+//    reads: list of functions to read data needed for a given process destination
+//    dests: list of destination processes (same length as read list)
+//    write: function to write data to process data structure (most likely of the form {x upsert y})
+.aq.par.master.shuffle:{[reads;dests;write]
+  workers:.aq.par.workerNames[];
+  // workers perform writes in parallel
+  .aq.par.worker.shuffle0[dests;reads; ] peach (count workers)#write;
+  // block until all workers done with their shuffle writes
+  .aq.par.master.waitWhile[.aq.par.master.workNotDone];
+  .aq.par.worker.cleanUp peach (count workers)#`temp;
+  };
+
+// master is not done until all workers are done
+.aq.par.master.workNotDone:{not all .aq.par.worker.workDone peach .z.pd[]};
+// waiting loop. master sleeps for a small amount of time before checking
+// for completion again
+.aq.par.master.waitWhile:{[continue] .aq.par.master.sleep/[continue;::];};
+
+// put master process to sleep while workers continue to write
+.aq.par.master.SLEEP_INTERVAL:"0.05";
+.aq.par.master.sleep:{ system "sleep ",.aq.par.master.SLEEP_INTERVAL; };
+
+// Worker keeps track of destinations that need to be written to
+// callbacks update this list to allow determining if a worker is done with work
+// all writes are done asynchronously
+.aq.par.worker.shuffle0:{[dests;reads;write]
+  // list of destinations acts as work list, 1 entry removed when write done
+  .aq.par.worker.workList:dests;
+  job:{[d;r;w]
+     // write data and call back
+    .aq.par.runAsynch[d;({y x; (neg .z.w) (`.aq.par.worker.updateWorkList;::)};r[];w)]
+    }[;;write];
+  job'[dests;reads]
+  };
+
+// worker is done with their job when their worklist is empty
+.aq.par.worker.workDone:{0=count .aq.par.worker.workList};
+// updates work list by removing the first entry (don't care which entry removed for now)
+.aq.par.worker.updateWorkList:{.aq.par.worker.workList:1_.aq.par.worker.workList};
 
 ////// Edge extension //////
 // (aka. add necessary data from previous process for window-ed ops)
