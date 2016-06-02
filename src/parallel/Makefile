@@ -1,8 +1,12 @@
 .PHONY: clean
 
 # set up parameter for size of data (# of tickers, for 4000 days of EOD data)
-ifndef BENCHMARKSIZE
-BENCHMARKSIZE=5000
+ifndef NTICKERS
+NTICKERS=5000
+endif
+
+ifndef NDAYS
+NDAYS=4000
 endif
 
 FINTIME_CODE_PATH=$(shell echo "`pwd`/fintime")
@@ -20,7 +24,7 @@ clean:
 # and fintime data
 fintime: ${FINTIME_CODE_PATH}/histgen.C ${FINTIME_CODE_PATH}/histgen.o
 	cd ${FINTIME_CODE_PATH}; make clean; make;\
-	./histgen ${BENCHMARKSIZE}; mkdir -p ${DATA_PATH}; mv -f ./hist-* ${DATA_PATH}/
+	./histgen ${NTICKERS} ${NDAYS}; mkdir -p ${DATA_PATH}; mv -f ./hist-* ${DATA_PATH}/
 	
 # create partitioned database
 qdata:
