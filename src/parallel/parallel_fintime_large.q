@@ -32,9 +32,8 @@ globs:{
   .aq.par.master.define[`getWeek;{1 + floor (x - firstDateOfYear x)%7}];
   // Map partitions to workers
   .aq.par.master.define[`.aq.part.map;.aq.par.master.mapPartitions[]];
-  };  
-{x[]} peach (count .z.pd[])#globs;
- 
+  };
+.aq.par.runAsynchAndBlock[.aq.par.masterNames[];(globs;::);(show;`loaded)];
 
 
 /
