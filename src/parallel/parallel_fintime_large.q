@@ -403,19 +403,22 @@ Modifications: larger stock list (1000)
 .qpar.q7.query:{
   // define allocation
   .aq.par.master.define[`alloc;10000.0];
+  // define global max dates
+  .aq.par.master.define[`maxTradeDate;first (select max TradeDate from price where month=max month)`TradeDate];
+  .aq.par.master.define[`maxSplitDate;first (select max SplitDate from split where month=max month)`SplitDate];
   
   // select relevant price data
   {
     `pxdata set select Id, TradeDate, ClosePrice from price 
       where month in .aq.part.map[.aq.par.worker.getSelfName[]], 
-      Id in stock1000, TradeDate >= -365 + max TradeDate
+      Id in stock1000, TradeDate >= -365 + maxTradeDate
   } peach .z.pd[];
   
   // select relevant split data
   {
     `splitdata set select Id, SplitDate, SplitFactor from split 
       where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stock1000, 
-      SplitDate >= -365 + max SplitDate
+      SplitDate >= -365 + maxSplitDate
   } peach .z.pd[];
 
   .aq.par.master.join[ej;`Id;`pxdata;`splitdata;`splitadj];
@@ -454,7 +457,7 @@ Modifications: larger stock list (1000)
   // and then reduce by adding up results
   {
     `latestPxs set select Id, ClosePrice from ungroup adjpxdata 
-    where TradeDate=max TradeDate
+    where TradeDate=maxTradeDate
   } peach .z.pd[];
   init:{
     select stock_value:sum alloc^result * ?[stillInvested;ClosePrice;1] from 
@@ -468,11 +471,14 @@ Modifications: larger stock list (1000)
 
 .qser.q7.query:{
  alloc:10000.0;
+ .aq.par.master.define[`maxTradeDate;first (select max TradeDate from price where month=max month)`TradeDate];
+ .aq.par.master.define[`maxSplitDate;first (select max SplitDate from split where month=max month)`SplitDate];
+
  pxdata:select Id, TradeDate, ClosePrice from price where Id in stock1000, 
-  TradeDate >= -365 + max TradeDate;
+  TradeDate >= -365 + maxTradeDate;
  
  splitdata:select Id, SplitDate, SplitFactor from split where Id in stock1000, 
-   SplitDate >= -365 + max SplitDate;
+   SplitDate >= -365 + maxSplitDate;
  
  splitadj:0!select ClosePrice:first ClosePrice*prd SplitFactor by Id, TradeDate from 
    ej[`Id;pxdata;splitdata] where TradeDate < SplitDate;
@@ -489,7 +495,7 @@ Modifications: larger stock list (1000)
       ((prev[m5month] >= prev m21day)& m5month < m21day)
     );
    
- latestPxs:select Id, ClosePrice from adjpxdata where TradeDate=max TradeDate;
+ latestPxs:select Id, ClosePrice from adjpxdata where TradeDate=maxTradeDate;
  select stock_value:sum alloc^result * ?[stillInvested;ClosePrice;1] from latestPxs lj `Id xkey simulated
  };
 .qser.q7.callback:{`q7ref set x}; 
@@ -564,7 +570,7 @@ Modification: larger stock list
 .qpar.q9.query:{
   // map reduce to calculate largest trade date
   init:{
-    select TradeDate:(-365*20)+max TradeDate from price where month in .aq.part.map[.aq.par.worker.getSelfName[]]
+    select TradeDate:(-365*20)+max TradeDate from price where month in .aq.part.map[.aq.par.worker.getSelfName[]], month=max month
   };
   reduce:|;
   startDate:first exec TradeDate from .aq.par.master.reduce[init;reduce;2];
@@ -590,7 +596,7 @@ Modification: larger stock list
   reduce:{y upsert x pj y};
   nosplit:select Id, year, avg_px:s% c from .aq.par.master.reduce[init;reduce;2];
   
-  // map reduce to calcualte dividend amount for non-split Ids
+  // map reduce to calculate dividend amount for non-split Ids
   init:{
     select total_divs:sum DivAmt by Id, year:getYear AnnounceDate from dividend 
     where month in .aq.part.map[.aq.par.worker.getSelfName[]], Id in stockLarge, 
@@ -605,7 +611,7 @@ Modification: larger stock list
 .qpar.q9.callback:{`q9result set x}; 
 
 .qser.q9.query:{
-  startDate:first exec (-365*20)+TradeDate from select max TradeDate from price;
+  startDate:first exec (-365*20)+TradeDate from select max TradeDate from price where month=max month;
   startYear:getYear startDate;
   .aq.par.master.define[`startDate;startDate];
   .aq.par.master.define[`startYear;startYear];
