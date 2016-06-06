@@ -151,8 +151,11 @@
 // args:
 //  r: request (purely for sideffects) (e.g. (system; "l mydatabase"))
 .aq.par.supermaster.onAll:{[r]
-  run:{eval x; .aq.par.runAsynch[.aq.par.workerNames[];x]};
-  run peach (count .z.pd[])#enlist r
+  run:{eval x; {eval x} peach (count .z.pd[])#enlist x};
+  $[1=cm:count .z.pd[];
+    .aq.par.runSynch[.aq.par.masterNames[];(run;r)];
+    run peach cm#enlist r
+    ]
   };
 
 
