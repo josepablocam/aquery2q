@@ -16,8 +16,9 @@
 
 \l parallel.q
 // Initialization
-masters:hsym `$"localhost:",/:string 7080+til 3;
-workers:hsym `$"localhost:",/:string 7090+til 30;
+opts:.Q.opt .z.x;
+masters:hsym `$"localhost:",/:"," vs first opts`masters;
+workers:hsym `$"localhost:",/:"," vs first opts`workers;
 workers:(count[workers] div count masters) cut workers;
 .aq.par.supermaster.init[masters;workers];
 
