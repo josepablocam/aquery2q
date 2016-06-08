@@ -235,7 +235,7 @@
 
 /////////// Primitives ///////////
 // Distributed computation is handled through use of 4 "primitives"
-// Shuffle, Edge Extension, Carry, Map-Reduce
+// Map (as in map-reduce), Edge Extension, Carry, (Staged) Reduce (as in map-reduce)
 // Each primitive encapsulates all parallelism in a given cohort
 
 ////// Order-Preserving Map //////
