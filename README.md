@@ -2,20 +2,20 @@ AQuery to Q (A2Q)
 ----------------
 
 A2Q is a project that explores order-based optimizations for a simple query
-language. Optimizations are mainly targeted at AST rewrites and, though simple,
+language. Optimizations are mainly targeted as AST rewrites and, though simple,
 yield empirical advantages at runtime.
 
 It compiles [AQuery](http://dl.acm.org/citation.cfm?id=1315482) into [q](https://kx.com/),
 providing users with two advantages:
 
-* Allows users to query kdb databases with a syntax similar to SQL
+* Allows users to query kdb+ databases with a syntax similar to SQL
 * Heuristic, order-based optimizations, which provide performance advantages, while maintaining
-readability
-* Compilation into transparent q code (allowing experienced users to inspect the code executed)
+readability in the source code
+* Transparent compilation into q code (allowing experienced users to inspect the code executed)
 
 The transformations on queries provide the same semantics at a fraction of the cost. These involve:
 pushing selections below sorting, removing unnecessary sorts, maintaining order across local tables,
-and others.
+amongst others.
 
 
 ## Installation/Building
@@ -28,11 +28,14 @@ executable installed. You can visit [kx systems](https://kx.com/software-downloa
 to download the appropriate version for your machine. For licensing reasons, we
 cannot include this for you. However, the process is simple.
 
-Once you install q, make sure you add it's installation location to your path.
+Once you install q, make sure you add its installation location to your path.
 
 ```
 export PATH=$PATH:/my/q/installation/location/
 ```
+
+Calling `which q` should echo back the appropriate location, if
+added succesfully.
 
 Most uses of q in examples/demos will assume you have this appropriately setup.
 
@@ -45,18 +48,25 @@ seamlessly using
 * Bison 2.3
 
 Other versions may work equally well, but they have not been
-tested. Assuming you have the above requirements, you can build by
+tested.
+
+The first step is to clone this git repository
 
 ```
-# from the main folder
-cd src
+git clone git@github.com:josepablocam/aquery2q.git
+```
+
+Assuming you have the mentioned requirements, you can build by
+
+```
+cd aquery2q/src
 make
 ```
 Similarly to the q installation, many demos/examples assume
 the AQuery executable is in your path, so make sure to add it
 
 ```
-export PATH=$PATH:/aquery/installation/location/src/
+export PATH=$PATH:path/to/aquery2q/src/
 ```
 
 ## Basic Usage
@@ -94,7 +104,6 @@ interactively.
 
 In order to build the demo:
 ```
-# assuming main aquery directory
 cd src/demo
 make
 ```
@@ -103,7 +112,11 @@ This will:
 * create sample data (randomly generated)
 * compile various sample queries in the examples folder
 
-In order to run the examples `src/demo/examples/fintime_aquery.a` (and their
+Building requires that you have the `q` executable in your path,
+and actually running additionally requires the same for the
+`a2q` executable.
+
+Running the examples `src/demo/examples/fintime_aquery.a` (and their
   respective translation), requires one additional step:
 
 ```
@@ -132,27 +145,30 @@ to `cd` into the appropriate folder.
 cd examples; ../a2qinterpret.sh 7089
 ```
 
+Entering an empty line executes the command written.
+
 ## Basic Grammar
 The grammar for AQuery is simple and should be familiar to
-most people used to SQL. A good way to get a thorough overview
+most people familiar with SQL. A good way to get a thorough overview
 of the grammar is to explore the parser rules in `src/parser/aquery.y`.
-These are written for Bison, should be fairly readable. We provide a simple
+These are written for Bison, and should be fairly readable. We provide a simple
 summary here of the most frequently used constructs: queries, data
 creation, loading/saving data, and user-defined functions.
 We use `ID` to stand for identifier, and `epsilon` to stand
 for the standard notation.
 
 ```
-program : [full-query | create | insert | load | dump | udf | verbatim-q | ] program
+program : [full-query | create | insert | load | dump | udf | verbatim-q]*
 
-verbatim-q: <q> str </q>
+// aquery files allow standard q code within special markers
+verbatim-q: <q> q code </q>
 
 // Queries
 full-query : [local_queries] query
 
 local_queries: WITH local_query+
 
-local_query: ID ['('columns')' |  epsilon ] AS ( query )
+local_query: ID ['('columns')'] AS '(' query ')'
 
 query : SELECT projections FROM source order-clause where-clause groupby-clause
 
@@ -173,11 +189,11 @@ groupby-clause: GROUP BY val [as ID] (, val [as ID])* [HAVING search-conditions]
 search-conditions: search-condition (AND search-condition)*;
 
 // Creating data
-create: CREATE TABLE ID [AS query | (schema)]
+create: CREATE TABLE ID [AS query | '(' schema ')']
 schema: ID type (, ID type)*
 
 insert: INSERT INTO ID [query | VALUES '(' vals ')']
-vals: val (,val)*;
+vals: val (, val)*;
 
 // Loading/Saving data
 load: LOAD DATA INFILE str INTO TABLE ID FIELDS TERMINATED BY str
@@ -189,7 +205,8 @@ udf: FUNCTION ID '(' arg-list ')' '{' fun-body '}'
 arg_list: ID (, ID)*
 fun_body: val | ID := val;
 
-val: val binop val | fun'('val (,val)*')' | -val
+val: val binop val | fun'('val (,val)*')' | -val | ID | int |
+  float | datetime | str | date | hex
 fun: ID | abs| avg[s] | count | deltas | distinct | drop
   | fill | first | last | max[s] | min[s] | mod | next
   | prev | sum[s] | stddev | ratios | vars | moving
@@ -215,7 +232,7 @@ WITH nested_t1(c1, c2, c3) AS (
   WHERE f(c3) > 10 AND c5 != c6
   GROUP BY c10
   )
-// must flatten out nested arrable  
+// must flatten out nested arrable using built-in FLATTEN
 SELECT c1, sum(c2) FROM FLATTEN(nested_t1) GROUP BY c1
 ```
 
