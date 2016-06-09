@@ -1,0 +1,73 @@
+// Sample queries for end-of-day SP500 stock quotes
+<q>
+eodprices:get `:../data/tables/eodprices
+</q>
+
+// definining our own covariance function
+FUNCTION myCov(x, y) {
+  center_x := x - avg(x);
+  center_y := y - avg(y);
+  num := sum(center_x * center_y);
+  denom := sqrt(sum(center_x * center_x)) * sqrt(sum(center_y * center_y));
+  num / denom
+  }
+
+// 30-day moving average closing price for apple stock
+SELECT 
+Date, avgs(12, Close) as movingClose
+FROM eodprices ASSUMING ASC Date WHERE ID = "AAPL"
+
+// Maximum profit (per-stock) for apple stock over last 60 days
+SELECT
+Date, 
+maxs(Close - mins(Close)) as maxProfit
+FROM eodprices ASSUMING ASC Date 
+WHERE ID = "AAPL" AND Date >= max(Date) - 60
+
+
+// Tickers with largest 30-day change price in last 365 days
+WITH
+  changes(ID, PxChange) AS (
+    SELECT 
+    ID, max(abs(fills(0, ratios(30, Close))))
+    FROM eodprices ASSUMING ASC Date 
+    WHERE Date >= max(Date) - 365
+    GROUP BY ID
+  )
+  SELECT first(10, ID) as TopMoMChangers FROM changes ASSUMING DESC PxChange
+  
+// Covariance in Day-over-Day price changes in last 30 days
+// for top 10 tickers by volume over last 60 days
+// use of adverbs is done through q, as this is usually an advanced feature
+<q>covEach:myCov';</q>
+
+WITH
+  volumes AS (
+    SELECT ID, sum(Volume) as TotalVolume
+    FROM eodprices WHERE Date >= max(Date) - 60
+    GROUP BY ID
+  )
+  bigVolumes AS (
+    SELECT first(10, ID) as ID, first(10, TotalVolume) FROM volumes ASSUMING DESC TotalVolume
+  ) 
+  priceChanges AS (
+    SELECT 
+    ID, fills(0, ratios(1, Close)) as DoDPrices
+    FROM
+    eodprices INNER JOIN bigVolumes USING ID
+    ASSUMING ASC Date
+    GROUP BY ID
+  )
+  SELECT 
+  p1.ID as ID1, p2.ID as ID2, covEach(p1.DoDPrices, p2.DoDPrices) as corrVal
+  FROM
+  priceChanges p1, priceChanges p2 WHERE p1.ID != p2.ID
+
+  
+
+   
+
+
+
+
+

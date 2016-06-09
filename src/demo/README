@@ -1,0 +1,37 @@
+This is a simple demo folder for aquery (sequential version).
+
+In order to run the fintime examples:
+1 - make fintime
+2 - make
+3 - cd examples; q compiled_fintime.q
+
+In order to run end-of-day examples:
+1 - call make
+2 - cd exammples; q compiled_eod.q
+
+
+Note that you must have the q executable in your $PATH. If you don't, please visit
+the kx site to download (https://kx.com/software-download.php)
+
+All data generated (along with q serialized tables) are found in the data/ folder.
+Building the fintime examples takes a bit longer, as the data is randomly generated
+and not attached here to minimize size.
+
+If you'd like to compile your own examples, make sure to have a2q (the aquery 
+compiler executable) in your path. You can check the options as usual with a2q -help
+
+This has been tested to run on Mac OSX and linux. This is unlikely to port without
+modifications to windows.
+
+The a2qinterpret program uses Matt Warren's qPy to communicate with a q server. We leverage
+his kdb.py code. It has been tested to work with python 2.7.*
+
+If you are interested in running the examples in examples/, note that various
+data loads take place with relative paths (relative to that folder), so please call
+
+cd examples/; ../a2qinterpret.sh <your-port-here>
+
+to make sure all filesystem paths work as intended.
+
+If you have any issues or questions, please email José Cambronero (jpc48@cs.nyu.edu)
+
