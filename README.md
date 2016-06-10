@@ -145,7 +145,8 @@ to `cd` into the appropriate folder.
 cd examples; ../a2qinterpret.sh 7089
 ```
 
-Entering an empty line executes the command written.
+Entering an empty line executes the command written. [Here](https://youtu.be/p9VSwbm0FFc)
+is a simple video going through the steps necessary to get this up and running.
 
 ## Basic Grammar
 The grammar for AQuery is simple and should be familiar to
@@ -163,7 +164,7 @@ program : [full-query | create | insert | load | dump | udf | verbatim-q]*
 // aquery files allow standard q code within special markers
 verbatim-q: <q> q code </q>
 
-// Queries
+/********* Queries *********/
 full-query : [local_queries] query
 
 local_queries: WITH local_query+
@@ -188,23 +189,24 @@ groupby-clause: GROUP BY val [as ID] (, val [as ID])* [HAVING search-conditions]
 // where search condition is a boolean-yielding expression
 search-conditions: search-condition (AND search-condition)*;
 
-// Creating data
+/********* Creating data *********/
 create: CREATE TABLE ID [AS query | '(' schema ')']
 schema: ID type (, ID type)*
 
 insert: INSERT INTO ID [query | VALUES '(' vals ')']
 vals: val (, val)*;
 
-// Loading/Saving data
+/********* Loading/Saving data *********/
 load: LOAD DATA INFILE str INTO TABLE ID FIELDS TERMINATED BY str
 
 save: query INTO OUTFILE str FIELDS TERMINATED BY str
 
-// User defined functions
+/********* User defined functions *********/
 udf: FUNCTION ID '(' arg-list ')' '{' fun-body '}'
 arg_list: ID (, ID)*
 fun_body: val | ID := val;
 
+/********* Expressions *********/
 val: val binop val | fun'('val (,val)*')' | -val | ID | int |
   float | datetime | str | date | hex
 fun: ID | abs| avg[s] | count | deltas | distinct | drop
@@ -248,22 +250,63 @@ INSERT INTO my_table SELECT * FROM my_table
 ```
 
 #### Loading and Saving data
-```
-SELECT * FROM my_table
-INTO OUTFILE "my_table.csv"
-FIELDS TERMINATED BY ","
+For this example, we'll create a simple csv file from the shell
+command line
 
-// note that we have my_table schema already defined
-// required to parse fields as appropriate type
+```
+josecambronero demo$ echo "ID,val" > my_table.csv;\
+ for i in {1..10}; do echo "$i,$((i * 10))" >> my_table.csv; done
+```
+We must first declare the schema of our table, as this is required to parse
+values to the appropriate type.
+
+```
+CREATE TABLE my_table (ID INT, val INT)
+```
+We can now parse in the csv file and insert the records into our predefined table.
+
+```
 LOAD DATA INFILE "my_table.csv"
 INTO TABLE my_table
 FIELDS TERMINATED BY ","
 ```
 
+We can now perform a query and save the results into a new file. In this case,
+we use a pipe-delimited file instead.
+
+```
+SELECT ID, val, val * 2 as derived_val FROM my_table
+INTO OUTFILE "new_my_table.csv"
+FIELDS TERMINATED BY "|"
+```
+```
+josecambronero demo$ cat new_my_table.csv
+ID|val|derived_val
+1|10|20
+2|20|40
+3|30|60
+4|40|80
+5|50|100
+6|60|120
+7|70|140
+8|80|160
+9|90|180
+10|100|200
+```
+
 ### User-Defined Functions
-Users can define their own aggregates using a simple syntax. In the example
-below, we define our own covariance aggregate. You are free to use other
-aggregates in the definition.
+Users can define their own aggregates using a simple syntax,
+described in briefly in the grammar section. The main idea is: you can
+define local variables using `:=`, consecutive commands must be concatenated
+with `;`, and the final result of the function corresponds to the last expression.
+If there is a `;` on the last expression, the function produces no result.
+This closely mirrors function definitions in q, with some minor changes.
+
+In the example
+below, we define our own covariance aggregate, for use in our queries.
+You are free to use other aggregates in the definition. In this case we use
+built-ins such as `avg`,
+`sum`, and `sqrt`, which are self-explanatory.
 
 ```
 FUNCTION myCov(x, y) {
