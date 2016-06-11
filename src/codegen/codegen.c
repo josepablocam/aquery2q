@@ -358,7 +358,8 @@ void cg_LookupCol(char *nm) {
 void cg_ID(ExprNode *id) {
   if (!IN_QUERY) { // means we're not in a functional query, so just use id as
                    // variable
-    print_code("%s", id->data.str);
+    // and enlist to avoid issues when interpreting
+    print_code("enlist %s", id->data.str);
   } else { // means we're in functional form, look up in column dictionary
     // this in turn means that if a function has the same name as a column
     // the columns masks the function, as happens in q usually
