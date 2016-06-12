@@ -91,13 +91,49 @@ class a2qinterpreter:
         print msg
 
 
+    def consume_markers(self, acc, line):
+        """
+        Consume special markers such as parenthesis, braces, and verbatim-q
+        wrappers in order to allow empty lines in between such markers
+        without triggering compilation
+        """
+        special = {'(' : ')', '{' : '}', '[' : ']'}
+        keys = special.keys()
+        vals = special.values()
+        # characters that we should be checking for opening/closing markers
+        char_check = keys + vals
+        # we use '[]' to represent <q></q> for simplicity of matching
+        clean_line = line.replace('<q>', '[').replace('</q>', ']')
+        relevant = [c for c in clean_line if c in char_check]
+
+        for c in relevant:
+            if c in keys:
+                acc.append(c)
+            elif not acc:
+                # no marker available that needs closing
+                clean_c = '</q>' if c == ']' else c
+                raise ValueError("Unopened " + clean_c)
+            else:
+                latest = acc[-1]
+                if c != special[latest]:
+                    clean_latest = '<q>' if latest == '[' else latest
+                    raise ValueError("Mismatched " + clean_latest)
+                else:
+                    acc.pop()
+
+
+
     def main(self):
         """ REPL """
         cmd = ""
+        # contains (), {}, <q></q> that are yet to be matched
+        markers = []
         while True:
             try:
                 line = raw_input(">")
-                if not line:
+                # we accept empty lines within markers
+                # without executing
+                if not line and not markers:
                     compiled = self.compile(cmd)
                     results = self.run_cmd(compiled, self.FUN_NAME)
                     self.display(results)
@@ -105,9 +141,18 @@ class a2qinterpreter:
                     cmd = ""
                 else:
                     # only concatenate if not a comment
-                    if line.lstrip()[:2] != '//':
+                    # and non-empty line
+                    if line.lstrip()[:2] != '//' and line:
                         cmd += " " + line
+                        # match any necessary markers
+                        self.consume_markers(markers, line)
+            except ValueError, err:
+                print "Error: " + err.message
+                # flush command and markers
+                cmd = ""
+                markers = []
             except EOFError:
+                # CTRL+D terminates the loop and exits interpreter, so cleanup
                 os.path.exists(self.COMPILED_NAME) and os.remove(self.COMPILED_NAME)
                 exit(0)
 

@@ -99,7 +99,7 @@ into modularity here.
 ## Demo
 The project comes with a simple demo, found in `src/demo`.
 The demo includes various examples in `src/demo/examples` and
-also provides a simple "interpreter" to run AQuery queries
+also provides a simple REPL to run AQuery queries
 interactively.
 
 In order to build the demo:
@@ -124,15 +124,15 @@ make fintime
 ```
 which generates extra data.
 
-The "interpreter" is a simple way for users to interact with AQuery. Behind the
+The REPL is a simple way for users to interact with AQuery. Behind the
 scenes, it is simply accumulating user input into a file, translating as usual,
 feeding the translation to a background q process for execution, and returning
 results to the user.
 
 In addition to having the AQuery translator, and the q executable, using the
-interpreter requires Python 2.7.\*.
+REPL requires Python 2.7.\*.
 
-Using the interpreter is as simple as launching the bash script
+Using the REPL is as simple as launching the bash script
 `a2qinterpret.sh` found
 in the demo folder with a free port number as an argument. The port number is
 used to open the background q process.
@@ -145,7 +145,10 @@ to `cd` into the appropriate folder.
 cd examples; ../a2qinterpret.sh 7089
 ```
 
-Entering an empty line executes the command written. [Here](https://youtu.be/p9VSwbm0FFc)
+Entering an empty line executes the command written. Empty lines are accepted,
+without executing the command, when these occur between `()`, `{}` or `<q></q>`.
+
+[Here](https://youtu.be/p9VSwbm0FFc)
 is a simple video going through the steps necessary to get this up and running.
 
 ## Basic Grammar
