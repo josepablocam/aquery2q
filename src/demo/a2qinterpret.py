@@ -19,11 +19,11 @@ class a2qinterpreter:
         # hackish but the unfortunate nature of things for now
         self.FUN_NAME = ".aq.q0"
         self.COMPILED_NAME = "_compiled.q"
-    
+
     def init_q(self):
         """ Initialize connection q server """
         return kdb.q(self.host, self.port, self.user)
-        
+
     def clear_console(self):
         """ Clear console colors after any error messages """
         print "\033[0m"
@@ -33,14 +33,14 @@ class a2qinterpreter:
         in_file = tempfile.NamedTemporaryFile()
         in_file.write(aquery)
         in_file.flush()
-        
+
         out_file = open(self.COMPILED_NAME, "w+")
         # define dummy function in case command doesn't create function
         out_file.write(self.FUN_NAME + ":{}; ")
         out_file.close()
-        
+
         inter_file = tempfile.NamedTemporaryFile()
-        
+
         aquery_compiler = ['a2q', '-a', '1', '-c', '-s', '-o']
         try:
             ret = subprocess.check_output(aquery_compiler + [inter_file.name, in_file.name])
@@ -58,8 +58,8 @@ class a2qinterpreter:
             in_file.close()
             inter_file.close()
             return out_file
-            
-    
+
+
     def run_cmd(self, in_file, fun_name):
         """ Run aquery in q by submitting file name to load and calling function wrapper """
         load_cmd = 'system "l '  + in_file.name + '"'
@@ -76,20 +76,20 @@ class a2qinterpreter:
             print "Error: " + err.message
             self.clear_console()
             return ""
-        
-    
+
+
     def display(self, s):
         """ Displays q stringified results in python """
         print "".join(s)
-        
+
     def usage(self):
         msg = """
         Usage: python a2qinterpret.py [host port user]
         Defaults to host: localhost, port: 7089, user: ""
         if none provided
         """
-        print msg    
-    
+        print msg
+
 
     def main(self):
         """ REPL """
@@ -106,7 +106,7 @@ class a2qinterpreter:
                 else:
                     cmd += " " + line
             except EOFError:
-                os.remove(self.COMPILED_NAME)
+                os.path.exists(self.COMPILED_NAME) and os.remove(self.COMPILED_NAME)
                 exit(0)
 
 
@@ -125,10 +125,3 @@ if __name__ == "__main__":
     # take in options
     interp = a2qinterpreter(host, port, user)
     interp.main()
-
-
-        
-    
-    
-
-
