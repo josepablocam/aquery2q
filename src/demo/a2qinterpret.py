@@ -104,7 +104,9 @@ class a2qinterpreter:
                     compiled.close()
                     cmd = ""
                 else:
-                    cmd += " " + line
+                    # only concatenate if not a comment
+                    if line.lstrip()[:2] != '//':
+                        cmd += " " + line
             except EOFError:
                 os.path.exists(self.COMPILED_NAME) and os.remove(self.COMPILED_NAME)
                 exit(0)
