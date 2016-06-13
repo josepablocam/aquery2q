@@ -160,7 +160,8 @@ typedef enum LogicalQueryNodeType {
   CONCATENATE_FUN,
   FLATTENED_QUERY,
   EXEC_ARRAYS,
-  SHOW_OP
+  SHOW_OP,
+  TABLE_FUN
 } LogicalQueryNodeType;
 
 typedef struct FlatQuery {
@@ -207,6 +208,7 @@ LogicalQueryNode *make_groupby(LogicalQueryNode *t, NamedExprNode *exprs);
 LogicalQueryNode *make_filterHaving(LogicalQueryNode *t, ExprNode *conds);
 LogicalQueryNode *make_flatten(LogicalQueryNode *t);
 LogicalQueryNode *make_concatenate(IDListNode *nms);
+LogicalQueryNode *make_table_fun(ExprNode *expr);
 LogicalQueryNode *make_project(LogicalQueryNodeType proj_type,
                                LogicalQueryNode *t, NamedExprNode *namedexprs);
 LogicalQueryNode *make_delete(LogicalQueryNode *t, IDListNode *cols);

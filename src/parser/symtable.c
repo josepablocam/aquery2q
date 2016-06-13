@@ -249,13 +249,13 @@ Symtable *init_symtable() {
       "abs",  "avg",    "avgs",      "count", "deltas", "distinct", "drop",
       "fill", "first",  "last",      "max",   "maxs",   "min",      "mins",
       "mod",  "next",   "prev",      "prd",   "prds",   "reverse",  "sum",
-      "sums", "stddev", "make_null", "sqrt", "ratios","vars", "moving"};
+      "sums", "stddev", "make_null", "sqrt", "ratios","vars", "moving", "flatten", "concatenate"};
 
   const int built_in_order_dep[] = {1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 0, 1, 0,
-                                    1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1};
+                                    1, 1, 1, 1, 0, 1, 1, 0, 1, 0, 0, 0, 1, 1, 1, 0};
 
   const int is_odx[] = {0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1, 0, 1,
-                        0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0};
+                        0, 0, 0, 0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0};
 
   Symtable *env = make_symtable();
   Symentry *info;

@@ -252,6 +252,10 @@ ExprNode *make_builtInFunNode(Symtable *symtable, char *nm) {
   AST_PRINT_DEBUG("making built in function node");
   ExprNode *new_node = make_EmptyExprNode(BUILT_IN_FUN_CALL);
   Symentry *meta_info = lookup_sym(symtable, nm);
+  if (meta_info == NULL) {
+    printf("No information on this built-in, exiting compilation\n");
+    exit(1);
+  }
   new_node->data.str = nm;
   new_node->order_dep = meta_info->order_dep;
   new_node->uses_agg = 1; // all built-ins are aggregates
@@ -682,6 +686,12 @@ LogicalQueryNode *make_concatenate(IDListNode *nms) {
   // TODO: CHANGE THIS. We shouldn't be abusing the struct like this...., this shouldn't be in cols
   app->params.cols = nms;
   return app;
+}
+
+LogicalQueryNode *make_table_fun(ExprNode *expr) {
+  LogicalQueryNode *call = make_EmptyLogicalQueryNode(TABLE_FUN);
+  call->params.exprs = expr;
+  return call;
 }
 
 LogicalQueryNode *make_project(LogicalQueryNodeType proj_type,
