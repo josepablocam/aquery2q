@@ -181,7 +181,11 @@ projections: [val as ID | val] (, [val as ID | val])*
 source : ID [ID | AS ID] |
   ID INNER JOIN source USING (columns) |
   ID FULL OUTER JOIN source USING (columns) |
-  FLATTEN '(' ID ')'
+  fun_call
+
+// fun can be verbatim-q function constructing table
+// or FLATTEN/DISTINCT/CONCATENATE
+fun_call: fun'('val (,val)*')'
 
 order-clause: ASSUMING ([ASC|DESC] ID)+
 
@@ -210,7 +214,7 @@ arg_list: ID (, ID)*
 fun_body: val | ID := val;
 
 /********* Expressions *********/
-val: val binop val | fun'('val (,val)*')' | -val | ID | int |
+val: val binop val | fun_call | -val | ID | int |
   float | datetime | str | date | hex
 fun: ID | abs| avg[s] | count | deltas | distinct | drop
   | fill | first | last | max[s] | min[s] | mod | next
@@ -244,6 +248,39 @@ WITH nested_t1(c1, c2, c3) AS (
 // must flatten out nested arrable using built-in FLATTEN
 SELECT c1, sum(c2) FROM FLATTEN(nested_t1) GROUP BY c1
 ```
+
+You are also free to have function calls that return a table as
+part of the from-clause. For example
+
+```
+SELECT * FROM FLATTEN(CONCATENATE(nested_1, nested_2, nested_3))
+```
+
+which uses the built-ins `FLATTEN` and `CONCATENATE` (`DISTINCT` is also available
+as a built-in). Users are also free to define functions (in verbatim-q for now)
+that return tables and use these in their queries.
+
+```
+<q>f:{([]c1: 1 2 3 1; c2:10 20 30 40)}</q>
+SELECT * FROM f() WHERE c1 = 1
+```
+
+The only restrictions on these functions currently is that you cannot use
+dot notation to access table columns in the call. So for example
+
+```
+<q>
+h:{([]c1:x * 2)};
+t:([]c1:1 2 3);
+</q>
+SELECT * FROM h(t.c1)
+```
+is not valid. However, there is a simple workaround
+
+```
+SELECT * FROM h(t("c1"))
+```
+
 
 #### Creating Data
 You can create data directly in AQuery as done below, but often
@@ -427,7 +464,7 @@ c1 avg_val
 2  35     
 3  50
 ```
-It is also worth highlighting that 1 level of nesting can be removed
+It is also worth highlighting that one level of nesting can be removed
 by applying `FLATTEN` (currently the only function application allowed
 in a `FROM` clause).
 
@@ -443,7 +480,8 @@ c1 c2
 3  50
 ```
 
-We consider another example, in which we have two levels of nesting. We create a very simple table meant to reflect data collected in a timed experiment.
+We consider another example, in which we have two levels of nesting. We create
+a very simple table meant to reflect data collected in a timed experiment.
 
 ```
 >CREATE TABLE t(indiv INT, grp STRING, val INT)
@@ -502,9 +540,12 @@ indiv grp timeseries
 4     B   20 20 40 80
 ```
 
-This resembles our prior example. We could apply an aggregate on each row of `timeseries` by using a modifier as described before. But consider another experiment. We might interested in an average across individuals in each group for each timestamp
-(i.e. for each point in our timeseries). We might
-then consider a query such as
+This resembles our prior example. We could apply an aggregate on each row of `timeseries` by using a modifier as described before.
+
+But consider another experiment, in which we *fuse*
+nested arrays, showing that we can create say
+a global time series that is the average of the
+given ones in a group.
 
 ```
 >SELECT grp, avg(timeseries) as avg_time_series
@@ -528,7 +569,7 @@ A   1 2 3 4     2 2 4 8
 B   10 20 30 40 20 20 40 80
 ```
 
-Note that there are now 2 levels of nesting. Each row
+Note that there are now two levels of nesting. Each row
 consists of two separate vectors. If there were `n` individuals per group,
 these would then be n-vectors and so forth.
 
@@ -548,6 +589,52 @@ grp avg_time_series
 A   1.5 2  3.5 6   
 B   15  20 35  60  
 ```
+
+#### Filling in missing values
+We now consider a common case in timeseries analysis: filling in missing values. Consider the the table defined below:
+
+```
+<q>
+ t1:([]indiv:1 1 1 1 1; ts:0 1 2 3 4; val:10 20 30 40 50);
+ t2:([]indiv:2 2 2; ts:2 3 4; val:30 40 50);
+ t:t1,t2;
+ </q>
+ ```
+ Individual two is missing observations for timestamp
+ (represented here as an integer for simplicity) zero and one.
+
+ In order to calculate correlation between the values for both individuals, we extend the timeseries for
+ individual two.
+
+```
+<q>corEach:cor';</q>
+FUNCTION fill_backward(x) {reverse(fills(reverse(x)))}
+
+WITH
+  ts AS (SELECT ts FROM t)
+  indiv AS (SELECT indiv FROM t)
+  complete AS (SELECT * FROM distinct(ts), distinct(indiv))
+  filled AS (SELECT   
+    indiv, ts,
+    fill_backward(val) as filled_val
+    FROM
+    complete FULL OUTER JOIN t USING (indiv, ts)
+    ASSUMING ASC ts
+    GROUP BY indiv)
+   SELECT
+   f1.indiv as indiv1, f2.indiv as indiv2,
+   corEach(f1.filled_val, f2.filled_val) as filled_corr
+   FROM filled f1, filled f2 WHERE f1.indiv != f2.indiv
+```   
+
+`ts` and `indiv` are single column tables representing all timestamps
+and individuals, respectively. `complete` is a cartesian-product of the
+distinct values in the two tables, generating a complete history for each
+individual. `filled` uses a UDF `fill_backward` to fill any missing values
+with the following non-missing value (hence the name). This is used in
+`complete` by joining our original table with our extended history table and
+applying the UDF by individual. Finally, our resulting query uses the
+filled data to calculate the correlation between the two individuals' timeseries.
 
 If you have any doubts/issues/feedback, please do not hesitate to contact
 [José Cambronero](mailto:jpc485@nyu.edu)
