@@ -81,7 +81,7 @@ function startup {
   do
     nohup $q parallel.q -p $worker < /dev/null &
   done
-  
+
   # sleep to allow workers to be setup
   sleep $((1 + $num_workers / 100))
 
@@ -91,7 +91,7 @@ function startup {
   do
     nohup $q parallel.q -s -${NUM_WORKERS_PER_MASTER} -p $master < /dev/null &
   done
-  
+
   # sleep to allow masters to be setup
   sleep $((1 + $NUM_MASTERS / 3))
 
@@ -101,12 +101,16 @@ function startup {
 
   echo "Initializing super-master"
   if [ -z $TIME ]
-    then 
+    then
       $q $SCRIPT -s -${NUM_MASTERS} -workers $worker_ports -masters $master_ports
     else
       time $q $SCRIPT -s -${NUM_MASTERS} -workers $worker_ports -masters $master_ports
   fi
-  killall q
+
+  for port in $(echo "$worker_ports,$master_ports" | tr , ' ')
+  do
+    lsof -i tcp:$port | awk 'NR!=1 {print $2}' | xargs kill
+  done
   exit 0
 }
 
