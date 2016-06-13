@@ -18,38 +18,38 @@ value. The output should be sorted by id and trade date.
 
 WITH
  // our main source of information, localized, avoiding rerunning for each aggregation
- Target(Id, TradeDate, ClosePrice)  AS (select 
+ Target(Id, TradeDate, ClosePrice)  AS (select
  Id, TradeDate,ClosePrice
  FROM price
  where Id in stock10 and TradeDate >= startYear10 and TradeDate <= startYear10 + 365 * 10)
 
-  weekly(Id, bucket, name, low, high, mean) AS (select 
+  weekly(Id, bucket, name, low, high, mean) AS (select
     Id,
     timeBucket,
     "weekly",
-    min(ClosePrice), 
+    min(ClosePrice),
 	  max(ClosePrice), avg(ClosePrice)
   	from Target group by Id, getWeek(TradeDate) as timeBucket)
-	
+
   monthly(Id, bucket, name, low, high, mean) AS (select
     Id,
     timeBucket,
     "monthly",
-     min(ClosePrice), 
-	   max(ClosePrice), 
+     min(ClosePrice),
+	   max(ClosePrice),
      avg(ClosePrice)
   	 from Target group by Id, getMonth(TradeDate) as timeBucket)
-	
+
   yearly(Id, bucket, name, low, high, mean) AS (select
     Id,
     timeBucket,
     "yearly",
-     min(ClosePrice), 
-	   max(ClosePrice), 
+     min(ClosePrice),
+	   max(ClosePrice),
      avg(ClosePrice)
   	 from Target group by Id, getYear(TradeDate) as timeBucket)
-		
-select Id, bucket, name, low, high, mean from CONCATENATE(weekly, monthly, yearly) 
+
+select Id, bucket, name, low, high, mean from CONCATENATE(weekly, monthly, yearly)
     assuming asc Id, asc name, asc bucket
 
 
@@ -62,24 +62,24 @@ split-adjusted prices and volumes.
 */
 
 WITH
-  pxdata(Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume) AS 
-    (select Id, TradeDate, HighPrice, LowPrice, 
+  pxdata(Id, TradeDate, HighPrice, LowPrice, ClosePrice, OpenPrice, Volume) AS
+    (select Id, TradeDate, HighPrice, LowPrice,
       ClosePrice, OpenPrice, Volume
-      from price where Id in stock1000 and TradeDate >= start300Days 
+      from price where Id in stock1000 and TradeDate >= start300Days
       and TradeDate <= start300Days + 300)
-   
-  splitdata(Id, SplitDate, SplitFactor) AS 
-    (select Id, SplitDate, SplitFactor 
+
+  splitdata(Id, SplitDate, SplitFactor) AS
+    (select Id, SplitDate, SplitFactor
       from split where Id in stock1000 and SplitDate >= start300Days)
 
   adjdata(Id, TradeDate, AdjFactor) AS (
   select Id, TradeDate, prd(SplitFactor)
   from
-  pxdata INNER JOIN splitdata USING Id 
+  pxdata INNER JOIN splitdata USING Id
   where TradeDate < SplitDate
   group by Id, TradeDate
   )
-  
+
   select Id, TradeDate, HighPrice * fill(1, AdjFactor) as HighPrice,
   LowPrice * fill(1, AdjFactor) as LowPrice,
   ClosePrice * fill(1, AdjFactor) as ClosePrice,
@@ -98,19 +98,19 @@ daily low on the day of each split event during a specified period.
 
 WITH
  pxdata(Id, TradeDate, HighPrice, LowPrice) AS
-   (select Id, TradeDate, HighPrice, LowPrice 
+   (select Id, TradeDate, HighPrice, LowPrice
     from price where Id in stock1000 and
     TradeDate between startPeriod and endPeriod)
-   
- splitdata(Id, TradeDate, SplitFactor) AS 
-   (select Id, SplitDate, SplitFactor 
-    from split where Id in stock1000 and 
+
+ splitdata(Id, TradeDate, SplitFactor) AS
+   (select Id, SplitDate, SplitFactor
+    from split where Id in stock1000 and
     SplitDate between startPeriod and endPeriod)
- 
+
  select Id as Id, TradeDate as TradeDate, HighPrice - LowPrice as MaxDiff from
  pxdata INNER JOIN splitdata USING (Id, TradeDate) assuming asc Id, asc TradeDate
 
- 
+
 
 
 
@@ -136,79 +136,79 @@ period. (Use split adjusted prices)
 WITH
   // Price data for the period
  pxdata(Id, TradeDate, ClosePrice) AS
-   (select Id, TradeDate, ClosePrice from price 
+   (select Id, TradeDate, ClosePrice from price
    where Id in stock1000 and TradeDate >= start6Mo and TradeDate < start6Mo + 31 * 6)
 
- // splits that happened  
- splitdata(Id, SplitDate, SplitFactor) AS 
+ // splits that happened
+ splitdata(Id, SplitDate, SplitFactor) AS
  (select Id, SplitDate, SplitFactor from split
    where Id in stock1000 and SplitDate >= start6Mo)
 
  // prices after adjusting for splits
  splitadj(Id, TradeDate, ClosePrice) AS
    (select Id, TradeDate, first(ClosePrice * prd(SplitFactor))
-    from 
+    from
     pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
     group by Id, TradeDate)
-    
+
  // fill in missing splitadj price with original price when necessary
- avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS 
- (select 
-   Id, TradeDate, 
-   fill(pxdata.ClosePrice, splitadj.ClosePrice), 
+ avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS
+ (select
+   Id, TradeDate,
+   fill(pxdata.ClosePrice, splitadj.ClosePrice),
    avgs(21,  fill(pxdata.ClosePrice, splitadj.ClosePrice)),
  	 avgs(5,  fill(pxdata.ClosePrice, splitadj.ClosePrice))
  FROM pxdata FULL OUTER JOIN splitadj USING (Id, TradeDate)
  assuming asc Id, asc TradeDate
  group by Id
  )
-   
+
   select * from FLATTEN(avgInfo) assuming asc Id, asc TradeDate
-   
+
 
 
 /*
 ********* QUERY 6 ****************
-(Based on the previous query) 
+(Based on the previous query)
 Find the points (specific days) when the 5-day moving average intersects the 21-day moving average
 for these stocks. The output is to be sorted by id and date.
 */
 WITH
     // Price data for the period
    pxdata(Id, TradeDate, ClosePrice) AS
-     (select Id, TradeDate, ClosePrice from price 
+     (select Id, TradeDate, ClosePrice from price
      where Id in stock1000 and TradeDate >= start6Mo and TradeDate < start6Mo + 31 * 6)
- 
-   // splits that happened  
-   splitdata(Id, SplitDate, SplitFactor) AS 
+
+   // splits that happened
+   splitdata(Id, SplitDate, SplitFactor) AS
    (select Id, SplitDate, SplitFactor from split
      where Id in stock1000 and SplitDate >= start6Mo)
-  
+
    // prices after adjusting for splits
    splitadj(Id, TradeDate, ClosePrice) AS
      (select Id, TradeDate, first(ClosePrice * prd(SplitFactor))
-      from 
+      from
       pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
       group by Id, TradeDate)
-      
+
    // fill in missing splitadj price with original price when necessary
-   avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS 
-   (select 
-     Id, TradeDate, 
-     fill(pxdata.ClosePrice, splitadj.ClosePrice), 
+   avgInfo(Id, TradeDate, ClosePrice, m21, m5) AS
+   (select
+     Id, TradeDate,
+     fill(pxdata.ClosePrice, splitadj.ClosePrice),
      avgs(21,  fill(pxdata.ClosePrice, splitadj.ClosePrice)),
    	 avgs(5,  fill(pxdata.ClosePrice, splitadj.ClosePrice))
    FROM pxdata FULL OUTER JOIN splitadj USING (Id, TradeDate)
    assuming asc Id, asc TradeDate
    group by Id
    )
-   
+
   select Id, TradeDate as CrossDate, ClosePrice
   from FLATTEN(avgInfo)
-  where Id = prev(Id) and 
+  where Id = prev(Id) and
   // cross over
-  (prev(m5) <= prev(m21) & m5 > m21)  
-  or 
+  (prev(m5) <= prev(m21) & m5 > m21)
+  or
   // cross under
   (prev(m5) >= prev(m21) & m5 < m21)
 
@@ -216,12 +216,12 @@ WITH
 /*
 ********* QUERY 7 ****************
   Determine the value of $100,000 now if 1 year ago it was invested equally in 10 specified
-   stocks (i.e. allocation for each stock is $10,000). The trading strategy is: 
-   When the 20-day moving average crosses over the 5-month moving average 
-   the complete allocation for that stock is invested and when the 
-   20-day moving average crosses below the 5-month moving average the 
+   stocks (i.e. allocation for each stock is $10,000). The trading strategy is:
+   When the 20-day moving average crosses over the 5-month moving average
+   the complete allocation for that stock is invested and when the
+   20-day moving average crosses below the 5-month moving average the
    entire position is sold. The trades happen on the closing price of the trading day.
-   
+
    Modifications based on sybase benchmark: use adjusted prices, 21-day moving avg, instead
    of 20 days
 */
@@ -242,67 +242,67 @@ FUNCTION executeStrategy(alloc, mavgday, mavgmonth, px) {
 WITH
     // Price data for the period
    pxdata(Id, TradeDate, ClosePrice) AS
-     (select Id, TradeDate, ClosePrice from price 
+     (select Id, TradeDate, ClosePrice from price
      where Id in stock10 and TradeDate >= max(TradeDate) - 365)
- 
-   // splits that happened  
-   splitdata(Id, SplitDate, SplitFactor) AS 
+
+   // splits that happened
+   splitdata(Id, SplitDate, SplitFactor) AS
    (select Id, SplitDate, SplitFactor from split
      where Id in stock10 and SplitDate >= max(SplitDate) - 365)
-  
+
    // prices after adjusting for splits
    splitadj(Id, TradeDate, ClosePrice) AS
      (select Id, TradeDate, first(ClosePrice * prd(SplitFactor))
-      from 
+      from
       pxdata INNER JOIN splitdata USING Id where TradeDate < SplitDate
       group by Id, TradeDate)
-    
-   // all prices, including split adjusted  
+
+   // all prices, including split adjusted
    adjpxdata(Id, TradeDate, ClosePrice) AS (
    select Id, TradeDate, fill(pxdata.ClosePrice, splitadj.ClosePrice) as ClosePrice
    FROM pxdata FULL OUTER JOIN splitadj USING (Id, TradeDate)
    )
-      
-   movingAvgs(Id, TradeDate, ClosePrice, m21day, m5month) AS 
-   (select 
-     Id, TradeDate, 
-     ClosePrice, 
+
+   movingAvgs(Id, TradeDate, ClosePrice, m21day, m5month) AS
+   (select
+     Id, TradeDate,
+     ClosePrice,
      avgs(21, ClosePrice),
    	 avgs(160, ClosePrice)
    FROM adjpxdata assuming asc Id, asc TradeDate group by Id
    )
-  
+
   // points of interest: when we invest all or sell all
   // execute strategy accordingly
  simulated AS (
-   select Id, 
+   select Id,
     executeStrategy(10000, m21day, m5month, ClosePrice) as result,
     last(m21day) > last(m5month) as stillInvested
     from FLATTEN(movingAvgs)
      where Id = prev(Id) and
      // (sell)
-     (prev(m5month) <= prev(m21day) & m5month > m21day)  
-     or 
+     (prev(m5month) <= prev(m21day) & m5month > m21day)
+     or
      // (buy)
      (prev(m5month) >= prev(m21day) & m5month < m21day)
-     group by Id  
+     group by Id
    )
   // latest set of prices (needed for those stocks that we still hold)
-  latestPxs AS (select * from  adjpxdata where TradeDate=max(TradeDate))  
-  
+  latestPxs AS (select * from  adjpxdata where TradeDate=max(TradeDate))
+
   // the value of our portfolio
-  select 
+  select
   sum(
     fill(10000, result * CASE WHEN stillInvested THEN ClosePrice ELSE 1 END)
     ) as stock_value
   from latestPxs FULL OUTER JOIN simulated USING Id
-  
+
 
 
 
 /*
 ********* QUERY 8 ****************
-Find the pair-wise coefficients of correlation in a set of 10 securities for a 2 year period. Sort 
+Find the pair-wise coefficients of correlation in a set of 10 securities for a 2 year period. Sort
 the securities by the coefficient of correlation, indicating the pair of securities corresponding to
 that row. [Note: coefficient of correlation defined in appendix]
 */
@@ -328,27 +328,27 @@ FUNCTION pairCorr(x, y) {
 <q>pairCorrEach:pairCorr'</q>
 
 WITH
-  stocksGrouped(Id, ClosePrice) AS (select Id, ClosePrice 
+  stocksGrouped(Id, ClosePrice) AS (select Id, ClosePrice
   from price assuming asc Id, asc TradeDate
-  where Id in stock10 and 
+  where Id in stock10 and
   TradeDate >= startYear10 and
-  TradeDate <= startYear10 + 365 * 2 
+  TradeDate <= startYear10 + 365 * 2
   group by Id)
-  
+
   pairsGrouped(Id1, Id2, ClosePrice1, ClosePrice2) AS (
-    select st1.Id, st2.Id, st1.ClosePrice, st2.ClosePrice 
-    from stocksGrouped st1, stocksGrouped st2 group by st1.Id, st2.Id)
-  
+    select st1.Id, st2.Id, st1.ClosePrice, st2.ClosePrice
+    from stocksGrouped st1, stocksGrouped st2)
+
   corrTable(Id1, Id2, corrCoeff) AS (select Id1, Id2,
        pairCorrEach(ClosePrice1, ClosePrice2) from
        pairsGrouped where Id1 != Id2)
-  select * from corrTable assuming asc corrCoeff  
-  
-  
+  select * from corrTable assuming asc corrCoeff
+
+
 /*
 ********* QUERY 9 ****************
-Determine the yearly dividends and annual yield (dividends/average closing price) for the past 3 
-years for all the stocks in the Russell 2000 index that did not split during that period. 
+Determine the yearly dividends and annual yield (dividends/average closing price) for the past 3
+years for all the stocks in the Russell 2000 index that did not split during that period.
 Use unadjusted prices since there were no splits to adjust for.
 */
 WITH
@@ -363,22 +363,18 @@ WITH
     select 1, distinct(Id) from split where Id in Russell2000 and
     getYear(SplitDate) >= first(DateInfo("startYear"))
     )
-    
+
     nosplit_avgpx AS (
-    select Id, year, avg(ClosePrice) as avg_px from price where Id in Russell2000 and 
+    select Id, year, avg(ClosePrice) as avg_px from price where Id in Russell2000 and
     TradeDate >= first(DateInfo("startDate")) and Id not in splitdata("Id")
     group by Id, getYear(TradeDate) as year
     )
-    
+
     divdata AS (
       select Id, year, sum(DivAmt) as total_divs from dividend where Id in Russell2000 and
       getYear(AnnounceDate) >= first(DateInfo("startYear")) and Id not in splitdata("Id")
       group by Id, getYear(AnnounceDate) as year
     )
-    
+
     select Id, year, avg_px, total_divs, total_divs / avg_px as yield
     FROM nosplit_avgpx INNER JOIN divdata USING (Id, year)
-    
-    
-  
-  

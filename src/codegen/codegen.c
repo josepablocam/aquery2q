@@ -130,6 +130,7 @@ void init_aq_helpers() {
              "  ejr upsert/(my;mz) // add missing records\n"
              "  };\n"
              ".aq.nj:{[t1;t2;p] raze {?[x,'count[x]#enlist y;z;0b;()]}[t1; ;p] each t2};\n"
+             ".aq.funEnlist:{$[0>type x;x;enlist x]};\n"
         );
   print_code(".aq.hj:{[t1;t2;a1;a2;p]\n"
                  "  // argument preparation\n"
@@ -359,7 +360,7 @@ void cg_ID(ExprNode *id) {
   if (!IN_QUERY) { // means we're not in a functional query, so just use id as
                    // variable
     // and enlist to avoid issues when interpreting
-    print_code("enlist %s", id->data.str);
+    print_code(".aq.funEnlist %s", id->data.str);
   } else { // means we're in functional form, look up in column dictionary
     // this in turn means that if a function has the same name as a column
     // the columns masks the function, as happens in q usually
