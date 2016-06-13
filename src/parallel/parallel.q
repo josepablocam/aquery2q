@@ -67,14 +67,14 @@
 // Job assignment
 // Assigns job to a master if any jobs still remain and masters are available for execution
 .aq.par.supermaster.assignJob:{
-  if[(0 < count .aq.par.supermaster.availMasters) & 0 < count .aq.par.supermaster.jobQueue; 
+  if[(0 < count .aq.par.supermaster.availMasters) & 0 < count .aq.par.supermaster.jobQueue;
   .aq.par.supermaster.runJob[]
   ];
   }
 
 // Run a job
 // Run the first job in the queue, with the first master in the list of available masters
-// remove both from their respective lists  
+// remove both from their respective lists
 .aq.par.supermaster.runJob:{
   // take first master and adjust availability list
   assigned:first .aq.par.supermaster.availMasters;
@@ -84,7 +84,7 @@
   .aq.par.supermaster.jobQueue:1_ .aq.par.supermaster.jobQueue;
   // execute job on assigned master
   (job 0) . (assigned,1_job)
-  };  
+  };
 
 // Register a master as available for execution
 // args:
@@ -95,14 +95,14 @@
 
 // Actions upon job completion
 // This is added to all callbacks, re-registers master as available and checks
-// if any jobs remain to be assigned 
+// if any jobs remain to be assigned
 // args:
 //  master: newly available master
 .aq.par.supermaster.completedJob:{[master]
   .aq.par.supermaster.registerAvail master;
   .aq.par.supermaster.assignJob[];
-  }  
-  
+  }
+
 // Execute a query on a master process
 // adds to the query as a job to be executed as soon as a master is available
 // args:
@@ -255,14 +255,14 @@
 .aq.par.master.opMap:{[reads;dests;write]
   workers:.aq.par.workerNames[];
   // for each function and destination process
-  // instruct each process to read and write to destination process 
+  // instruct each process to read and write to destination process
   // self will correspond to handle 0 (and thus not actually send), but just copy over
   // as desired
   .aq.par.master.opMap0[ ;workers;write; ] ./: flip (reads;dests);
   // clean up potential temporary data created
   .aq.par.worker.cleanUp peach (count workers)#`temp;
   };
- 
+
 .aq.par.master.opMap0:{[read;workers;write;dest]
   //
   if[(0=count .z.pd[])|not all .z.pd[] in .aq.par.nameToHandle workers;
@@ -775,6 +775,38 @@
   {[j;l;r;nm] nm set j[l[];r]}[jc;readl;localRef;] peach ctWorkers#nm;
  };
 
+ //// Align partitions ///////
+ // Given an in-memory table `src` that is partitioned on the values of columns
+ // pcols, repartition table t such that its pcol values are aligned with src
+ // If `t` has values that don't exist in `src` these will be partitioned
+ // by equally spreading values (note, not counts!) of partitions across processes
+ // args:
+ //  pcol: column(s) on which src is partitioned
+ //  src: in-memory partitioned table
+ //  t: in-memory table to be partitioned
+ //  nm: name for newly partitioned table
+ .aq.par.master.alignPartitions:{[pcols;src;t;nm]
+  workers:.aq.par.workerNames[];
+  ctWorkers:count workers;
+  pcols,:();
+  // partition values for src table
+  partsSrc:{[x;y] ?[x;();1b;y!y]}[src;] peach ctWorkers#enlist pcols;
+  // possible partition values for t table
+  partsT:{[x;y] ?[x;();1b;y!y]}[t;] peach ctWorkers#enlist pcols;
+  // there may be partition values in t that are not in src
+  // we need to add these before we repartition, otherwise values will be
+  // dropped
+  missing:(ctWorkers;0N)#(distinct raze partsT) except raze partsSrc;
+  // complete partitioning of t table
+  parts:partsSrc,'missing;
+  // map based on complete partitioning
+  maps:{[x;y;dummy] (0!x) where ?[x;();0b;c!c:cols y] in y}[t;;]@'parts;
+  write:{`.aq.par.align upsert x};
+  .aq.par.worker.cleanUp peach ctWorkers#enlist`temp;
+  .aq.par.master.map[maps;workers;write];
+  {x set get y}[nm;] peach ctWorkers#`.aq.par.align;
+  .aq.par.worker.cleanUp peach ctWorkers#enlist `temp`align;
+ }
 
 ////// Distributed cross //////
 // Perform cross of two tables stored across processes
@@ -816,6 +848,3 @@
  mk:{[ct;off;path] path set ([]id:off+til ct;c1:ct?10;c2:ct?10;c3:ct?100.;c4:ct?100)};
  mk[n;;] ./: flip (n*til count parpaths;parpaths)
  };
-
-
-
