@@ -63,7 +63,7 @@ int silence_warnings = 0;
 %token ROWID ODD EVEN EVERY
 
  /* SQL: table operations */
-%token FLATTEN CONCATENATE
+%token <str> FLATTEN CONCATENATE
 
  /* SQL: joins */
 %token JOIN INNER OUTER FULL ON USING 
@@ -123,7 +123,7 @@ int silence_warnings = 0;
 /* types for expressions */
 %type <exprnode> constant truth_value table_constant 
 %type <exprnode> case_expression case_clause when_clauses when_clause when_clauses_tail else_clause
-%type <exprnode> call built_in_fun 
+%type <exprnode> call built_in_fun fun_call
 %type <exprnode> unary_neg
 %type <exprnode> main_expression
 %type <exprnode> indexing
@@ -460,8 +460,9 @@ using_clause: USING '(' comma_identifier_list ')' 				{ $$ = $3; }
 	;
 	
 table_expression: table_expression_main							{ $$ = $1;               } 
-	| FLATTEN '(' table_expression_main ')'						{ $$ = make_flatten($3); }
-	| CONCATENATE '('  comma_identifier_list  ')'     { $$ = make_concatenate($3); }
+ //	| FLATTEN '(' table_expression_main ')'						{ $$ = make_flatten($3); }
+ //	| CONCATENATE '('  comma_identifier_list  ')'     { $$ = make_concatenate($3); }
+	| fun_call                                        { $$ = make_table_fun($1); }
 	;
 		
 table_expression_main: ID ID 									{ $$ = make_alias(make_table($1), $2); }
@@ -639,11 +640,14 @@ main_expression: constant 					{ $$ = $1; }
 
 call: main_expression						              { $$ = $1;                                         }
 	| main_expression '[' indexing ']' 		              { $$ = make_indexNode($1, $3);                     }
-	| built_in_fun '(' comma_value_expression_list ')'    { $$ = make_callNode($1, $3);                      } 
-	| built_in_fun '(' ')' 								  { $$ = make_callNode($1, NULL);                    }
-	| ID '(' comma_value_expression_list ')'              { $$ = make_callNode(make_udfNode(env, $1), $3);   }
-	| ID '(' ')' 							              { $$ = make_callNode(make_udfNode(env, $1), NULL); }
+	| fun_call                                  { $$ = $1; }
 	;
+
+fun_call: ID '(' comma_value_expression_list ')'              { $$ = make_callNode(make_udfNode(env, $1), $3);   }
+  	| ID '(' ')' 							              { $$ = make_callNode(make_udfNode(env, $1), NULL); }
+  	| built_in_fun '(' comma_value_expression_list ')'    { $$ = make_callNode($1, $3);                      }
+    | built_in_fun '(' ')' 								  { $$ = make_callNode($1, NULL);                    }
+  	;
 
 
 indexing: ODD 				{ $$ = make_oddix();      }
@@ -679,6 +683,8 @@ built_in_fun: ABS 				{ $$ = make_builtInFunNode(env, $1); }
 	| RATIOS                    { $$ = make_builtInFunNode(env, $1); }
 	| VARS                    { $$ = make_builtInFunNode(env, $1); }
 	| MOVING                    { $$ = make_builtInFunNode(env, $1); }
+	| CONCATENATE               { $$ = make_builtInFunNode(env, $1); }
+	| FLATTEN                   { $$ = make_builtInFunNode(env, $1); }
 	;
 
 unary_neg: call { $$ = $1; }

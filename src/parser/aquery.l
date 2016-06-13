@@ -47,8 +47,8 @@ void consume_verbatim_q();
 "EVERY"			{ count(); return EVERY;     }
 
  /* SQL: table operations */
-"FLATTEN"		{ count(); yylval.str = strdup(yytext); return FLATTEN;	 }
-"CONCATENATE" { count(); yylval.str = strdup(yytext); return CONCATENATE;	 }
+("FLATTEN")|("flatten")		{ count(); yylval.str = strdup("flatten"); return FLATTEN;	 }
+("CONCATENATE")|("concatenate") { count(); yylval.str = strdup("concatenate"); return CONCATENATE;	 }
 
  /* SQL: joins */
 "JOIN"			{ count(); return JOIN;     }
@@ -119,7 +119,7 @@ void consume_verbatim_q();
 "avgs"			{ count(); yylval.str = strdup(yytext); return AVGS;     }
 "count"			{ count(); yylval.str = strdup(yytext); return COUNT;    }
 "deltas"		{ count(); yylval.str = strdup(yytext); return DELTAS;   }
-"distinct"		{ count(); yylval.str = strdup(yytext); return DISTINCT; }
+("distinct")|("DISTINCT")		{ count(); yylval.str = strdup("distinct"); return DISTINCT; }
 "drop"			{ count(); yylval.str = strdup(yytext); return DROP;     }
 "fill"			{ count(); yylval.str = strdup(yytext); return FILL;     }
 "first"			{ count(); yylval.str = strdup(yytext); return FIRST;    }

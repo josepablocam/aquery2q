@@ -39,7 +39,7 @@ char *aquery_builtins[] = {
     "maxs", "maxs",   "min",       "mins",    "mins",  "mod",     "next",
     "next", "prev", "prev", "prd",    "prds",      "reverse", "sum",   "sums",    "sums",
     "sqrt", "stddev", "make_null", "not",     "is",    "between", "in",
-    "like", "null",   "overlaps",  "enlist", "ratios", "vars", "moving"};
+    "like", "null",   "overlaps",  "enlist", "ratios", "vars", "moving", "flatten", "concatenate"};
 
 char *q_builtins[] = {"abs", "avg", "avgs", "mavg", "count", "deltas",
                       "distinct", "_", "^", "first", "sublist", "last",
@@ -48,7 +48,8 @@ char *q_builtins[] = {"abs", "avg", "avgs", "mavg", "count", "deltas",
                       "sum", "sums", "msum", "sqrt", "dev", "first 0#", "not",
                       "::", "within", "in", "{[x;y] x like string y}", "null",
                       "{[x;y] not (x[1]<y[0])|y[1]<x[0]}", "enlist", "{[x;y] y%x xprev y}",
-                      "{mavg[x;y*y]-m*m:mavg[x;y:\"f\"$y]}", "{[f;w;a] f each {(x sublist y),z}[1-w;;]\\[a]}"};
+                      "{mavg[x;y*y]-m*m:mavg[x;y:\"f\"$y]}", "{[f;w;a] f each {(x sublist y),z}[1-w;;]\\[a]}",
+                      "ungroup", "(upsert/)"};
 
 char *aquery_overloads[] = {"avgs", "maxs", "mins", "sums", "first", "last", "prev", "next"};
 int LEN_OVERLOADS = sizeof(aquery_overloads) / sizeof(char *);
@@ -485,6 +486,9 @@ void cg_callNode(ExprNode *call) {
   CG_PRINT_DEBUG("call node\n");
   ExprNode *fun = call->first_child;
   ExprNode *args = fun->next_sibling;
+  // need to add enlist?
+  int needs_enlist = strcmp(fun->data.str, "concatenate") == 0;
+
 
   print_code("(");
   if (fun->node_type == BUILT_IN_FUN_CALL ||
@@ -511,7 +515,13 @@ void cg_callNode(ExprNode *call) {
   if (args == NULL) {
     print_code("::"); // null argument
   } else {
+    if (needs_enlist) {
+      print_code("(enlist; ");
+    }
     cg_ExprNode(args->first_child); // it is a list, take out contents
+    if (needs_enlist) {
+      print_code(")");
+    }
   }
   print_code(")");
 }
@@ -1042,6 +1052,23 @@ char *cg_concatenate(LogicalQueryNode *node) {
   return t1;
 }
 
+
+char *cg_TableFun(LogicalQueryNode *node) {
+  char *t1 = gen_table_nm(NULL);
+  // turn off query marker to generate variable names
+  // for table functions without using symbol names
+  // as may refer to local tables created in query
+  // This means we cannot use .aq.cd, so things like
+  // f(t.c1) are not possible, but this is easily sidestepped
+  // by having f(x):{x("c1")} as the function definition
+  IN_QUERY = 0;
+  print_code(" %s:eval ", t1);
+  cg_ExprNode(node->params.exprs);
+  print_code(";\n");
+  IN_QUERY = 1;
+  return t1;
+}
+
 char *cg_queryPlan(LogicalQueryNode *node) {
   init_dc(); // initialize our dictionary that keeps track of column names
   return cg_LogicalQueryNode(node); // generate query plan and return table name
@@ -1398,6 +1425,8 @@ char *cg_LogicalQueryNode(LogicalQueryNode *node) {
       case SHOW_OP:
         result_table = cg_showOp(node);
         break;
+      case TABLE_FUN:
+        result_table = cg_TableFun(node);
     }
   }
   return result_table;
