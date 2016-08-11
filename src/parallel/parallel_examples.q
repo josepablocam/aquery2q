@@ -1,33 +1,15 @@
 \l parallel.q
-PWD:first system "readlink -f ."
-
-// helper to spin up processes
-initproc:{[xtra;p] system ssr/["q parallel.q %xtra -p %p";("%xtra";"%p");(xtra;p)]}
-mkhandle:{hsym `$"localhost:",x}
-
-// 2 masters
-mports:string 7087 7088
-// 6 workers (3 per master)
-wports:string 7089+til 6
-if[count mports inter wports; '"error workers and masters must be disjoint"];
-
-// start master processes
-initproc["-s -2";] each mports
-// start worker processes
-initproc["";] each wports
-
-// sleep two seconds to make sure processes are forked by OS before connecting
-system "sleep 2s";
-
-masters:mkhandle each mports;
-workers:3 cut mkhandle each wports;
-
-// initialize
+// Initialization
+opts:.Q.opt .z.x;
+masters:hsym `$"localhost:",/:"," vs first opts`masters;
+workers:hsym `$"localhost:",/:"," vs first opts`workers;
+workers:(count[workers] div count masters) cut workers;
 .aq.par.supermaster.init[masters;workers];
+
 // create partitioned data
 .aq.par.createSamplePartitioned[1;`:toydb];
 // load data on all masters and workers
-.aq.par.supermaster.onAll[(system;"l ",PWD,"/toydb")];
+.aq.par.supermaster.onAll[(system;"l toydb")];
 
 // queries (query/callback pairs) to be processed by super-master
 query1:{
