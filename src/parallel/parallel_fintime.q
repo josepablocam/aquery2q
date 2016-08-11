@@ -23,7 +23,7 @@ globs:{
   // Map partitions to workers
   .aq.par.master.define[`.aq.part.map;.aq.par.master.mapPartitions[]];
   };
-{x[]} peach (count .z.pd[])#globs;
+.aq.par.safePeach (globs;::);
 
 
 

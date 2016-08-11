@@ -13,6 +13,7 @@
 // order of worker connection is relevant!
 .aq.par.connections:([] name:`u#`$(); handle:`u#`int$(); conntype:`.aq.par.connectionTypes$())
 .aq.par.nameToHandle:{(exec name!handle from .aq.par.connections) x}
+// handle = 0 -> self
 .aq.par.workerHandles:{exec handle from .aq.par.connections where handle<>0}
 .aq.par.workerNames:{exec name from .aq.par.connections where conntype=`worker}
 .aq.par.masterNames:{exec name from .aq.par.connections where conntype=`master}
@@ -40,8 +41,27 @@
 //  names: process names to execute on
 //  a: asynchronous request (e.g ({y set get x};`mytable;`othertable))
 //  s: syncronous request (e.g. ({x set othertable};`result))
-.aq.par.runAsynchAndBlock:{[names;a;s] .aq.par.runAsynch[names;a]; .aq.par.runSynch[names;s]};
+.aq.par.runAsynchAndBlock:{[names;a;s]
+  // send asynch message
+  .aq.par.runAsynch[names;a];
+  // flush asynch queue
+  .aq.par.runAsynch[names;::];
+  // chase with synchronous request
+  .aq.par.runSynch[names;s]
+  };
 
+// Run a function in peach if possible, else send using normal requests
+// args:
+//  req: request (req 0 is a function, 1 _ req are the arguments)
+.aq.par.safePeach:{[req]
+  $[1=ct:count nodes:.z.pd[];
+    (first nodes) req;
+    $[2=count req;
+      req[0] peach ct#1_req;
+      (req[0] . ) peach ct#enlist 1_req
+      ]
+    ]
+ }
 
 
 /////////// Super Master functions ///////////
@@ -72,7 +92,7 @@
   ];
   }
 
-// Run a job
+// Run a job (pair of actual function to run and callback)
 // Run the first job in the queue, with the first master in the list of available masters
 // remove both from their respective lists
 .aq.par.supermaster.runJob:{
@@ -151,11 +171,9 @@
 // args:
 //  r: request (purely for sideffects) (e.g. (system; "l mydatabase"))
 .aq.par.supermaster.onAll:{[r]
+  // we don't need safe peach as masters always have more than 1 worker
   run:{eval x; {eval x} peach (count .z.pd[])#enlist x};
-  $[1=cm:count .z.pd[];
-    .aq.par.runSynch[.aq.par.masterNames[];(run;r)];
-    run peach cm#enlist r
-    ]
+  .aq.par.safePeach (run;r)
   };
 
 
@@ -181,9 +199,15 @@
  //   nm: name of data structure
  //     (used to read from this cohort and write to counterparts with same name)
 .aq.par.master.broadcast:{[nm]
-  readAndWrite:{.aq.par.runSynch[.aq.par.counterPartNames[];({x set y};x;get x)]};
+  // if we have multiple counterparts, we can use peach else synch
+  // also note that $ is lazy eval in args
+  readAndWrite:{
+    rw:({x set y};x;get x);
+    check:({show "broadcast received at ",string .z.P};::);
+    .aq.par.runAsynchAndBlock[.aq.par.counterPartNames[];rw;check]
+   };
   readAndWrite peach (count .z.pd[])#nm
-  };
+ };
 
 // Define a value on all workers and self
 // args:
@@ -191,7 +215,8 @@
 //  def: definition
 .aq.par.master.define:{[nm;def]
   nm set def;
-  {x set y}[;def] peach (count .z.pd[])#nm
+  ct:count .z.pd[];
+  .aq.par.safePeach ({[x;y] x set y};nm;def)
   };
 
 // Map partition values to workers
