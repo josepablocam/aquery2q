@@ -581,7 +581,8 @@
   sorted:sort combined ix;
   // assign each observation to one of the processes
   assigned:update proc:reverse fills reverse fills proc from sorted;
-  `.aq.par.temp set assigned
+  // group by reference to allow for fast lookup and set
+  `.aq.par.temp set ?[assigned;();g!g:enlist `proc;c!c:cols[assigned] except `proc]
    };
 
 // Query a process with data sorted and labeled with destination process
@@ -589,7 +590,9 @@
 // args:
 //  want: process for which we want to get data
 .aq.par.worker.getDataToSend:{[want]
-  delete proc, isref from select from .aq.par.temp where proc=want, not isref
+  // fast lookup as .aq.par.temp is grouped and keyed by process id
+  found:select from ungroup ([]proc:enlist want)#.aq.par.temp where not isref;
+  delete proc, isref from found
  };
 
 
