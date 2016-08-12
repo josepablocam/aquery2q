@@ -15,7 +15,7 @@ workers:(count[workers] div count masters) cut workers;
 query1:{
   // helper function to assign chunks of values to workers
   workers:.aq.par.workerNames[];
-  split:{[x;y] x!(ceiling count[y]%count x) cut y}[workers;];
+  split:{group y!(count y)#x}[workers;];
   // groups split by workers
   pgs:split (select distinct c1 from t)`c1;
   // date partitions by workers
@@ -42,7 +42,7 @@ callback3:{`orig set x}
 query4:{
   // helper function to assign chunks of values to workers
   workers:.aq.par.workerNames[];
-  split:{[x;y] x!(ceiling count[y]%count x) cut y}[workers;];
+  split:{group y!(count y)#x}[workers;];
   // date partitions by workers
   pds:split (select distinct date from t)`date;
   // create some in-memory data for each worker process
@@ -158,9 +158,9 @@ query12:{
 callback12:{`q12result set x};
 
 query13:{
-  read:{get `shuffled}; sort:{`c1`c2`id xasc x};nm:`localSorted;
+  read:{get `shuffled}; sort:{`c1`c2`id xasc x};nm:`localTSorted;
   .aq.par.master.sort[read;sort;nm];
-  raze {get x} peach (count .z.pd[])#nm
+  {select from localTSorted} peach .z.pd[]
  };
 callback13:{`q13result set x};
 
@@ -172,7 +172,7 @@ timer:{[iters;q]
   (q;(system cmd)%iters)
   };
 
-/
+
 .aq.par.supermaster.execute[1b;(query1;::);callback1];
 .aq.par.supermaster.execute[0b;(query2;::);callback2];
 .aq.par.supermaster.execute[0b;(query3;::);callback3];
@@ -186,7 +186,7 @@ timer:{[iters;q]
 .aq.par.supermaster.execute[0b;(query11;::);callback11];
 .aq.par.supermaster.execute[0b;(query12;::);callback12];
 .aq.par.supermaster.execute[0b;(query13;::);callback13];
-
+/
 
 timer[10; ] each `$"query",/:string 1+til 12
 
