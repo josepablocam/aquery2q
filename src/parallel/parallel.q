@@ -35,6 +35,9 @@
 .aq.par.runSynch:{[names;r] (.aq.par.nameToHandle (),names)@\:r};
 .aq.par.runAsynch:{[names;r] (neg .aq.par.nameToHandle (),names)@\:r};
 
+// Flush asynch message queue
+.aq.par.master.flush:{.aq.par.runAsynch[x;(::)]};
+
 // Run a request asynchronously, and then execute a synchronous request on each process
 // Useful to block until synchronous requests have been handled (provides more control vs. peach)
 // args:
@@ -45,7 +48,7 @@
   // send asynch message
   .aq.par.runAsynch[names;a];
   // flush asynch queue
-  .aq.par.runAsynch[names;::];
+  .aq.par.master.flush[names];
   // chase with synchronous request
   .aq.par.runSynch[names;s]
   };
@@ -58,7 +61,7 @@
     (first nodes) req;
     $[2=count req;
       req[0] peach ct#1_req;
-      (req[0] . ) peach ct#enlist 1_req
+      (req[0] .) peach ct#enlist 1_req
       ]
     ]
  }
@@ -318,6 +321,8 @@
   .aq.par.worker.map0[dests;reads; ] peach (count workers)#write;
   // block until all workers done with their shuffle writes
   .aq.par.master.waitWhile[.aq.par.master.workNotDone];
+  .aq.par.master.flush[workers];
+  .aq.par.runSynch[workers;""];
   .aq.par.worker.cleanUp peach (count workers)#`temp;
   };
 
