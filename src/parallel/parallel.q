@@ -866,7 +866,7 @@
 //  x: seed for random number generator
 .aq.par.createSamplePartitioned:{[seed;path]
  system "S ",string seed;
- n:100000; // # of obs per partition
+ n:500000; // # of obs per partition
  pars:.z.D + til 10; // partitions
  parpaths:` sv/: path,/:(`$string pars),\:`t`;
  // we avoid symbols for simplicity
