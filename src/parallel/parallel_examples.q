@@ -48,7 +48,7 @@ query4:{
   // create some in-memory data for each worker process
   {[d;p] `local set select from t where date in d p}[pds;] peach workers
  };
-callback4:`local; 
+callback4:`local;
 
 // sort based on 3 columns and then calculate window-based moving aggregates
 query5:{
@@ -59,7 +59,7 @@ query5:{
   readSorted:{get `localSorted}; mOp:{select c1, c2, id, ms:4 msum c4, ma:4 mavg c4 from x}; st:(::);
   raze .aq.par.master.edgeOp[4;readSorted;mOp;st]
   };
-callback5:{`localMovResult set x};  
+callback5:{`localMovResult set x};
 
 
 // sort based on column in other table
@@ -157,7 +157,20 @@ query12:{
   };
 callback12:{`q12result set x};
 
+query13:{
+  read:{get `shuffled}; sort:{`c1`c2`id xasc x};nm:`localSorted;
+  .aq.par.master.sort[read;sort;nm];
+  raze {get x} peach (count .z.pd[])#nm
+ };
+callback13:{`q13result set x};
 
+
+timer:{[iters;q]
+  show "timing query ",string[q];
+  master:first .aq.par.masterNames[];
+  cmd:"ts:",string[iters]," .aq.par.runSynch[`",string[master],";(",string[q],";::)]";
+  (q;(system cmd)%iters)
+  };
 
 /
 .aq.par.supermaster.execute[1b;(query1;::);callback1];
@@ -172,7 +185,10 @@ callback12:{`q12result set x};
 .aq.par.supermaster.execute[0b;(query10;::);callback10];
 .aq.par.supermaster.execute[0b;(query11;::);callback11];
 .aq.par.supermaster.execute[0b;(query12;::);callback12];
+.aq.par.supermaster.execute[0b;(query13;::);callback13];
 
+
+timer[10; ] each `$"query",/:string 1+til 12
 
 / Simple check of moving average
 \l toydb
