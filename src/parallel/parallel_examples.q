@@ -164,6 +164,15 @@ query13:{
  };
 callback13:{`q13result set x};
 
+query14:{
+  {`t1 set local} peach .z.pd[];
+  {`t2 set update c5:5 * c1 from local} peach .z.pd[];
+  .aq.par.master.join[ij;`c1`c2;`t1;`t2;`tjoined2];
+  // now we want to ungroup them add columns and return result
+  raze {tjoined2} peach .z.pd[]
+  };
+callback14:{`q14result set x};
+
 
 timer:{[iters;q]
   show "timing query ",string[q];
@@ -191,6 +200,7 @@ timer:{[iters;q]
 timer[10; ] each `$"query",/:string 1+til 12
 
 / Simple check of moving average
+\x .z.pd
 \l toydb
 ref:select `#c1, c2, id, ms:4 msum c4, ma:4 mavg c4 from `c1`c2`id xasc select from t
 ref~localMovResult
