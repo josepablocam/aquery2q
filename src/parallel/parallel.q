@@ -662,7 +662,7 @@
 // args:
 //  alloc: table indicating allocation information for each group
 .aq.par.worker.addGroupAlloc:{[alloc]
-  .aq.par.temp:.aq.par.temp lj alloc;
+  .aq.par.temp:update `p#aq__proc from .aq.par.temp lj alloc;
   };
 
 
