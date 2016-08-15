@@ -735,7 +735,7 @@
   // add allocation info to temporary table
   .aq.par.worker.allocKeys[;alloc;temp] peach (count dests)#read;
   // shuffle data to right process
-  shuffle:{[x;y;z] delete aq__proc from select from x where aq__proc=y}[temp;;]@/:dests;
+  shuffle:{[x;y;z] delete aq__proc from ungroup select from x where aq__proc=y}[temp;;]@/:dests;
   .aq.par.master.map[shuffle;dests;final upsert]
  };
 
@@ -745,7 +745,7 @@
 //  allocs: table with process allocation for each key in join
 //  nm: assign results to table with this name
 .aq.par.worker.allocKeys:{[read;allocs;nm]
-  nm set read[] lj allocs
+  nm set `aq__proc xgroup read[] lj allocs
   };
 
 // Collect possible values along join columns in a table
