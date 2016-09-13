@@ -377,7 +377,7 @@
 // Select edge of relevant data in a given process
 //  n: number of records to take from bottom of data read with read[]
 //  read: function to read data
-.aq.par.worker.selectEdge:{[n;read] select from read[] where i>neg[n]+last i};
+.aq.par.worker.selectEdge:{[n;read] neg[n]#$[type[`]~type t:read[];get t;t]};
 
 // Extend data and perform operation
 // args: window size to extend, function to read data, operation requiring extended data,
@@ -390,7 +390,8 @@
   prevProc:.aq.par.worker.getPrevProcessName[];
   result:$[null prevProc;
     f read[];
-    w _ f (raze .aq.par.runSynch[prevProc;(`.aq.par.worker.selectEdge;w;read)]),read[]];
+    w _ f (raze .aq.par.runSynch[prevProc;(`.aq.par.worker.selectEdge;w;read)]),read[]
+    ];
     write result
   };
 
