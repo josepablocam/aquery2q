@@ -162,7 +162,7 @@ the pair of securities corresponding to that row. [Note: coefficient of correlat
 defined in appendix]
 \
 .qtest.q8:{
-	pricedata:select Id, ClosePrice from `Id`TradeDate xasc price where Id in stock10, TradeDate >= startYear10,
+	pricedata:`Id`TradeDate xasc select Id, TradeDate, ClosePrice from price where Id in stock10, TradeDate >= startYear10,
     TradeDate <= startYear10 + 365 * 2;
 	pair1:select ClosePrice1:ClosePrice by Id1:Id from pricedata;
 	pair2:`Id2`ClosePrice2 xcol pair1;
