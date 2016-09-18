@@ -371,7 +371,12 @@
 //    write: function to write data to process data structure
 .aq.par.master.edgeOp:{[w;read;f;write]
   workers:.aq.par.workerNames[];
-  .aq.par.worker.edgeOp[ ;read;f;write] peach (count workers)#w
+  // get necessary data
+  .aq.par.worker.getEdgeOpData[;read] peach (count workers)#w;
+  // perform calculation
+  result:.aq.par.worker.edgeOp[ ;f;write] peach (count workers)#w;
+  .aq.par.worker.cleanUp peach (count workers)#`temp;
+  result
   };
 
 // Select edge of relevant data in a given process
@@ -382,18 +387,27 @@
 // Extend data and perform operation
 // args: window size to extend, function to read data, operation requiring extended data,
 //  w: window size to extend
-//  read: function to read data
 //  f: operation that required the extended data
 //  write: a storing function, which either returns (::) or writes data locally to process
 // function to store data
-.aq.par.worker.edgeOp:{[w;read;f;write]
+.aq.par.worker.edgeOp:{[w;f;write]
   prevProc:.aq.par.worker.getPrevProcessName[];
-  result:$[null prevProc;
-    f read[];
-    w _ f (raze .aq.par.runSynch[prevProc;(`.aq.par.worker.selectEdge;w;read)]),read[]
-    ];
-    write result
+  result:$[null prevProc;f .aq.par.temp;w _ f .aq.par.temp];
+  write result
   };
+
+// Get complete data set (extended with edge) for each worker
+// Writes data to .aq.par.temp
+// args: window size to extend, function to read data
+//  w: window size to extend
+//  read: function to read data
+.aq.par.worker.getEdgeOpData:{[w;read]
+  prevProc:.aq.par.worker.getPrevProcessName[];
+  $[null prevProc;
+    `.aq.par.temp set read[];
+    `.aq.par.temp set (raze .aq.par.runSynch[prevProc;(`.aq.par.worker.selectEdge;w;read)]),read[]
+    ];
+ };
 
 
 ////// Carry //////
